@@ -6,14 +6,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm -r --parallel --filter ./apps/* dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @autoc/api db:migrate",
     "db:seed": "pnpm --filter @autoc/api db:seed",
-    "e2e": "pnpm --filter @autoc/web e2e"
+    "e2e": "pnpm --filter @autoc/web e2e",
+    "setup:local": "node scripts/setup-local.mjs",
+    "dev": "pnpm --filter @autoc/shared build && pnpm -r --parallel --filter ./apps/* dev"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
