@@ -134,6 +134,12 @@ export const userSearchQuerySchema = paginationQuerySchema.extend({
 
 export const uploadPurposeSchema = z.object({ purpose: z.enum(UPLOAD_PURPOSES) });
 
+/** Multipart text fields of POST /uploads. durationSec is client-measured and clamped server-side. */
+export const uploadBodySchema = uploadPurposeSchema.extend({
+  durationSec: z.coerce.number().min(0).max(86_400).optional(),
+});
+export type UploadBody = z.infer<typeof uploadBodySchema>;
+
 /* ---------- location & map (phase 2) ---------- */
 
 export const updateLocationSchema = z.object({

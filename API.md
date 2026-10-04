@@ -27,7 +27,8 @@ type UserPublic = {
   relation: 'self' | 'none' | 'request_out' | 'request_in' | 'friend';
   status: 'active' | 'blocked';
 }
-type Me = UserPublic & {
+type Me = Omit<UserPublic, 'nickname'> & {
+  nickname: string | null;            // null until onboarding sets it
   phone: string | null; phoneVerified: boolean;
   privacyMode: 'hidden' | 'community' | 'friends' | 'everyone';
   receiveSos: boolean; role: 'user' | 'admin'; locale: 'ru' | 'en';
@@ -73,6 +74,12 @@ Rules
 - Upload limits: images (jpeg/png/webp/heic) ≤ 10 MB → re-encoded WebP, EXIF stripped, max 2048 px + 400 px thumb; voice (webm/ogg/mp4/mpeg audio) ≤ 5 MB, ≤ 3 min; video (mp4/webm) ≤ 50 MB. Type checked by magic bytes.
 - Rate limits: OTP request: phone 1/60 s & 5/h, IP 20/h. OTP verify: 5 attempts per code, 10 failures/h per phone → `RATE_LIMITED`. Uploads 60/h per user.
 - New user created on first successful verify with `nickname = null` → `onboardingCompleted=false`. Client routes to onboarding until complete. Default `privacyMode = 'community'`, `receiveSos = true`, `rating = 50`.
+- Visibility: `GET /users/:id` and `/users/:id/vehicles` return `404` for users who haven't completed onboarding or deleted their account (self excepted). Blocked users are returned with `status: 'blocked'`.
+- Vehicles `isPrimary`: `true` moves the primary flag; `false` on the current primary hands it to the oldest other vehicle (a lone vehicle stays primary).
+- `DELETE /me` additionally removes friendships and the user's avatar uploads.
+- Uploads: multipart text field `durationSec` is clamped to 180 s (voice) / 600 s (video). HEIC is accepted by type but HEVC-encoded HEIC can't be decoded by the server's image library → `415 UNSUPPORTED_FILE_TYPE` (browsers on iOS normally convert to JPEG on upload).
+- Refresh rotation is strict: two concurrent `/auth/refresh` calls with the same cookie count as reuse and end the session. The web client must serialize refreshes (single in-flight promise, shared across tabs, e.g. Web Locks).
+- Phase 1 error codes beyond §0: `OTP_INVALID` (400, details `{ attemptsLeft }`), `OTP_EXPIRED` (400, no active code / burned / used), `SESSION_EXPIRED` (401, refresh cookie missing/invalid/reused), `CSRF_FAILED` (403), `PROVIDER_DISABLED` (404), `INVALID_ID_TOKEN` (401), `SMS_UNAVAILABLE` (503), `NICKNAME_TAKEN` / `PHONE_IN_USE` / `VEHICLE_LIMIT` (409), `ONBOARDING_INCOMPLETE` (400, details `{ missing: ('name'|'nickname')[] }`), `INVALID_UPLOAD` (400, upload not yours / wrong purpose), `FILE_TOO_LARGE` (413), `UNSUPPORTED_FILE_TYPE` (415). `429` responses also carry a `Retry-After` header.
 
 ## 2. Phase 2 — Location, map, friends, notifications (FROZEN at Phase 2 start)
 

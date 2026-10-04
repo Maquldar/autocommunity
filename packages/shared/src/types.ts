@@ -40,7 +40,9 @@ export type UserPublic = {
   status: 'active' | 'blocked';
 };
 
-export type Me = UserPublic & {
+/** `nickname` is null until onboarding sets it (UserPublic is only rendered for onboarded users). */
+export type Me = Omit<UserPublic, 'nickname'> & {
+  nickname: string | null;
   phone: string | null;
   phoneVerified: boolean;
   privacyMode: PrivacyMode;

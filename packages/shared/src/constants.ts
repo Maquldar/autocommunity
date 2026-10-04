@@ -36,6 +36,7 @@ export const LIMITS = {
   voiceMaxBytes: 5 * 1024 * 1024,
   voiceMaxSec: 180,
   videoMaxBytes: 50 * 1024 * 1024,
+  videoMaxSec: 600,
   pageDefault: 20,
   pageMax: 50,
   otpTtlSec: 300,

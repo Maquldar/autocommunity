@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "declaration": false,
+    "types": ["node"],
+    "baseUrl": "."
+  },
+  "include": ["src", "test", "prisma/seed", "vitest.config.ts"]
+}
