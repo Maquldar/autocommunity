@@ -3,6 +3,9 @@
 services:
   postgres:
     image: postgis/postgis:16-3.4
+    # The official PostGIS image is amd64-only. On ARM machines (Apple Silicon, Snapdragon) Docker Desktop
+    # runs it under emulation; without this line the pull fails with "no matching manifest".
+    platform: linux/amd64
     environment:
       POSTGRES_USER: autoc
       POSTGRES_PASSWORD: autoc

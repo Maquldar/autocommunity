@@ -31,6 +31,7 @@ Stop with `Ctrl+C`; `docker compose down` stops the database (data is kept).
 - `Can't reach database server at localhost:5432`: Docker isn't running, or `docker compose up -d` wasn't run.
 - Port 5432 already in use: a local Postgres is running. Stop it, or change the port in `docker-compose.yml` and `DATABASE_URL`.
 - `pnpm: command not found`: run `npm i -g pnpm@10`.
+- Apple Silicon / ARM Windows: the database image runs under emulation (`platform: linux/amd64`). It's slower to start, but it works. On Windows ARM, make sure Docker Desktop's emulation support is enabled.
 
 ## Tests
 ```bash
