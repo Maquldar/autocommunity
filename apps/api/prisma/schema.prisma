@@ -1,0 +1,788 @@
+// AutoCommunity data model. Geography columns are Unsupported and queried with $queryRaw;
+// their GiST indexes are created in SQL migrations (Prisma can't express them).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, citext]
+}
+
+/* ------------------------------------------------------------------ users & auth */
+
+enum PrivacyMode {
+  hidden
+  community
+  friends
+  everyone
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  blocked
+  deleted
+}
+
+enum AuthProvider {
+  phone
+  google
+  apple
+}
+
+model User {
+  id               String      @id @db.Uuid
+  phone            String?     @unique
+  phoneVerifiedAt  DateTime?   @map("phone_verified_at")
+  name             String      @default("")
+  nickname         String?     @unique @db.Citext
+  avatarUploadId   String?     @map("avatar_upload_id") @db.Uuid
+  city             String?
+  bio              String?
+  rating           Int         @default(50)
+  privacyMode      PrivacyMode @default(community) @map("privacy_mode")
+  receiveSos       Boolean     @default(true) @map("receive_sos")
+  role             UserRole    @default(user)
+  status           UserStatus  @default(active)
+  blockedUntil     DateTime?   @map("blocked_until")
+  sosBannedUntil   DateTime?   @map("sos_banned_until")
+  locale           String      @default("ru")
+  onboardedAt      DateTime?   @map("onboarded_at")
+  lastActiveAt     DateTime?   @map("last_active_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  avatar             Upload?            @relation("UserAvatar", fields: [avatarUploadId], references: [id], onDelete: SetNull)
+  identities         AuthIdentity[]
+  refreshTokens      RefreshToken[]
+  vehicles           Vehicle[]
+  location           UserLocation?
+  sentRequests       Friendship[]       @relation("FriendRequester")
+  receivedRequests   Friendship[]       @relation("FriendAddressee")
+  ownedCommunities   Community[]        @relation("CommunityOwner")
+  memberships        CommunityMember[]
+  sosRequests        SosRequest[]
+  sosResponses       SosResponse[]
+  chatMembers        ChatMember[]
+  messages           Message[]
+  reviewsWritten     Review[]           @relation("ReviewAuthor")
+  ratingEvents       RatingEvent[]
+  reportsFiled       Report[]           @relation("ReportReporter")
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  uploads            Upload[]           @relation("UploadOwner")
+  adminActionsDone   AdminAction[]      @relation("AdminActor")
+  adminActionsOn     AdminAction[]      @relation("AdminTarget")
+  posts              Post[]
+  postComments       PostComment[]
+  postLikes          PostLike[]
+  pollVotes          PollVote[]
+  eventParticipants  EventParticipant[]
+  eventsCreated      Event[]
+  serviceVisits      ServiceVisit[]
+  servicesSubmitted  ServiceCenter[]
+  fraudFlags         FraudFlag[]
+
+  @@index([city])
+  @@index([status])
+  @@map("users")
+}
+
+model AuthIdentity {
+  id          String       @id @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  provider    AuthProvider
+  providerUid String       @map("provider_uid")
+  email       String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUid])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model OtpCode {
+  id        String   @id @db.Uuid
+  phone     String
+  codeHash  String   @map("code_hash")
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([phone, createdAt(sort: Desc)])
+  @@map("otp_codes")
+}
+
+model RefreshToken {
+  id         String    @id @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  familyId   String    @map("family_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  userAgent  String?   @map("user_agent")
+  ip         String?
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/* ------------------------------------------------------------------ vehicles & location */
+
+model Vehicle {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  brand     String
+  model     String
+  year      Int
+  plate     String?
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([brand])
+  @@map("vehicles")
+}
+
+/// Latest position only; history is never stored (privacy).
+model UserLocation {
+  userId    String                                @id @map("user_id") @db.Uuid
+  location  Unsupported("geography(Point,4326)")
+  accuracyM Float?                                @map("accuracy_m")
+  updatedAt DateTime                              @default(now()) @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+  @@map("user_locations")
+}
+
+/* ------------------------------------------------------------------ friends */
+
+enum FriendshipStatus {
+  pending
+  accepted
+}
+
+model Friendship {
+  id          String           @id @db.Uuid
+  requesterId String           @map("requester_id") @db.Uuid
+  addresseeId String           @map("addressee_id") @db.Uuid
+  /// least(requester, addressee) + greatest(...) — one row per pair regardless of direction
+  pairKey     String           @unique @map("pair_key")
+  status      FriendshipStatus @default(pending)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  acceptedAt  DateTime?        @map("accepted_at")
+
+  requester User @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+  @@map("friendships")
+}
+
+/* ------------------------------------------------------------------ communities */
+
+enum CommunityRole {
+  owner
+  moderator
+  member
+}
+
+enum MembershipStatus {
+  pending
+  active
+}
+
+model Community {
+  id             String    @id @db.Uuid
+  name           String
+  description    String    @default("")
+  city           String?
+  isPrivate      Boolean   @default(false) @map("is_private")
+  ownerId        String    @map("owner_id") @db.Uuid
+  avatarUploadId String?   @map("avatar_upload_id") @db.Uuid
+  memberCount    Int       @default(1) @map("member_count")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  owner   User              @relation("CommunityOwner", fields: [ownerId], references: [id])
+  avatar  Upload?           @relation("CommunityAvatar", fields: [avatarUploadId], references: [id], onDelete: SetNull)
+  members CommunityMember[]
+  events  Event[]
+  posts   Post[]
+
+  @@index([city])
+  @@index([createdAt])
+  @@map("communities")
+}
+
+model CommunityMember {
+  communityId String           @map("community_id") @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  role        CommunityRole    @default(member)
+  status      MembershipStatus @default(active)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  joinedAt    DateTime?        @map("joined_at")
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([communityId, userId])
+  @@index([userId, status])
+  @@index([communityId, status, createdAt])
+  @@map("community_members")
+}
+
+/* ------------------------------------------------------------------ SOS */
+
+enum SosType {
+  flat_tire
+  battery
+  fuel
+  stuck
+  breakdown
+  accident
+  tow
+  other
+}
+
+enum SosStatus {
+  created
+  accepted
+  in_progress
+  closed
+  cancelled
+  expired
+}
+
+enum SosResponseStatus {
+  offered
+  accepted
+  arrived
+  withdrawn
+  declined
+}
+
+model SosRequest {
+  id             String                               @id @db.Uuid
+  userId         String                               @map("user_id") @db.Uuid
+  type           SosType
+  description    String                               @default("")
+  photoUploadIds String[]                             @default([]) @map("photo_upload_ids") @db.Uuid
+  location       Unsupported("geography(Point,4326)")
+  status         SosStatus                            @default(created)
+  sharePhone     Boolean                              @default(false) @map("share_phone")
+  radiusM        Int                                  @default(5000) @map("radius_m")
+  shareToken     String?                              @unique @map("share_token")
+  isFake         Boolean                              @default(false) @map("is_fake")
+  cancelReason   String?                              @map("cancel_reason")
+  createdAt      DateTime                             @default(now()) @map("created_at")
+  acceptedAt     DateTime?                            @map("accepted_at")
+  closedAt       DateTime?                            @map("closed_at")
+  expiresAt      DateTime                             @map("expires_at")
+
+  user      User          @relation(fields: [userId], references: [id])
+  responses SosResponse[]
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("sos_requests")
+}
+
+model SosResponse {
+  id        String            @id @db.Uuid
+  sosId     String            @map("sos_id") @db.Uuid
+  helperId  String            @map("helper_id") @db.Uuid
+  status    SosResponseStatus @default(offered)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  sos    SosRequest @relation(fields: [sosId], references: [id], onDelete: Cascade)
+  helper User       @relation(fields: [helperId], references: [id])
+
+  @@unique([sosId, helperId])
+  @@index([helperId, createdAt])
+  @@map("sos_responses")
+}
+
+/// Users notified about an SOS (dispatch log); prevents duplicate pushes on radius expansion.
+model SosDispatch {
+  sosId     String   @map("sos_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  distanceM Int      @map("distance_m")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([sosId, userId])
+  @@map("sos_dispatches")
+}
+
+/* ------------------------------------------------------------------ chats */
+
+enum ChatType {
+  direct
+  community
+  event
+  sos
+}
+
+enum MessageType {
+  text
+  photo
+  location
+  voice
+  system
+}
+
+model Chat {
+  id            String   @id @db.Uuid
+  type          ChatType
+  /// community / event / sos id; for direct chats: "minUserId:maxUserId"
+  refId         String   @unique @map("ref_id")
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  members  ChatMember[]
+  messages Message[]
+
+  @@map("chats")
+}
+
+model ChatMember {
+  chatId     String   @map("chat_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  lastReadAt DateTime @default(now()) @map("last_read_at")
+  joinedAt   DateTime @default(now()) @map("joined_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@index([userId])
+  @@map("chat_members")
+}
+
+model Message {
+  id        String      @id @db.Uuid
+  chatId    String      @map("chat_id") @db.Uuid
+  senderId  String      @map("sender_id") @db.Uuid
+  type      MessageType
+  text      String?
+  uploadId  String?     @map("upload_id") @db.Uuid
+  lat       Float?
+  lng       Float?
+  createdAt DateTime    @default(now()) @map("created_at")
+  deletedAt DateTime?   @map("deleted_at")
+
+  chat   Chat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User    @relation(fields: [senderId], references: [id])
+  upload Upload? @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+
+  @@index([chatId, createdAt(sort: Desc), id])
+  @@map("messages")
+}
+
+/* ------------------------------------------------------------------ services (v2) */
+
+enum ServiceCategory {
+  repair
+  tires
+  wash
+  parts
+  tow
+}
+
+enum ServiceStatus {
+  pending
+  verified
+  rejected
+}
+
+enum VisitMethod {
+  geo
+  qr
+  photo
+}
+
+enum VisitStatus {
+  pending
+  verified
+  rejected
+}
+
+model ServiceCenter {
+  id             String                               @id @db.Uuid
+  name           String
+  category       ServiceCategory
+  description    String                               @default("")
+  address        String
+  phone          String?
+  /// e.g. {"mon":"09:00-19:00", ..., "sun":null}
+  hours          Json                                 @default("{}")
+  photoUploadIds String[]                             @default([]) @map("photo_upload_ids") @db.Uuid
+  location       Unsupported("geography(Point,4326)")
+  rating         Float                                @default(0)
+  reviewCount    Int                                  @default(0) @map("review_count")
+  visitCount     Int                                  @default(0) @map("visit_count")
+  status         ServiceStatus                        @default(pending)
+  qrSecret       String                               @map("qr_secret")
+  submittedById  String?                              @map("submitted_by_id") @db.Uuid
+  createdAt      DateTime                             @default(now()) @map("created_at")
+  updatedAt      DateTime                             @updatedAt @map("updated_at")
+
+  submittedBy User?          @relation(fields: [submittedById], references: [id], onDelete: SetNull)
+  visits      ServiceVisit[]
+
+  @@index([category, status])
+  @@index([status, rating])
+  @@map("service_centers")
+}
+
+model ServiceVisit {
+  id         String      @id @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  serviceId  String      @map("service_id") @db.Uuid
+  method     VisitMethod
+  uploadId   String?     @map("upload_id") @db.Uuid
+  distanceM  Int?        @map("distance_m")
+  status     VisitStatus
+  createdAt  DateTime    @default(now()) @map("created_at")
+  reviewedAt DateTime?   @map("reviewed_at")
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service ServiceCenter @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, status])
+  @@index([userId, serviceId, createdAt])
+  @@index([status, createdAt])
+  @@map("service_visits")
+}
+
+/* ------------------------------------------------------------------ reviews, rating, reports */
+
+enum ReviewTarget {
+  user
+  service
+}
+
+model Review {
+  id         String       @id @db.Uuid
+  authorId   String       @map("author_id") @db.Uuid
+  targetType ReviewTarget @map("target_type")
+  targetId   String       @map("target_id") @db.Uuid
+  /// SOS id for user reviews, visit id for service reviews ("verified_by" in the plan)
+  refId      String       @map("ref_id") @db.Uuid
+  stars      Int
+  comment    String?
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  author User @relation("ReviewAuthor", fields: [authorId], references: [id])
+
+  @@unique([authorId, targetType, targetId, refId])
+  @@index([targetType, targetId, createdAt])
+  @@map("reviews")
+}
+
+/// Append-only ledger; users.rating is derived from it (see packages/shared/rating.ts).
+model RatingEvent {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  delta     Int
+  reason    String
+  refId     String?  @map("ref_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("rating_events")
+}
+
+enum ReportTarget {
+  user
+  message
+  post
+  comment
+  sos
+  community
+  service
+}
+
+enum ReportStatus {
+  open
+  confirmed
+  dismissed
+}
+
+model Report {
+  id           String       @id @db.Uuid
+  reporterId   String       @map("reporter_id") @db.Uuid
+  targetType   ReportTarget @map("target_type")
+  targetId     String       @map("target_id") @db.Uuid
+  /// owner of the reported content (penalties apply to this user)
+  targetUserId String?      @map("target_user_id") @db.Uuid
+  reason       String
+  details      String?
+  status       ReportStatus @default(open)
+  resolvedById String?      @map("resolved_by_id") @db.Uuid
+  resolvedNote String?      @map("resolved_note")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  resolvedAt   DateTime?    @map("resolved_at")
+
+  reporter User @relation("ReportReporter", fields: [reporterId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([targetUserId])
+  @@index([reporterId, createdAt])
+  @@map("reports")
+}
+
+model FraudFlag {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  kind      String
+  details   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("fraud_flags")
+}
+
+model AdminAction {
+  id           String   @id @db.Uuid
+  adminId      String   @map("admin_id") @db.Uuid
+  action       String
+  targetType   String   @map("target_type")
+  targetId     String   @map("target_id") @db.Uuid
+  targetUserId String?  @map("target_user_id") @db.Uuid
+  note         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  admin      User  @relation("AdminActor", fields: [adminId], references: [id])
+  targetUser User? @relation("AdminTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([targetUserId])
+  @@map("admin_actions")
+}
+
+/* ------------------------------------------------------------------ notifications */
+
+model Notification {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  payload   Json      @default("{}")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc), id])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/* ------------------------------------------------------------------ uploads */
+
+model Upload {
+  id          String   @id @db.Uuid
+  ownerId     String   @map("owner_id") @db.Uuid
+  purpose     String
+  key         String   @unique
+  thumbKey    String?  @map("thumb_key")
+  mime        String
+  sizeBytes   Int      @map("size_bytes")
+  width       Int?
+  height      Int?
+  durationSec Float?   @map("duration_sec")
+  /// perceptual-ish hash (sha256 of normalized pixels) for duplicate SOS photo detection
+  contentHash String?  @map("content_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner           User        @relation("UploadOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  avatarOf        User[]      @relation("UserAvatar")
+  communityAvatar Community[] @relation("CommunityAvatar")
+  messages        Message[]
+
+  @@index([ownerId, createdAt])
+  @@index([contentHash])
+  @@map("uploads")
+}
+
+/* ------------------------------------------------------------------ events (v2) */
+
+enum RsvpStatus {
+  going
+  interested
+}
+
+model Event {
+  id          String                                @id @db.Uuid
+  communityId String                                @map("community_id") @db.Uuid
+  createdById String                                @map("created_by_id") @db.Uuid
+  title       String
+  description String                                @default("")
+  place       String
+  location    Unsupported("geography(Point,4326)")
+  startsAt    DateTime                              @map("starts_at")
+  endsAt      DateTime?                             @map("ends_at")
+  /// [[lng, lat], ...]
+  route       Json?
+  goingCount  Int                                   @default(0) @map("going_count")
+  reminderSentAt DateTime?                          @map("reminder_sent_at")
+  createdAt   DateTime                              @default(now()) @map("created_at")
+  updatedAt   DateTime                              @updatedAt @map("updated_at")
+
+  community    Community          @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  createdBy    User               @relation(fields: [createdById], references: [id])
+  participants EventParticipant[]
+
+  @@index([communityId, startsAt])
+  @@index([startsAt])
+  @@map("events")
+}
+
+model EventParticipant {
+  eventId   String     @map("event_id") @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  status    RsvpStatus
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId])
+  @@map("event_participants")
+}
+
+/* ------------------------------------------------------------------ feed (v2) */
+
+model Post {
+  id             String    @id @db.Uuid
+  authorId       String    @map("author_id") @db.Uuid
+  communityId    String?   @map("community_id") @db.Uuid
+  text           String    @default("")
+  mediaUploadIds String[]  @default([]) @map("media_upload_ids") @db.Uuid
+  likeCount      Int       @default(0) @map("like_count")
+  commentCount   Int       @default(0) @map("comment_count")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  author    User          @relation(fields: [authorId], references: [id])
+  community Community?    @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  comments  PostComment[]
+  likes     PostLike[]
+  poll      Poll?
+
+  @@index([createdAt(sort: Desc), id])
+  @@index([communityId, createdAt(sort: Desc)])
+  @@index([authorId, createdAt(sort: Desc)])
+  @@map("posts")
+}
+
+model PostComment {
+  id        String    @id @db.Uuid
+  postId    String    @map("post_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  text      String
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([postId, createdAt])
+  @@map("post_comments")
+}
+
+model PostLike {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@map("post_likes")
+}
+
+model Poll {
+  id       String       @id @db.Uuid
+  postId   String       @unique @map("post_id") @db.Uuid
+  question String
+  multiple Boolean      @default(false)
+  options  PollOption[]
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("polls")
+}
+
+model PollOption {
+  id        String     @id @db.Uuid
+  pollId    String     @map("poll_id") @db.Uuid
+  text      String
+  position  Int
+  voteCount Int        @default(0) @map("vote_count")
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([pollId])
+  @@map("poll_options")
+}
+
+model PollVote {
+  optionId  String   @map("option_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  pollId    String   @map("poll_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([optionId, userId])
+  @@index([pollId, userId])
+  @@map("poll_votes")
+}

@@ -1,0 +1,32 @@
+{
+  "name": "autocommunity",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @autoc/api db:migrate",
+    "db:seed": "pnpm --filter @autoc/api db:seed",
+    "e2e": "pnpm --filter @autoc/web e2e"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp",
+      "esbuild",
+      "@nestjs/core",
+      "unrs-resolver",
+      "@parcel/watcher",
+      "@swc/core",
+      "msgpackr-extract"
+    ]
+  }
+}
