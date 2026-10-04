@@ -16,6 +16,15 @@ describe('env validation', () => {
     expect(env.PUBLIC_MEDIA_URL).toBe('http://localhost:4000/media');
     expect(env.COOKIE_DOMAIN).toBeUndefined();
     expect(env.SMS_PROVIDER).toBe('console');
+    expect(env.TRUST_PROXY).toBe('false');
+    expect(env.OTP_ALLOWED_PREFIXES).toEqual(['+7']);
+    expect(parseEnvOrThrow({ ...base, OTP_ALLOWED_PREFIXES: '+7, +998' }).OTP_ALLOWED_PREFIXES).toEqual(['+7', '+998']);
+    expect(() => parseEnvOrThrow({ ...base, OTP_ALLOWED_PREFIXES: '7' })).toThrow(/OTP_ALLOWED_PREFIXES/);
+  });
+
+  it('refuses the console SMS sender in production unless explicitly allowed', () => {
+    expect(() => parseEnvOrThrow({ ...base, NODE_ENV: 'production' })).toThrow(/ALLOW_CONSOLE_SMS/);
+    expect(parseEnvOrThrow({ ...base, NODE_ENV: 'production', ALLOW_CONSOLE_SMS: 'true' }).SMS_PROVIDER).toBe('console');
   });
 
   it('fails fast listing every problem', () => {
@@ -29,7 +38,9 @@ describe('env validation', () => {
   });
 
   it('never exposes dev OTP codes in production or with a real SMS provider', () => {
-    expect(() => parseEnvOrThrow({ ...base, NODE_ENV: 'production', AUTH_EXPOSE_DEV_CODE: 'true' })).toThrow(/production/);
+    expect(() =>
+      parseEnvOrThrow({ ...base, NODE_ENV: 'production', ALLOW_CONSOLE_SMS: 'true', AUTH_EXPOSE_DEV_CODE: 'true' }),
+    ).toThrow(/AUTH_EXPOSE_DEV_CODE/);
     const twilio = parseEnvOrThrow({
       ...base,
       SMS_PROVIDER: 'twilio',

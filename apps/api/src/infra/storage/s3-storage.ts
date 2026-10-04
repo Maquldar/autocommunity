@@ -35,6 +35,8 @@ export class S3Storage extends Storage {
         Key: key,
         Body: body,
         ContentType: contentType,
+        // Never offer user files as downloads with a sniffed type; the CDN must add X-Content-Type-Options.
+        ContentDisposition: 'inline',
         // Keys are random and never rewritten, so objects can be cached forever.
         CacheControl: 'public, max-age=31536000, immutable',
       }),

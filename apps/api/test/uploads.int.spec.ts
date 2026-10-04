@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bearer, createTestApp, createUser, type TestApp } from './support/app';
-import { jpegWithGps, oggOpus } from './support/images';
+import { jpegWithGps, oggOpus, webmAudio } from './support/images';
 
 let t: TestApp;
 beforeAll(async () => {
@@ -89,6 +89,44 @@ describe('POST /uploads', () => {
     expect(res.body).toMatchObject({ mime: 'audio/ogg', durationSec: 180, thumbUrl: null, width: null });
   });
 
+  it('serves WebM voice notes as audio/webm', async () => {
+    const u = await createUser(t);
+    const res = await upload(u.token, 'voice', webmAudio(), 'note.webm', { durationSec: '4.2' }).expect(201);
+    expect(res.body).toMatchObject({ mime: 'audio/webm', durationSec: 4.2 });
+    expect(res.body.url).toMatch(/\.weba$/);
+    const stored = await fetchMedia(res.body.url);
+    expect(stored.headers['content-type']).toBe('audio/webm');
+  });
+
+  it('accepts purpose in the query string, which takes precedence over the form field', async () => {
+    const u = await createUser(t);
+    const jpeg = await jpegWithGps();
+    const ok = await request(t.http)
+      .post('/api/v1/uploads?purpose=avatar')
+      .set(bearer(u.token))
+      .attach('file', jpeg, { filename: 'a.jpg' })
+      .expect(201);
+    expect((await t.prisma.upload.findUniqueOrThrow({ where: { id: ok.body.id } })).purpose).toBe('avatar');
+    await request(t.http)
+      .post('/api/v1/uploads?purpose=voice')
+      .set(bearer(u.token))
+      .field('purpose', 'avatar')
+      .attach('file', jpeg, { filename: 'a.jpg' })
+      .expect(415);
+    await request(t.http).post('/api/v1/uploads?purpose=selfie').set(bearer(u.token)).attach('file', jpeg, { filename: 'a.jpg' }).expect(400);
+  });
+
+  it('caps the stream at the per-kind limit when purpose is in the query', async () => {
+    const u = await createUser(t);
+    // 11 MB is under the 50 MB global cap but over the 10 MB image cap: rejected while streaming.
+    const res = await request(t.http)
+      .post('/api/v1/uploads?purpose=avatar')
+      .set(bearer(u.token))
+      .attach('file', Buffer.alloc(11 * 1024 * 1024, 7), { filename: 'big.jpg' })
+      .expect(413);
+    expect(res.body.error.code).toBe('FILE_TOO_LARGE');
+  });
+
   it('enforces per-kind size limits', async () => {
     const u = await createUser(t);
     const res = await upload(u.token, 'voice', oggOpus(5 * 1024 * 1024), 'long.ogg').expect(413);
@@ -109,6 +147,13 @@ describe('POST /uploads', () => {
     );
     const res = await upload(u.token, 'avatar', await jpegWithGps(), 'a.jpg').expect(429);
     expect(res.body.error.code).toBe('RATE_LIMITED');
+    // Charged before the body is read: a too-large file is still answered with 429, not 413.
+    const big = await request(t.http)
+      .post('/api/v1/uploads?purpose=avatar')
+      .set(bearer(u.token))
+      .attach('file', Buffer.alloc(1024 * 1024, 1), { filename: 'x.jpg' })
+      .catch((err: { response?: { status: number } }) => err.response);
+    expect(big?.status).toBe(429);
   });
 
   it('does not list directories or serve dotfiles under /media', async () => {

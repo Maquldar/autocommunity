@@ -49,8 +49,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @ZBody(otpVerifySchema) body: z.output<typeof otpVerifySchema>,
   ): Promise<AuthResult> {
-    await this.otp.verify(body.phone, body.code);
-    return this.respond(res, await this.auth.loginWithPhone(body.phone, clientMeta(req)));
+    const meta = clientMeta(req);
+    await this.otp.verify(body.phone, body.code, meta.ip ?? 'unknown');
+    return this.respond(res, await this.auth.loginWithPhone(body.phone, meta));
   }
 
   @Public()
@@ -95,12 +96,15 @@ export class AuthController {
     }
   }
 
+  /**
+   * Always clears the cookies (so a client that lost its CSRF cookie can still sign out locally); the
+   * server-side session is revoked only when the CSRF check passes.
+   */
   @Public()
   @Post('logout')
   @HttpCode(204)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
-    this.cookies.assertCsrf(req);
-    await this.auth.logout(this.cookies.readRefresh(req));
+    if (this.cookies.hasValidCsrf(req)) await this.auth.logout(this.cookies.readRefresh(req));
     this.cookies.clear(res);
   }
 

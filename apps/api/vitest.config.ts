@@ -46,6 +46,7 @@ export default defineConfig({
             STORAGE_DRIVER: 'local',
             UPLOAD_DIR: join(tmpdir(), 'autoc-api-test-uploads'),
             PUBLIC_MEDIA_URL: 'http://localhost:4000/media',
+            // Explicit: lets tests vary the client IP via X-Forwarded-For (default is false).
             TRUST_PROXY: 'loopback',
             GOOGLE_CLIENT_ID: '',
             APPLE_CLIENT_ID: '',

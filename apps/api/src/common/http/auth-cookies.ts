@@ -46,9 +46,13 @@ export class AuthCookies {
   }
 
   /** Cookie-authenticated routes must echo the CSRF cookie in the X-CSRF-Token header. */
-  assertCsrf(req: Request): void {
+  hasValidCsrf(req: Request): boolean {
     const cookie = this.readCsrf(req);
     const header = req.get(CSRF_HEADER);
-    if (!cookie || !header || !safeEqual(cookie, header)) throw Errors.forbidden('CSRF token missing or invalid', 'CSRF_FAILED');
+    return !!cookie && !!header && safeEqual(cookie, header);
+  }
+
+  assertCsrf(req: Request): void {
+    if (!this.hasValidCsrf(req)) throw Errors.forbidden('CSRF token missing or invalid', 'CSRF_FAILED');
   }
 }

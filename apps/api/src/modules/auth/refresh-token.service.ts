@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
+import { SessionService } from '../../common/auth/session.service';
 import { Errors } from '../../common/errors/api-exception';
 import { REFRESH_TTL_MS } from '../../common/http/auth-cookies';
 import { newId } from '../../common/ids';
@@ -17,7 +18,10 @@ const invalidSession = () => Errors.unauthorized('Session expired, sign in again
  */
 @Injectable()
 export class RefreshTokenService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessions: SessionService,
+  ) {}
 
   async issue(userId: string, meta: ClientMeta, familyId: string = newId()): Promise<string> {
     const token = randomBytes(32).toString('base64url');
@@ -31,7 +35,7 @@ export class RefreshTokenService {
     const current = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hashRefreshToken(token) } });
     if (!current) throw invalidSession();
     if (current.revokedAt) {
-      await this.revokeFamily(current.familyId);
+      await this.onReuse(current);
       throw invalidSession();
     }
     if (current.expiresAt <= new Date()) throw invalidSession();
@@ -49,7 +53,7 @@ export class RefreshTokenService {
     });
     if (!rotated) {
       // Lost a race with another use of the same token: treat as reuse.
-      await this.revokeFamily(current.familyId);
+      await this.onReuse(current);
       throw invalidSession();
     }
     return { userId: current.userId, token: next };
@@ -62,6 +66,15 @@ export class RefreshTokenService {
       select: { familyId: true },
     });
     if (row) await this.revokeFamily(row.familyId);
+  }
+
+  /**
+   * A rotated token came back: someone holds a stolen copy. Kill the family and every outstanding access
+   * token of the user (we can't tell which access tokens the thief obtained).
+   */
+  private async onReuse(token: { userId: string; familyId: string }): Promise<void> {
+    await this.revokeFamily(token.familyId);
+    await this.sessions.markRevoked(token.userId);
   }
 
   async revokeFamily(familyId: string): Promise<void> {

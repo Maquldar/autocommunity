@@ -13,8 +13,8 @@ afterAll(async () => {
 
 const otpRequest = (phone: string, ip = nextIp()) =>
   request(t.http).post('/api/v1/auth/otp/request').set('X-Forwarded-For', ip).send({ phone });
-const otpVerify = (phone: string, code: string) =>
-  request(t.http).post('/api/v1/auth/otp/verify').set('X-Forwarded-For', nextIp()).send({ phone, code });
+const otpVerify = (phone: string, code: string, ip = nextIp()) =>
+  request(t.http).post('/api/v1/auth/otp/verify').set('X-Forwarded-For', ip).send({ phone, code });
 const refresh = (refreshToken: string, csrf: string | null) => {
   const r = request(t.http)
     .post('/api/v1/auth/refresh')
@@ -109,24 +109,70 @@ describe('OTP login', () => {
     expect(res.body.error.code).toBe('OTP_EXPIRED');
   });
 
-  it('locks the phone out after 10 failures in an hour', async () => {
+  it('locks out a phone+IP after 10 failures in an hour without locking out the owner elsewhere', async () => {
     const phone = nextPhone();
+    const attackerIp = nextIp();
     let code = (await otpRequest(phone).expect(200)).body.devCode as string;
     for (let i = 0; i < 10; i++) {
       if (i === 5) {
         await skipCooldown(phone);
         code = (await otpRequest(phone).expect(200)).body.devCode;
       }
-      await otpVerify(phone, wrongCode(code)).expect(400);
+      await otpVerify(phone, wrongCode(code), attackerIp).expect(400);
     }
-    const locked = await otpVerify(phone, code).expect(429);
+    const locked = await otpVerify(phone, code, attackerIp).expect(429);
     expect(locked.body.error.code).toBe('RATE_LIMITED');
     expect(locked.body.error.details.retryAfterSec).toBeGreaterThan(0);
     expect(locked.headers['retry-after']).toBeDefined();
-
     await skipCooldown(phone);
-    const req = await otpRequest(phone).expect(429);
-    expect(req.body.error.code).toBe('RATE_LIMITED');
+    await otpRequest(phone, attackerIp).expect(429);
+
+    // The real owner on another IP is unaffected (third parties can't lock them out).
+    const ownerIp = nextIp();
+    await skipCooldown(phone);
+    const fresh = (await otpRequest(phone, ownerIp).expect(200)).body.devCode as string;
+    await otpVerify(phone, fresh, ownerIp).expect(200);
+  });
+
+  it('caps failures per phone across all IPs at 30 per hour', async () => {
+    const phone = nextPhone();
+    for (let round = 0; round < 6; round++) {
+      await skipCooldown(phone);
+      await t.redis.del(`rl:otp:phone:hour:${phone}`);
+      const code = (await otpRequest(phone).expect(200)).body.devCode as string;
+      for (let i = 0; i < 5; i++) await otpVerify(phone, wrongCode(code)).expect(400);
+    }
+    await skipCooldown(phone);
+    await t.redis.del(`rl:otp:phone:hour:${phone}`);
+    expect((await otpRequest(phone).expect(429)).body.error.code).toBe('RATE_LIMITED');
+    expect((await otpVerify(phone, '000000').expect(429)).body.error.code).toBe('RATE_LIMITED');
+  });
+
+  it('parallel guesses from one IP never exceed the 10-failure lockout', async () => {
+    const phone = nextPhone();
+    const ip = nextIp();
+    const codes: string[] = [];
+    // Two live codes in turn give 10 possible wrong attempts; fire 25 guesses at once against each.
+    for (let round = 0; round < 2; round++) {
+      await skipCooldown(phone);
+      codes.push((await otpRequest(phone).expect(200)).body.devCode);
+      await Promise.all(Array.from({ length: 25 }, () => otpVerify(phone, wrongCode(codes[round]!), ip)));
+    }
+    const failures = await t.redis.zcard(`rl:otp:fail:${phone}:${ip}`);
+    expect(failures).toBeLessThanOrEqual(10);
+    await otpVerify(phone, codes[1]!, ip).expect(429);
+  });
+
+  it('returns the post-increment attemptsLeft', async () => {
+    const phone = nextPhone();
+    const { body } = await otpRequest(phone).expect(200);
+    const res = await otpVerify(phone, wrongCode(body.devCode)).expect(400);
+    expect(res.body.error.details.attemptsLeft).toBe(LIMITS.otpMaxAttempts - 1);
+  });
+
+  it('refuses SMS to countries outside OTP_ALLOWED_PREFIXES', async () => {
+    const res = await otpRequest('+44 20 7946 0958').expect(400);
+    expect(res.body.error.code).toBe('PHONE_NOT_SUPPORTED');
   });
 
   it('enforces the resend cooldown with retryAfterSec', async () => {
@@ -153,6 +199,20 @@ describe('OTP login', () => {
     const ip = nextIp();
     for (let i = 0; i < 20; i++) await otpRequest(nextPhone(), ip).expect(200);
     await otpRequest(nextPhone(), ip).expect(429);
+  });
+
+  it('ignores X-Forwarded-For with the default TRUST_PROXY=false', async () => {
+    const strict = await createTestApp({ TRUST_PROXY: 'false' });
+    try {
+      for (let i = 0; i < 20; i++) {
+        await request(strict.http).post('/api/v1/auth/otp/request').set('X-Forwarded-For', nextIp()).send({ phone: nextPhone() }).expect(200);
+      }
+      // Spoofed per-request IPs don't help: every request counts against the real peer address.
+      const res = await request(strict.http).post('/api/v1/auth/otp/request').set('X-Forwarded-For', nextIp()).send({ phone: nextPhone() });
+      expect(res.status).toBe(429);
+    } finally {
+      await strict.close();
+    }
   });
 
   it('validates the phone and code format', async () => {
@@ -183,6 +243,8 @@ describe('sessions', () => {
 
     const reuse = await refresh(s.refreshToken, s.csrfToken).expect(401);
     expect(reuse.body.error.code).toBe('SESSION_EXPIRED');
+    // Access tokens issued before the reuse (possibly to the thief) die too.
+    await request(t.http).get('/api/v1/me').set(bearer(first.body.accessToken)).expect(401);
     // The legitimate latest token is dead too.
     await refresh(current, s.csrfToken).expect(401);
     const live = await t.prisma.refreshToken.count({ where: { userId: s.user.id, revokedAt: null } });
@@ -211,9 +273,13 @@ describe('sessions', () => {
     expect(res.body.error.code).toBe('SESSION_EXPIRED');
   });
 
-  it('logout revokes the refresh token and clears cookies', async () => {
+  it('logout without a valid CSRF header only clears cookies; with it, revokes the session', async () => {
     const s = await loginWithOtp(t);
-    await request(t.http).post('/api/v1/auth/logout').set('Cookie', [`ac_rt=${s.refreshToken}`]).expect(403);
+    const noCsrf = await request(t.http).post('/api/v1/auth/logout').set('Cookie', [`ac_rt=${s.refreshToken}`]).expect(204);
+    expect(readCookies(noCsrf)).toMatchObject({ ac_rt: '', ac_csrf: '' });
+    // Not revoked server-side: a forged cross-site logout can't kill the session.
+    const still = await refresh(s.refreshToken, s.csrfToken).expect(200);
+    s.refreshToken = readCookies(still).ac_rt!;
     const res = await request(t.http)
       .post('/api/v1/auth/logout')
       .set('Cookie', [`ac_rt=${s.refreshToken}`, `ac_csrf=${s.csrfToken}`])
@@ -245,6 +311,12 @@ describe('authentication guard', () => {
     const none = await request(t.http).get('/api/v1/me').expect(401);
     expect(none.body).toEqual({ error: { code: 'UNAUTHORIZED', message: expect.any(String) } });
     await request(t.http).get('/api/v1/me').set(bearer('garbage')).expect(401);
+  });
+
+  it('accepts the Bearer scheme case-insensitively', async () => {
+    const u = await createUser(t);
+    await request(t.http).get('/api/v1/me').set('Authorization', `bearer ${u.token}`).expect(200);
+    await request(t.http).get('/api/v1/me').set('Authorization', `BEARER  ${u.token}`).expect(200);
   });
 
   it('blocked users get 403 ACCOUNT_BLOCKED on every request and cannot refresh', async () => {

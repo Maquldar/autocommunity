@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AuthProvider, Prisma, type User } from '@prisma/client';
-import { LIMITS, RATING, type AuthResult, type Me } from '@autoc/shared';
+import { LIMITS, RATING, type AuthResult, type Me, type OtpRequestResult } from '@autoc/shared';
 import { randomBytes } from 'node:crypto';
 import { AccessTokenService } from '../../common/auth/access-token.service';
 import { SessionService } from '../../common/auth/session.service';
@@ -8,8 +8,10 @@ import { isUserBlocked, UserStateService } from '../../common/auth/user-state.se
 import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { UserViewService } from '../users/user-view.service';
 import type { OAuthProfile } from './oauth-verifier.service';
+import { OtpService } from './otp.service';
 import { RefreshTokenService, type ClientMeta } from './refresh-token.service';
 
 /** Login result before cookies are written by the controller. */
@@ -28,6 +30,8 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly userState: UserStateService,
     private readonly view: UserViewService,
+    private readonly otp: OtpService,
+    private readonly rateLimiter: RateLimiterService,
   ) {}
 
   /** Phone already verified by OTP. */
@@ -59,19 +63,35 @@ export class AuthService {
     return this.sessions.revokeAll(userId);
   }
 
-  /** Attaches a verified phone to an existing account (OAuth users); phone numbers are unique. */
-  async linkPhone(userId: string, phone: string): Promise<Me> {
+  /**
+   * Starts linking a phone to an account that has none (Google/Apple sign-ups). The response is the same
+   * whether or not the number belongs to someone else, so this can't be used to probe registrations.
+   */
+  async requestPhoneLink(userId: string, phone: string, ip: string): Promise<OtpRequestResult> {
+    await this.assertNoVerifiedPhone(userId);
+    return this.otp.request(phone, ip);
+  }
+
+  /**
+   * Completes linking. PHONE_IN_USE is only reported after the code is verified, i.e. to the owner of the
+   * number. Changing an already verified phone is not supported (it would let a stolen access token take
+   * over the account's phone login).
+   */
+  async linkPhone(userId: string, phone: string, code: string, ip: string): Promise<Me> {
+    await this.rateLimiter.consumeOrThrow([{ key: `otp:link-verify:user:${userId}`, limit: LINK_VERIFY_PER_HOUR, windowSec: 3600 }]);
+    await this.assertNoVerifiedPhone(userId);
+    await this.otp.verify(phone, code, ip);
     try {
       await this.prisma.$transaction(async (tx) => {
         const owner = await tx.user.findUnique({ where: { phone }, select: { id: true } });
         if (owner && owner.id !== userId) throw phoneInUse();
-        await tx.user.update({ where: { id: userId }, data: { phone, phoneVerifiedAt: new Date() } });
-        await tx.authIdentity.deleteMany({ where: { userId, provider: 'phone', providerUid: { not: phone } } });
-        await tx.authIdentity.upsert({
-          where: { provider_providerUid: { provider: 'phone', providerUid: phone } },
-          create: { id: newId(), userId, provider: 'phone', providerUid: phone },
-          update: {},
+        const linked = await tx.user.updateMany({
+          where: { id: userId, phoneVerifiedAt: null },
+          data: { phone, phoneVerifiedAt: new Date() },
         });
+        if (linked.count === 0) throw phoneAlreadyVerified();
+        await tx.authIdentity.deleteMany({ where: { userId, provider: 'phone' } });
+        await tx.authIdentity.create({ data: { id: newId(), userId, provider: 'phone', providerUid: phone } });
       });
     } catch (err) {
       if (isUniqueViolation(err)) throw phoneInUse();
@@ -80,10 +100,9 @@ export class AuthService {
     return this.view.loadMe(userId);
   }
 
-  /** Throws PHONE_IN_USE when the number belongs to another account. */
-  async assertPhoneAvailable(userId: string, phone: string): Promise<void> {
-    const owner = await this.prisma.user.findUnique({ where: { phone }, select: { id: true } });
-    if (owner && owner.id !== userId) throw phoneInUse();
+  private async assertNoVerifiedPhone(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phoneVerifiedAt: true } });
+    if (user.phoneVerifiedAt) throw phoneAlreadyVerified();
   }
 
   private async startSession(user: User, isNew: boolean, meta: ClientMeta): Promise<Session> {
@@ -157,4 +176,8 @@ export class AuthService {
   }
 }
 
+const LINK_VERIFY_PER_HOUR = 10;
+
+const phoneAlreadyVerified = () =>
+  Errors.conflict('PHONE_ALREADY_VERIFIED', 'This account already has a verified phone; changing it is not supported');
 const phoneInUse = () => Errors.conflict('PHONE_IN_USE', 'This phone number is linked to another account');

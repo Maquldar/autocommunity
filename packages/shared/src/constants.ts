@@ -23,6 +23,9 @@ export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 /** Purposes whose files are images (re-encoded to WebP, EXIF stripped). */
 export const IMAGE_PURPOSES: readonly UploadPurpose[] = ['avatar', 'community', 'sos', 'message', 'post', 'service', 'order'];
 
+/** Nicknames nobody can claim through the API (impersonation of staff / the platform). */
+export const RESERVED_NICKNAMES: readonly string[] = ['admin', 'support', 'moderator', 'autocommunity', 'system', 'root', 'help'];
+
 export const LIMITS = {
   nicknameMin: 3,
   nicknameMax: 24,

@@ -1,13 +1,42 @@
+import type { NestApplicationOptions } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import type { Env } from './config/env';
-import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
+import { Errors } from './common/errors/api-exception';
+import { AllExceptionsFilter, internalError, sendError, toErrorResponse } from './common/errors/all-exceptions.filter';
 import { CSRF_HEADER } from './common/http/auth-cookies';
 import { LocalStorage } from './infra/storage/local-storage';
 import { Storage } from './infra/storage/storage';
 
 export const API_PREFIX = 'api/v1';
+export const JSON_BODY_LIMIT = '100kb';
+
+/**
+ * Nest's default parsers are off: only JSON bodies (and multipart on upload routes) are accepted, so a
+ * cross-site HTML form (urlencoded / text/plain) can never reach a handler as a parsed body.
+ */
+export const APP_OPTIONS: NestApplicationOptions = { bodyParser: false };
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** Rejects state-changing requests sent by browsers from origins that aren't allow-listed. */
+function originGuard(allowed: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const origin = req.headers.origin;
+    if (origin !== undefined && UNSAFE_METHODS.has(req.method) && !allowed.includes(origin)) {
+      sendError(res, toErrorResponse(Errors.forbidden('Origin not allowed', 'ORIGIN_NOT_ALLOWED'))!);
+      return;
+    }
+    next();
+  };
+}
+
+/** Body-parser errors happen before Nest's pipeline; render them in the API error shape. */
+function bodyParserErrors(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+  sendError(res, toErrorResponse(err) ?? internalError());
+}
 
 function parseTrustProxy(value: string): boolean | number | string {
   if (value === 'true') return true;
@@ -21,7 +50,10 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
   app.disable('x-powered-by');
   app.use(helmet());
+  app.use(originGuard(env.WEB_ORIGIN));
   app.use(cookieParser());
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  app.use(bodyParserErrors);
   app.enableCors({
     origin: env.WEB_ORIGIN,
     credentials: true,

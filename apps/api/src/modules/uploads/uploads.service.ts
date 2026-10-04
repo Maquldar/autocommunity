@@ -4,12 +4,9 @@ import type { Upload } from '@prisma/client';
 import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { randomKeyBase, Storage } from '../../infra/storage/storage';
 import { processMedia } from './media-processor';
 import { toUploadDto } from './upload.mapper';
-
-const UPLOADS_PER_HOUR = 60;
 
 @Injectable()
 export class UploadsService {
@@ -18,11 +15,10 @@ export class UploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: Storage,
-    private readonly rateLimiter: RateLimiterService,
   ) {}
 
+  /** Rate limiting and the streaming size cap happen in UploadStreamInterceptor, before buffering. */
   async create(userId: string, purpose: UploadPurpose, file: Buffer, durationSec?: number): Promise<UploadDto> {
-    await this.rateLimiter.consumeOrThrow([{ key: `upload:user:${userId}`, limit: UPLOADS_PER_HOUR, windowSec: 3600 }]);
     const media = await processMedia(purpose, file, durationSec);
 
     const base = randomKeyBase(purpose);
@@ -64,6 +60,14 @@ export class UploadsService {
       throw Errors.badRequest('INVALID_UPLOAD', 'Upload not found or not allowed here');
     }
     return upload;
+  }
+
+  /** Deletes an upload row and its stored objects (e.g. a replaced avatar). */
+  async remove(uploadId: string): Promise<void> {
+    const deleted = await this.prisma.upload
+      .delete({ where: { id: uploadId }, select: { key: true, thumbKey: true } })
+      .catch(() => null);
+    if (deleted) await this.removeObjects([deleted.key, deleted.thumbKey]);
   }
 
   /** Deletes stored objects; failures are logged, never thrown (orphans are harmless). */

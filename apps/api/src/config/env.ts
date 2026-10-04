@@ -20,8 +20,11 @@ export const envSchema = z
       .default('http://localhost:3000')
       .transform((v) => v.split(',').map((o) => o.trim()).filter(Boolean))
       .pipe(z.array(z.url()).min(1)),
-    /** Express "trust proxy" setting: a hop count, `true`/`false`, or a list of subnets/names. */
-    TRUST_PROXY: z.string().default('loopback, linklocal, uniquelocal'),
+    /**
+     * Express "trust proxy": `false` (default: req.ip is the socket peer), a hop count, or subnets/names.
+     * Behind a load balancer set the exact hop count, otherwise clients can spoof X-Forwarded-For.
+     */
+    TRUST_PROXY: z.string().default('false'),
 
     DATABASE_URL: z.string().url(),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
@@ -34,6 +37,14 @@ export const envSchema = z
     SMS_PROVIDER: z.enum(['console', 'twilio']).default('console'),
     AUTH_EXPOSE_DEV_CODE: bool.default(false),
     OTP_GLOBAL_PER_HOUR: z.coerce.number().int().min(1).default(2000),
+    /** Country prefixes OTP SMS may be sent to (toll-fraud protection), comma-separated E.164 prefixes. */
+    OTP_ALLOWED_PREFIXES: z
+      .string()
+      .default('+7')
+      .transform((v) => v.split(',').map((p) => p.trim()).filter(Boolean))
+      .pipe(z.array(z.string().regex(/^\+\d{1,6}$/, 'prefixes look like +7 or +77')).min(1)),
+    /** Explicit opt-in to the console SMS sender in production (codes would only be logged). */
+    ALLOW_CONSOLE_SMS: bool.default(false),
     TWILIO_ACCOUNT_SID: optionalString,
     TWILIO_AUTH_TOKEN: optionalString,
     /** Sender number in E.164, or a Messaging Service SID (MG…). */
@@ -66,6 +77,9 @@ export const envSchema = z
     if (env.SMS_PROVIDER === 'twilio') need(['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'], 'SMS_PROVIDER=twilio');
     if (env.STORAGE_DRIVER === 's3') need(['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'], 'STORAGE_DRIVER=s3');
     if (env.APPLE_CLIENT_ID) need(['APPLE_REDIRECT_URI'], 'APPLE_CLIENT_ID is set');
+    if (env.NODE_ENV === 'production' && env.SMS_PROVIDER === 'console' && !env.ALLOW_CONSOLE_SMS) {
+      ctx.addIssue({ code: 'custom', path: ['SMS_PROVIDER'], message: 'console SMS in production requires ALLOW_CONSOLE_SMS=true' });
+    }
     if (env.NODE_ENV === 'production' && env.AUTH_EXPOSE_DEV_CODE) {
       ctx.addIssue({ code: 'custom', path: ['AUTH_EXPOSE_DEV_CODE'], message: 'must not be enabled in production' });
     }

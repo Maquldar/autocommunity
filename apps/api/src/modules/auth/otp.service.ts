@@ -12,7 +12,13 @@ import { SmsSender } from '../../infra/sms/sms-sender';
 const HOUR = 3600;
 const PHONE_PER_HOUR = 5;
 const IP_PER_HOUR = 20;
-const FAILURES_PER_HOUR = 10;
+/** Wrong codes per phone from one IP before that IP is locked out for the phone. */
+const FAILURES_PER_PHONE_IP = 10;
+/**
+ * Backstop across all IPs. Keying the main lockout on phone+IP stops a third party from locking the real
+ * owner out; this higher per-phone cap still bounds a distributed guessing attack.
+ */
+const FAILURES_PER_PHONE = 30;
 
 export function generateOtpCode(): string {
   return String(randomInt(0, 10 ** LIMITS.otpLength)).padStart(LIMITS.otpLength, '0');
@@ -23,7 +29,12 @@ export function hashOtp(secret: string, phone: string, code: string): string {
   return createHmac('sha256', secret).update(`${phone}:${code}`).digest('hex');
 }
 
-const failureRule = (phone: string): RateRule => ({ key: `otp:fail:${phone}`, limit: FAILURES_PER_HOUR, windowSec: HOUR });
+export const failureRules = (phone: string, ip: string): RateRule[] => [
+  { key: `otp:fail:${phone}:${ip}`, limit: FAILURES_PER_PHONE_IP, windowSec: HOUR },
+  { key: `otp:fail:${phone}`, limit: FAILURES_PER_PHONE, windowSec: HOUR },
+];
+
+type ClaimedCode = { id: string; codeHash: string; attempts: number };
 
 @Injectable()
 export class OtpService {
@@ -34,9 +45,17 @@ export class OtpService {
     private readonly sms: SmsSender,
   ) {}
 
+  /** Throws PHONE_NOT_SUPPORTED for numbers outside OTP_ALLOWED_PREFIXES (SMS toll-fraud protection). */
+  assertSupported(phone: string): void {
+    if (!this.env.OTP_ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
+      throw Errors.badRequest('PHONE_NOT_SUPPORTED', 'Phone numbers from this country are not supported yet');
+    }
+  }
+
   /** Issues a new code (invalidating older ones) and sends it by SMS. `phone` must be normalized E.164. */
   async request(phone: string, ip: string): Promise<OtpRequestResult> {
-    await this.rateLimiter.checkOrThrow([failureRule(phone)]);
+    this.assertSupported(phone);
+    await this.rateLimiter.checkOrThrow(failureRules(phone, ip));
     await this.rateLimiter.consumeOrThrow([
       { key: `otp:phone:cooldown:${phone}`, limit: 1, windowSec: LIMITS.otpResendSec },
       { key: `otp:phone:hour:${phone}`, limit: PHONE_PER_HOUR, windowSec: HOUR },
@@ -65,31 +84,37 @@ export class OtpService {
 
   /**
    * Consumes the latest active code for the phone. Each code allows `otpMaxAttempts` tries, then it is
-   * burned; repeated failures lock the phone out for an hour.
+   * burned. A failure slot is reserved before comparing (so parallel guesses can't exceed the lockout)
+   * and refunded when the attempt turns out not to be a wrong guess.
    */
-  async verify(phone: string, code: string): Promise<void> {
-    await this.rateLimiter.checkOrThrow([failureRule(phone)]);
-    const now = new Date();
-    const otp = await this.prisma.otpCode.findFirst({
-      where: { phone, usedAt: null, expiresAt: { gt: now } },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!otp || otp.attempts >= LIMITS.otpMaxAttempts) throw codeExpired();
-
-    // Claim the attempt atomically so parallel guesses can't exceed the per-code limit.
-    const claimed = await this.prisma.otpCode.updateMany({
-      where: { id: otp.id, usedAt: null, attempts: { lt: LIMITS.otpMaxAttempts } },
-      data: { attempts: { increment: 1 } },
-    });
-    if (claimed.count === 0) throw codeExpired();
-
-    if (!safeEqual(hashOtp(this.env.OTP_SECRET, phone, code), otp.codeHash)) {
-      await this.rateLimiter.consume([failureRule(phone)]);
-      const attemptsLeft = Math.max(0, LIMITS.otpMaxAttempts - otp.attempts - 1);
-      throw Errors.badRequest('OTP_INVALID', 'Wrong code', { attemptsLeft });
+  async verify(phone: string, code: string, ip: string): Promise<void> {
+    const failureSlot = await this.rateLimiter.reserveOrThrow(failureRules(phone, ip));
+    const otp = await this.claimAttempt(phone);
+    if (!otp) {
+      await this.rateLimiter.refund(failureSlot);
+      throw codeExpired();
     }
-    const used = await this.prisma.otpCode.updateMany({ where: { id: otp.id, usedAt: null }, data: { usedAt: now } });
+    if (!safeEqual(hashOtp(this.env.OTP_SECRET, phone, code), otp.codeHash)) {
+      throw Errors.badRequest('OTP_INVALID', 'Wrong code', { attemptsLeft: Math.max(0, LIMITS.otpMaxAttempts - otp.attempts) });
+    }
+    await this.rateLimiter.refund(failureSlot);
+    const used = await this.prisma.otpCode.updateMany({ where: { id: otp.id, usedAt: null }, data: { usedAt: new Date() } });
     if (used.count === 0) throw codeExpired();
+  }
+
+  /** Atomically counts an attempt on the newest live code; returns the post-increment attempt count. */
+  private async claimAttempt(phone: string): Promise<ClaimedCode | null> {
+    const rows = await this.prisma.$queryRaw<ClaimedCode[]>`
+      UPDATE otp_codes SET attempts = attempts + 1
+      WHERE id = (
+        SELECT id FROM otp_codes
+        WHERE phone = ${phone} AND used_at IS NULL AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+      AND attempts < ${LIMITS.otpMaxAttempts}
+      RETURNING id, code_hash AS "codeHash", attempts`;
+    return rows[0] ?? null;
   }
 }
 

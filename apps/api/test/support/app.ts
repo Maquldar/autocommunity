@@ -5,10 +5,10 @@ import type { AuthResult, UserRole } from '@autoc/shared';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
-import { configureApp } from '../../src/bootstrap';
+import { APP_OPTIONS, configureApp } from '../../src/bootstrap';
 import { AccessTokenService } from '../../src/common/auth/access-token.service';
 import { newId } from '../../src/common/ids';
-import { parseEnvOrThrow } from '../../src/config/env';
+import { ENV, parseEnvOrThrow } from '../../src/config/env';
 import { PrismaService } from '../../src/infra/prisma/prisma.service';
 import { RedisService } from '../../src/infra/redis/redis.service';
 import { friendPairKey } from '../../src/modules/users/relation.service';
@@ -22,10 +22,12 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-export async function createTestApp(): Promise<TestApp> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-  configureApp(app, parseEnvOrThrow());
+/** Boots the real app; `envOverrides` replace variables from the test environment (vitest.config.ts). */
+export async function createTestApp(envOverrides: Record<string, string> = {}): Promise<TestApp> {
+  const env = parseEnvOrThrow({ ...process.env, ...envOverrides });
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(ENV).useValue(env).compile();
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ ...APP_OPTIONS, logger: false });
+  configureApp(app, env);
   await app.init();
   const http = app.getHttpServer() as App;
   return {
@@ -39,7 +41,10 @@ export async function createTestApp(): Promise<TestApp> {
 }
 
 let ipSeq = 0;
-/** A fresh client IP per call (sent as X-Forwarded-For, trusted from loopback) so IP limits don't interfere. */
+/**
+ * A fresh client IP per call, sent as X-Forwarded-For. The test env sets TRUST_PROXY=loopback explicitly
+ * (the production default is false), so supertest's loopback connection is treated as a trusted proxy.
+ */
 export const nextIp = () => `10.${(ipSeq >> 16) & 255}.${(ipSeq >> 8) & 255}.${ipSeq++ & 255}`;
 
 let phoneSeq = 1_000_000;

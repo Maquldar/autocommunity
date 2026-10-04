@@ -17,7 +17,7 @@ const STATUS_CODES: Partial<Record<number, string>> = {
   429: 'RATE_LIMITED',
 };
 
-type Rendered = { status: number; body: ApiErrorBody };
+export type Rendered = { status: number; body: ApiErrorBody };
 
 function render(status: number, code: string, message: string, details?: unknown): Rendered {
   const error: ApiErrorBody['error'] = { code, message };
@@ -43,16 +43,25 @@ export function toErrorResponse(exception: unknown): Rendered | null {
     if (status >= 500) return null;
     return render(status, STATUS_CODES[status] ?? 'ERROR', exception.message);
   }
-  // body-parser / http-errors style errors (malformed JSON, payload too large) carry an expose flag.
+  // body-parser (http-errors) failures; their messages echo parser internals, so use fixed ones.
   if (exception && typeof exception === 'object' && 'status' in exception && 'expose' in exception) {
-    const e = exception as { status: number; expose: boolean; message: string; type?: string };
-    if (e.expose && e.status >= 400 && e.status < 500) {
-      const message = e.type === 'entity.parse.failed' ? 'Malformed JSON body' : e.message;
-      return render(e.status, STATUS_CODES[e.status] ?? 'ERROR', message);
-    }
+    const e = exception as { status: number; expose: boolean; type?: string };
+    if (e.type === 'entity.parse.failed') return render(400, 'INVALID_JSON', 'Malformed JSON body');
+    if (e.type === 'entity.too.large') return render(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large');
+    if (e.expose && e.status >= 400 && e.status < 500) return render(e.status, STATUS_CODES[e.status] ?? 'ERROR', 'Bad request');
   }
   return null;
 }
+
+/** Writes an error response (used by the filter and by plain Express middleware outside Nest's pipeline). */
+export function sendError(res: Response, rendered: Rendered): void {
+  if (res.headersSent) return;
+  const details = rendered.body.error.details as { retryAfterSec?: number } | undefined;
+  if (rendered.status === 429 && details?.retryAfterSec) res.setHeader('Retry-After', String(details.retryAfterSec));
+  res.status(rendered.status).json(rendered.body);
+}
+
+export const internalError = (): Rendered => render(HttpStatus.INTERNAL_SERVER_ERROR, 'INTERNAL', 'Internal server error');
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -67,11 +76,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let rendered = toErrorResponse(exception);
     if (!rendered) {
       this.logger.error({ err: exception, reqId: req.id, url: req.originalUrl }, 'Unhandled error');
-      rendered = render(HttpStatus.INTERNAL_SERVER_ERROR, 'INTERNAL', 'Internal server error');
+      rendered = internalError();
     }
-    if (res.headersSent) return;
-    const details = rendered.body.error.details as { retryAfterSec?: number } | undefined;
-    if (rendered.status === 429 && details?.retryAfterSec) res.setHeader('Retry-After', String(details.retryAfterSec));
-    res.status(rendered.status).json(rendered.body);
+    sendError(res, rendered);
   }
 }

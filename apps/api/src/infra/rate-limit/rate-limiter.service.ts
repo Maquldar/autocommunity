@@ -11,6 +11,8 @@ export type RateRule = {
 };
 
 export type RateResult = { allowed: boolean; retryAfterSec: number };
+/** A recorded hit that can be refunded (e.g. a failure slot reserved before a check that then succeeded). */
+export type RateHit = { rules: RateRule[]; member: string };
 
 /*
  * Sliding-window log over several rules evaluated atomically: either every rule has room and a hit is
@@ -48,13 +50,27 @@ export class RateLimiterService {
   constructor(private readonly redis: RedisService) {}
 
   /** Records a hit in every rule if all have room. */
-  consume(rules: RateRule[]): Promise<RateResult> {
-    return this.run(rules, 'consume');
+  async consume(rules: RateRule[]): Promise<RateResult> {
+    return (await this.run(rules, 'consume')).result;
+  }
+
+  /** Like `consumeOrThrow`, returning a handle for `refund`. */
+  async reserveOrThrow(rules: RateRule[]): Promise<RateHit> {
+    const { result, member } = await this.run(rules, 'consume');
+    if (!result.allowed) throw Errors.rateLimited(result.retryAfterSec);
+    return { rules, member };
+  }
+
+  /** Removes a previously recorded hit from every rule it was recorded in. */
+  async refund(hit: RateHit): Promise<void> {
+    const pipeline = this.redis.pipeline();
+    for (const r of hit.rules) pipeline.zrem(`rl:${r.key}`, hit.member);
+    await pipeline.exec();
   }
 
   /** Checks without recording a hit. */
-  check(rules: RateRule[]): Promise<RateResult> {
-    return this.run(rules, 'check');
+  async check(rules: RateRule[]): Promise<RateResult> {
+    return (await this.run(rules, 'check')).result;
   }
 
   /** Like `consume`, but throws RATE_LIMITED (429) when blocked. */
@@ -72,9 +88,9 @@ export class RateLimiterService {
     if (keys.length) await this.redis.del(...keys.map((k) => `rl:${k}`));
   }
 
-  private async run(rules: RateRule[], mode: 'consume' | 'check'): Promise<RateResult> {
-    if (!rules.length) return { allowed: true, retryAfterSec: 0 };
+  private async run(rules: RateRule[], mode: 'consume' | 'check'): Promise<{ result: RateResult; member: string }> {
     const member = `${Date.now()}-${randomBytes(6).toString('hex')}`;
+    if (!rules.length) return { result: { allowed: true, retryAfterSec: 0 }, member };
     const args: (string | number)[] = [Date.now(), member, mode];
     for (const r of rules) args.push(r.limit, r.windowSec * 1000);
     const waitMs = (await this.redis.eval(
@@ -83,6 +99,8 @@ export class RateLimiterService {
       ...rules.map((r) => `rl:${r.key}`),
       ...args,
     )) as number;
-    return waitMs > 0 ? { allowed: false, retryAfterSec: Math.max(1, Math.ceil(waitMs / 1000)) } : { allowed: true, retryAfterSec: 0 };
+    const result: RateResult =
+      waitMs > 0 ? { allowed: false, retryAfterSec: Math.max(1, Math.ceil(waitMs / 1000)) } : { allowed: true, retryAfterSec: 0 };
+    return { result, member };
   }
 }

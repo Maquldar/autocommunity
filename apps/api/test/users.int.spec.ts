@@ -56,13 +56,39 @@ describe('PATCH /me', () => {
     await patchMe(own.token, { nickname: 'my_nick' }).expect(200);
   });
 
-  it('sets and removes an avatar from an own avatar upload', async () => {
+  it('sets, replaces and removes an avatar, deleting the previous upload', async () => {
     const u = await createUser(t);
     const up = await uploadAvatar(u.token).expect(201);
     const res = await patchMe(u.token, { avatarUploadId: up.body.id }).expect(200);
     expect(res.body.avatarUrl).toBe(up.body.thumbUrl);
+    await patchMe(u.token, { avatarUploadId: up.body.id }).expect(200);
+    expect(await t.prisma.upload.count({ where: { id: up.body.id } })).toBe(1);
+
+    const next = await uploadAvatar(u.token).expect(201);
+    await patchMe(u.token, { avatarUploadId: next.body.id }).expect(200);
+    expect(await t.prisma.upload.count({ where: { id: up.body.id } })).toBe(0);
+    await request(t.http).get(new URL(up.body.url).pathname).expect(404);
+    await request(t.http).get(new URL(up.body.thumbUrl).pathname).expect(404);
+
     const removed = await patchMe(u.token, { avatarUploadId: null }).expect(200);
     expect(removed.body.avatarUrl).toBeNull();
+    expect(await t.prisma.upload.count({ where: { id: next.body.id } })).toBe(0);
+  });
+
+  it('reserves staff nicknames but lets their holder keep them', async () => {
+    const u = await createUser(t);
+    for (const nickname of ['admin', 'Support', 'moderator', 'autocommunity', 'system', 'root', 'help']) {
+      expect((await patchMe(u.token, { nickname }).expect(409)).body.error.code).toBe('NICKNAME_TAKEN');
+    }
+    const admin = await createUser(t, { nickname: 'admin', role: 'admin' });
+    await patchMe(admin.token, { nickname: 'admin', bio: 'staff' }).expect(200);
+  });
+
+  it('rejects invisible characters and nicknames without letters or digits', async () => {
+    const u = await createUser(t);
+    for (const body of [{ nickname: '___' }, { nickname: '._.' }, { name: 'Ase\u200Bt' }, { name: '\u202Egnp.exe' }, { bio: 'a\u2066b' }]) {
+      expect((await patchMe(u.token, body).expect(400)).body.error.code).toBe('VALIDATION_ERROR');
+    }
   });
 
   it("rejects another user's upload and uploads with a different purpose", async () => {
@@ -144,6 +170,15 @@ describe('GET /users/:id and plate privacy', () => {
     expect(self.body).toMatchObject({ relation: 'self', primaryVehicle: { plate: '123ABC02' } });
   });
 
+  it("reports status 'active' once a temporary block has expired", async () => {
+    const viewer = await createUser(t);
+    const u = await createUser(t);
+    await t.prisma.user.update({ where: { id: u.id }, data: { status: 'blocked', blockedUntil: new Date(Date.now() + 60_000) } });
+    expect((await request(t.http).get(`/api/v1/users/${u.id}`).set(bearer(viewer.token)).expect(200)).body.status).toBe('blocked');
+    await t.prisma.user.update({ where: { id: u.id }, data: { blockedUntil: new Date(Date.now() - 1000) } });
+    expect((await request(t.http).get(`/api/v1/users/${u.id}`).set(bearer(viewer.token)).expect(200)).body.status).toBe('active');
+  });
+
   it('hides users who have not finished onboarding, and 404s unknown ids', async () => {
     const viewer = await createUser(t);
     const fresh = await createUser(t, { nickname: null, onboarded: false });
@@ -196,29 +231,57 @@ describe('GET /users?q=', () => {
 });
 
 describe('phone linking', () => {
-  it('links a verified phone to an account without one, and refuses numbers in use', async () => {
+  const oauthUser = async () => {
     const u = await createUser(t);
     await t.prisma.user.update({ where: { id: u.id }, data: { phone: null, phoneVerifiedAt: null } });
-    const other = await loginWithOtp(t);
+    return u;
+  };
+  const linkRequest = (token: string, phone: string, ip = nextIp()) =>
+    request(t.http).post('/api/v1/me/phone/request').set(bearer(token)).set('X-Forwarded-For', ip).send({ phone });
+  const linkVerify = (token: string, phone: string, code: string) =>
+    request(t.http).post('/api/v1/me/phone/verify').set(bearer(token)).set('X-Forwarded-For', nextIp()).send({ phone, code });
 
-    const inUse = await request(t.http).post('/api/v1/me/phone/request').set(bearer(u.token)).send({ phone: other.phone }).expect(409);
-    expect(inUse.body.error.code).toBe('PHONE_IN_USE');
-
+  it('links a verified phone to an account without one', async () => {
+    const u = await oauthUser();
     const phone = nextPhone();
-    const req = await request(t.http)
-      .post('/api/v1/me/phone/request')
-      .set(bearer(u.token))
-      .set('X-Forwarded-For', nextIp())
-      .send({ phone })
-      .expect(200);
-    const res = await request(t.http)
-      .post('/api/v1/me/phone/verify')
-      .set(bearer(u.token))
-      .send({ phone, code: req.body.devCode })
-      .expect(200);
+    const req = await linkRequest(u.token, phone).expect(200);
+    const res = await linkVerify(u.token, phone, req.body.devCode).expect(200);
     expect(res.body).toMatchObject({ phone, phoneVerified: true });
     const identity = await t.prisma.authIdentity.findFirst({ where: { userId: u.id, provider: 'phone' } });
     expect(identity?.providerUid).toBe(phone);
+  });
+
+  it('refuses to replace an already verified phone (account takeover via stolen token)', async () => {
+    const s = await loginWithOtp(t);
+    const attackerPhone = nextPhone();
+    const req = await linkRequest(s.accessToken, attackerPhone).expect(409);
+    expect(req.body.error.code).toBe('PHONE_ALREADY_VERIFIED');
+    const ver = await linkVerify(s.accessToken, attackerPhone, '123456').expect(409);
+    expect(ver.body.error.code).toBe('PHONE_ALREADY_VERIFIED');
+    const user = await t.prisma.user.findUniqueOrThrow({ where: { id: s.user.id } });
+    expect(user.phone).toBe(s.phone);
+  });
+
+  it('does not reveal whether a number is registered until the code is verified', async () => {
+    const u = await oauthUser();
+    const other = await loginWithOtp(t);
+    const free = await linkRequest(u.token, nextPhone()).expect(200);
+    await t.redis.del(`rl:otp:phone:cooldown:${other.phone}`);
+    const taken = await linkRequest(u.token, other.phone).expect(200);
+    expect(Object.keys(taken.body).sort()).toEqual(Object.keys(free.body).sort());
+
+    const wrong = await linkVerify(u.token, other.phone, String((Number(taken.body.devCode) + 1) % 1e6).padStart(6, '0')).expect(400);
+    expect(wrong.body.error.code).toBe('OTP_INVALID');
+    // Only someone who received the SMS learns the number is in use.
+    const res = await linkVerify(u.token, other.phone, taken.body.devCode).expect(409);
+    expect(res.body.error.code).toBe('PHONE_IN_USE');
+  });
+
+  it('rate-limits link verification per user', async () => {
+    const u = await oauthUser();
+    for (let i = 0; i < 10; i++) await linkVerify(u.token, nextPhone(), '000000').expect(400);
+    const res = await linkVerify(u.token, nextPhone(), '000000').expect(429);
+    expect(res.body.error.code).toBe('RATE_LIMITED');
   });
 });
 

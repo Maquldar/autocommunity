@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { LOCALES, type Locale, type Me, type Relation, type UserMini, type UserPublic } from '@autoc/shared';
+import { isUserBlocked } from '../../common/auth/user-state.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Storage } from '../../infra/storage/storage';
 import { toVehicleDto } from '../vehicles/vehicle.mapper';
@@ -50,7 +51,7 @@ export class UserViewService {
       createdAt: user.createdAt.toISOString(),
       primaryVehicle: primary ? toVehicleDto(primary, canSeePlate(relation)) : null,
       relation,
-      status: user.status === 'active' ? 'active' : 'blocked',
+      status: isUserBlocked({ status: user.status, blockedUntil: user.blockedUntil?.toISOString() ?? null }) ? 'blocked' : 'active',
     };
   }
 

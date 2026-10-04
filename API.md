@@ -44,19 +44,19 @@ type UserMini = { id: string; nickname: string; name: string; avatarUrl: string 
 | Method | Path | Auth | Body / query | Response |
 |---|---|---|---|---|
 | GET | `/auth/providers` | public | — | `{ google: { clientId } \| null, apple: { clientId, redirectUri } \| null, devOtp: boolean }` |
-| POST | `/auth/otp/request` | public | `{ phone }` (E.164, `+7…` normalized server-side) | `200 { retryAfterSec: number, devCode?: string }` — `devCode` only when `SMS_PROVIDER=console` and `AUTH_EXPOSE_DEV_CODE=true` |
+| POST | `/auth/otp/request` | public | `{ phone }` (E.164, `+7…` normalized server-side; only prefixes in `OTP_ALLOWED_PREFIXES`, default `+7`, else `400 PHONE_NOT_SUPPORTED`) | `200 { retryAfterSec: number, devCode?: string }` — `devCode` only when `SMS_PROVIDER=console` and `AUTH_EXPOSE_DEV_CODE=true` |
 | POST | `/auth/otp/verify` | public | `{ phone, code }` | `200 { accessToken, user: Me, isNew: boolean }` + sets cookies |
 | POST | `/auth/google` | public | `{ idToken }` | same as verify |
 | POST | `/auth/apple` | public | `{ idToken, name? }` | same as verify |
 | POST | `/auth/refresh` | cookie + CSRF | — | `{ accessToken }` (rotates cookie) |
-| POST | `/auth/logout` | cookie + CSRF | — | `204` |
+| POST | `/auth/logout` | cookie + CSRF | — | `204`, always clears cookies; the session is revoked server-side only with a valid CSRF header |
 | POST | `/auth/logout-all` | bearer | — | `204` (revokes all refresh tokens, disconnects sockets) |
 | GET | `/me` | ✓ | — | `Me` |
 | PATCH | `/me` | ✓ | `{ name?, nickname?, city?, bio?, avatarUploadId? (null removes), locale? }` | `Me` (`CONFLICT NICKNAME_TAKEN`) |
 | PATCH | `/me/settings` | ✓ | `{ privacyMode?, receiveSos? }` | `Me` |
 | POST | `/me/onboarding/complete` | ✓ | — | `Me` (requires name + nickname set) |
-| POST | `/me/phone/request` | ✓ | `{ phone }` | like `/auth/otp/request` (link phone to OAuth account; `CONFLICT PHONE_IN_USE`) |
-| POST | `/me/phone/verify` | ✓ | `{ phone, code }` | `Me` |
+| POST | `/me/phone/request` | ✓ | `{ phone }` | like `/auth/otp/request` — only for accounts **without** a verified phone (else `409 PHONE_ALREADY_VERIFIED`; changing a phone is not supported in Phase 1). Same `200` whether or not the number is registered |
+| POST | `/me/phone/verify` | ✓ | `{ phone, code }` | `Me`; code checked first, then `409 PHONE_IN_USE` if the number belongs to another account; `409 PHONE_ALREADY_VERIFIED`; 10 attempts/h per user |
 | DELETE | `/me` | ✓ | `{ confirm: "DELETE" }` | `204` — anonymizes profile, deletes location, vehicles, push subs, tokens |
 | GET | `/me/vehicles` | ✓ | — | `VehicleDto[]` |
 | POST | `/me/vehicles` | ✓ | `{ brand, model, year, plate?, isPrimary? }` | `VehicleDto` (first vehicle is primary automatically; max 5) |
@@ -65,21 +65,25 @@ type UserMini = { id: string; nickname: string; name: string; avatarUrl: string 
 | GET | `/users/:id` | ✓ | — | `UserPublic` |
 | GET | `/users/:id/vehicles` | ✓ | — | `VehicleDto[]` |
 | GET | `/users` | ✓ | `q` (≥2 chars, nickname/name prefix), cursor, limit | page of `UserPublic` |
-| POST | `/uploads` | ✓ | multipart: `file`, `purpose` ∈ `avatar, community, sos, message, voice, post, video, service, order`, `durationSec?` (voice/video, client-measured, clamped to limits) | `UploadDto` |
+| POST | `/uploads?purpose=` | ✓ | multipart: `file`, `purpose` (query string preferred — it takes precedence and lets the server cap the stream at the per-kind limit; the multipart field is still accepted) ∈ `avatar, community, sos, message, voice, post, video, service, order`, `durationSec?` (voice/video, client-measured, clamped to limits) | `UploadDto` |
 | GET | `/health` | public | — | `{ status: 'ok', db: 'ok', redis: 'ok' }` |
 
 Rules
-- Nickname: 3–24 chars `[a-z0-9_.]`, case-insensitive unique. Name 1–60. Bio ≤ 300. City from `CITIES` list (shared).
+- Nickname: 3–24 chars `[a-z0-9_.]` with at least one letter or digit, case-insensitive unique; `RESERVED_NICKNAMES` (shared: admin, support, moderator, autocommunity, system, root, help) → `409 NICKNAME_TAKEN`. Name 1–60, single line, must contain a letter or digit. Name and bio reject control/zero-width/bidi characters (ZWJ allowed for emoji). Bio ≤ 300. City from `CITIES` list (shared).
 - Vehicle: brand from `CAR_BRANDS` (shared) or free text ≤ 40; model ≤ 40; year 1950..current+1; plate ≤ 12, normalized uppercase.
 - Upload limits: images (jpeg/png/webp/heic) ≤ 10 MB → re-encoded WebP, EXIF stripped, max 2048 px + 400 px thumb; voice (webm/ogg/mp4/mpeg audio) ≤ 5 MB, ≤ 3 min; video (mp4/webm) ≤ 50 MB. Type checked by magic bytes.
-- Rate limits: OTP request: phone 1/60 s & 5/h, IP 20/h. OTP verify: 5 attempts per code, 10 failures/h per phone → `RATE_LIMITED`. Uploads 60/h per user.
+- Rate limits: OTP request: phone 1/60 s & 5/h, IP 20/h. OTP verify: 5 attempts per code, 10 failures/h per phone **from one IP** and 30 failures/h per phone overall → `RATE_LIMITED` (both also block new codes). Uploads 60/h per user.
 - New user created on first successful verify with `nickname = null` → `onboardingCompleted=false`. Client routes to onboarding until complete. Default `privacyMode = 'community'`, `receiveSos = true`, `rating = 50`.
 - Visibility: `GET /users/:id` and `/users/:id/vehicles` return `404` for users who haven't completed onboarding or deleted their account (self excepted). Blocked users are returned with `status: 'blocked'`.
 - Vehicles `isPrimary`: `true` moves the primary flag; `false` on the current primary hands it to the oldest other vehicle (a lone vehicle stays primary).
 - `DELETE /me` additionally removes friendships and the user's avatar uploads.
 - Uploads: multipart text field `durationSec` is clamped to 180 s (voice) / 600 s (video). HEIC is accepted by type but HEVC-encoded HEIC can't be decoded by the server's image library → `415 UNSUPPORTED_FILE_TYPE` (browsers on iOS normally convert to JPEG on upload).
+- `PATCH /me` with a new `avatarUploadId` (or `null`) deletes the previous avatar upload and its files. `UserPublic.status` is `'active'` once a temporary block (`blockedUntil`) has passed.
+- Requests: only `application/json` bodies (≤ 100 KB) and multipart on `/uploads` are parsed — urlencoded/text bodies are ignored. `POST/PUT/PATCH/DELETE` carrying an `Origin` header outside `WEB_ORIGIN` → `403 ORIGIN_NOT_ALLOWED`. Malformed JSON → `400 INVALID_JSON`; JSON body too large → `413 PAYLOAD_TOO_LARGE`.
+- Voice uploads are stored as `.weba`/`.ogg`/`.m4a`/`.mp3` and served with an `audio/*` content type.
+- Refresh-token reuse also invalidates every access token of that user issued before it (all devices).
 - Refresh rotation is strict: two concurrent `/auth/refresh` calls with the same cookie count as reuse and end the session. The web client must serialize refreshes (single in-flight promise, shared across tabs, e.g. Web Locks).
-- Phase 1 error codes beyond §0: `OTP_INVALID` (400, details `{ attemptsLeft }`), `OTP_EXPIRED` (400, no active code / burned / used), `SESSION_EXPIRED` (401, refresh cookie missing/invalid/reused), `CSRF_FAILED` (403), `PROVIDER_DISABLED` (404), `INVALID_ID_TOKEN` (401), `SMS_UNAVAILABLE` (503), `NICKNAME_TAKEN` / `PHONE_IN_USE` / `VEHICLE_LIMIT` (409), `ONBOARDING_INCOMPLETE` (400, details `{ missing: ('name'|'nickname')[] }`), `INVALID_UPLOAD` (400, upload not yours / wrong purpose), `FILE_TOO_LARGE` (413), `UNSUPPORTED_FILE_TYPE` (415). `429` responses also carry a `Retry-After` header.
+- Phase 1 error codes beyond §0: `OTP_INVALID` (400, details `{ attemptsLeft }`), `OTP_EXPIRED` (400, no active code / burned / used), `SESSION_EXPIRED` (401, refresh cookie missing/invalid/reused), `CSRF_FAILED` (403), `PROVIDER_DISABLED` (404), `INVALID_ID_TOKEN` (401), `SMS_UNAVAILABLE` (503), `NICKNAME_TAKEN` / `PHONE_IN_USE` / `PHONE_ALREADY_VERIFIED` / `VEHICLE_LIMIT` (409), `PHONE_NOT_SUPPORTED` (400), `ORIGIN_NOT_ALLOWED` (403), `INVALID_JSON` (400), `PAYLOAD_TOO_LARGE` (413, JSON body), `ONBOARDING_INCOMPLETE` (400, details `{ missing: ('name'|'nickname')[] }`), `INVALID_UPLOAD` (400, upload not yours / wrong purpose), `FILE_TOO_LARGE` (413), `UNSUPPORTED_FILE_TYPE` (415). `429` responses also carry a `Retry-After` header.
 
 ## 2. Phase 2 — Location, map, friends, notifications (FROZEN at Phase 2 start)
 

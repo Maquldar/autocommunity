@@ -28,3 +28,9 @@ export function oggOpus(extraBytes = 200): Buffer {
 
 export const pngImage = (size = 32): Promise<Buffer> =>
   sharp({ create: { width: size, height: size, channels: 4, background: '#3366ff' } }).png().toBuffer();
+
+/** Minimal WebM (EBML header with DocType "webm") as produced by MediaRecorder for audio. */
+export function webmAudio(extraBytes = 200): Buffer {
+  const header = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84]);
+  return Buffer.concat([header, Buffer.from('webm', 'latin1'), Buffer.from([0x42, 0x87, 0x81, 0x04, 0x42, 0x85, 0x81, 0x02]), Buffer.alloc(extraBytes, 0)]);
+}

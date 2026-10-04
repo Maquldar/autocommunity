@@ -31,9 +31,9 @@ const ACCEPTED: Record<MediaKind, Record<string, { mime: string; ext: string }>>
     'image/heif': { mime: 'image/webp', ext: 'webp' },
   },
   voice: {
-    // WebM/Matroska audio is reported as video/webm by magic bytes.
-    'video/webm': { mime: 'audio/webm', ext: 'webm' },
-    'audio/webm': { mime: 'audio/webm', ext: 'webm' },
+    // WebM audio is reported as video/webm by magic bytes; ".weba" makes static serving use audio/webm.
+    'video/webm': { mime: 'audio/webm', ext: 'weba' },
+    'audio/webm': { mime: 'audio/webm', ext: 'weba' },
     'audio/ogg': { mime: 'audio/ogg', ext: 'ogg' },
     'audio/opus': { mime: 'audio/ogg', ext: 'ogg' },
     'audio/mp4': { mime: 'audio/mp4', ext: 'm4a' },
@@ -52,6 +52,8 @@ const MAX_BYTES: Record<MediaKind, number> = {
   voice: LIMITS.voiceMaxBytes,
   video: LIMITS.videoMaxBytes,
 };
+
+export const maxBytesFor = (kind: MediaKind): number => MAX_BYTES[kind];
 
 const MAX_SECONDS: Partial<Record<MediaKind, number>> = { voice: LIMITS.voiceMaxSec, video: LIMITS.videoMaxSec };
 

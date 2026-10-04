@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type {
-  Me,
-  Paginated,
-  UpdateMeInput,
-  UpdateSettingsInput,
-  UserPublic,
-  VehicleDto,
+import {
+  RESERVED_NICKNAMES,
+  type Me,
+  type Paginated,
+  type UpdateMeInput,
+  type UpdateSettingsInput,
+  type UserPublic,
+  type VehicleDto,
 } from '@autoc/shared';
 import { SessionService } from '../../common/auth/session.service';
 import { UserStateService } from '../../common/auth/user-state.service';
@@ -26,7 +27,9 @@ const isUniqueViolationOn = (err: unknown, field: string) =>
   JSON.stringify(err.meta?.target ?? '').includes(field);
 
 /** Escapes LIKE wildcards so user input is matched literally. */
-const likePrefix = (q: string) => `${q.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
+const likePrefix = (q: string) => `${q.replace(/[\\%_]/g, '\\$&')}%`;
+/** Highest code point: every string starting with `q` sorts (bytewise) below `q + MAX_CHAR`. */
+const MAX_CHAR = String.fromCodePoint(0x10ffff);
 
 @Injectable()
 export class UsersService {
@@ -45,10 +48,17 @@ export class UsersService {
   }
 
   async updateMe(userId: string, input: UpdateMeInput): Promise<Me> {
-    if (input.nickname !== undefined) await this.assertNicknameFree(userId, input.nickname);
+    const current = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { nickname: true, avatarUploadId: true },
+    });
+    if (input.nickname !== undefined && input.nickname !== current.nickname) {
+      await this.assertNicknameFree(userId, input.nickname);
+    }
     if (input.avatarUploadId) await this.uploads.requireOwn(userId, input.avatarUploadId, ['avatar']);
+    let user: UserWithView;
     try {
-      const user = await this.prisma.user.update({
+      user = await this.prisma.user.update({
         where: { id: userId },
         data: {
           name: input.name,
@@ -60,11 +70,13 @@ export class UsersService {
         },
         include: userViewInclude,
       });
-      return this.view.toMe(user);
     } catch (err) {
       if (isUniqueViolationOn(err, 'nickname')) throw nicknameTaken();
       throw err;
     }
+    const replacedAvatar = input.avatarUploadId !== undefined && current.avatarUploadId !== input.avatarUploadId;
+    if (replacedAvatar && current.avatarUploadId) await this.uploads.remove(current.avatarUploadId);
+    return this.view.toMe(user);
   }
 
   async updateSettings(userId: string, input: UpdateSettingsInput): Promise<Me> {
@@ -143,13 +155,20 @@ export class UsersService {
   /** Prefix search over nickname and name among active, onboarded users. */
   async search(viewerId: string, q: string, cursor: string | undefined, limit: number): Promise<Paginated<UserPublic>> {
     const after = decodeCursor(cursor);
-    const pattern = likePrefix(q);
+    const prefix = q.toLowerCase();
+    const pattern = likePrefix(prefix);
+    const upper = prefix + MAX_CHAR;
     const rows = await this.prisma.$queryRaw<{ id: string; createdAt: Date }[]>`
       SELECT id, created_at AS "createdAt"
       FROM users
       WHERE status = 'active'
         AND onboarded_at IS NOT NULL
-        AND (lower(nickname::text) LIKE ${pattern} ESCAPE '\\' OR lower(name) LIKE ${pattern} ESCAPE '\\')
+        -- The explicit ~>=~/~<~ range lets prepared (generic) plans use the text_pattern_ops indexes,
+        -- which a parameterized LIKE alone cannot; LIKE then keeps the match exact.
+        AND (
+          (lower(nickname::text) ~>=~ ${prefix} AND lower(nickname::text) ~<~ ${upper} AND lower(nickname::text) LIKE ${pattern} ESCAPE '\\')
+          OR (lower(name) ~>=~ ${prefix} AND lower(name) ~<~ ${upper} AND lower(name) LIKE ${pattern} ESCAPE '\\')
+        )
         ${after ? Prisma.sql`AND (created_at, id) < (${after.createdAt}, ${after.id}::uuid)` : Prisma.empty}
       ORDER BY created_at DESC, id DESC
       LIMIT ${limit + 1}`;
@@ -172,6 +191,7 @@ export class UsersService {
   }
 
   private async assertNicknameFree(userId: string, nickname: string): Promise<void> {
+    if (RESERVED_NICKNAMES.includes(nickname.toLowerCase())) throw nicknameTaken();
     // nickname is citext, so equality is case-insensitive.
     const owner = await this.prisma.user.findFirst({ where: { nickname, id: { not: userId } }, select: { id: true } });
     if (owner) throw nicknameTaken();

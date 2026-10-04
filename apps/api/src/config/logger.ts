@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { RequestMethod } from '@nestjs/common';
 import type { Params } from 'nestjs-pino';
 import type { Env } from './env';
 
@@ -24,6 +25,8 @@ export const REDACT_PATHS = [
 
 export function loggerOptions(env: Env): Params {
   return {
+    // Named wildcard (path-to-regexp v8 syntax); the library default "*" triggers a deprecation warning.
+    forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
     pinoHttp: {
       level: env.LOG_LEVEL,
       redact: { paths: REDACT_PATHS, censor: '[redacted]' },

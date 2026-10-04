@@ -62,9 +62,35 @@ const boolQuery = z.enum(['true', 'false']).transform((v) => v === 'true');
 export const otpRequestSchema = z.object({ phone: phoneSchema });
 export const otpVerifySchema = z.object({ phone: phoneSchema, code: otpCodeSchema });
 export const googleAuthSchema = z.object({ idToken: z.string().min(10).max(4096) });
-export const appleAuthSchema = z.object({ idToken: z.string().min(10).max(4096), name: z.string().trim().max(LIMITS.nameMax).optional() });
+export const appleAuthSchema = z.object({
+  idToken: z.string().min(10).max(4096),
+  name: z.string().trim().max(LIMITS.nameMax).optional(),
+});
 
 /* ---------- profile ---------- */
+
+/**
+ * Invisible or layout-changing characters that enable look-alike names: C0/C1 controls (newline and tab
+ * are handled per field), zero-width space/non-joiner, bidi marks and overrides, word joiners, BOM, soft
+ * hyphen. ZWJ (U+200D) stays allowed because emoji sequences need it.
+ */
+const INVISIBLE_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+const LINE_BREAK_RE = /[\t\n]/;
+
+/** Display name: single line, no invisible characters, at least one letter or digit. */
+export const nameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(LIMITS.nameMax)
+  .refine((v) => !INVISIBLE_RE.test(v) && !LINE_BREAK_RE.test(v), 'Contains invalid characters')
+  .refine((v) => /[\p{L}\p{N}]/u.test(v), 'Must contain a letter or digit');
+
+export const bioSchema = z
+  .string()
+  .trim()
+  .max(LIMITS.bioMax)
+  .refine((v) => !INVISIBLE_RE.test(v), 'Contains invalid characters');
 
 export const nicknameSchema = z
   .string()
@@ -72,16 +98,17 @@ export const nicknameSchema = z
   .toLowerCase()
   .min(LIMITS.nicknameMin)
   .max(LIMITS.nicknameMax)
-  .regex(/^[a-z0-9_.]+$/, 'Only latin letters, digits, _ and .');
+  .regex(/^[a-z0-9_.]+$/, 'Only latin letters, digits, _ and .')
+  .refine((v) => /[a-z0-9]/.test(v), 'Must contain a letter or digit');
 
 export const citySchema = z.enum(CITIES);
 
 export const updateMeSchema = z
   .object({
-    name: z.string().trim().min(1).max(LIMITS.nameMax),
+    name: nameSchema,
     nickname: nicknameSchema,
     city: citySchema.nullable(),
-    bio: z.string().trim().max(LIMITS.bioMax).nullable(),
+    bio: bioSchema.nullable(),
     avatarUploadId: idSchema.nullable(),
     locale: z.enum(LOCALES),
   })
@@ -134,7 +161,11 @@ export const userSearchQuerySchema = paginationQuerySchema.extend({
 
 export const uploadPurposeSchema = z.object({ purpose: z.enum(UPLOAD_PURPOSES) });
 
-/** Multipart text fields of POST /uploads. durationSec is client-measured and clamped server-side. */
+/**
+ * Text fields of POST /uploads. `purpose` may also be sent as the `?purpose=` query parameter (preferred:
+ * the server then applies the per-kind size limit while streaming); the query value wins.
+ * durationSec is client-measured and clamped server-side.
+ */
 export const uploadBodySchema = uploadPurposeSchema.extend({
   durationSec: z.coerce.number().min(0).max(86_400).optional(),
 });

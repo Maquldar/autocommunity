@@ -36,6 +36,13 @@ describe('toErrorResponse', () => {
     expect(toErrorResponse(new BadRequestException('x'))).toMatchObject({ status: 400, body: { error: { code: 'VALIDATION_ERROR' } } });
   });
 
+  it('maps body-parser errors to fixed messages', () => {
+    const parse = Object.assign(new SyntaxError('Unexpected token } in JSON at position 7'), { status: 400, expose: true, type: 'entity.parse.failed' });
+    expect(toErrorResponse(parse)).toEqual({ status: 400, body: { error: { code: 'INVALID_JSON', message: 'Malformed JSON body' } } });
+    const big = Object.assign(new Error('request entity too large'), { status: 413, expose: true, type: 'entity.too.large' });
+    expect(toErrorResponse(big)).toMatchObject({ status: 413, body: { error: { code: 'PAYLOAD_TOO_LARGE' } } });
+  });
+
   it('returns null (→ INTERNAL) for unknown errors so internals never leak', () => {
     expect(toErrorResponse(new Error('connection string postgres://secret'))).toBeNull();
     expect(toErrorResponse('boom')).toBeNull();
