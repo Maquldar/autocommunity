@@ -4,7 +4,7 @@ import { expect, test, type ConsoleMessage, type Page } from '@playwright/test';
  * Routes linked from enabled nav items / the landing CTA whose pages are built by the next phase.
  * Next.js prefetches them and logs a 404. Remove entries as the pages ship.
  */
-const PENDING_ROUTES = ['/login', '/profile', '/settings'];
+const PENDING_ROUTES: string[] = [];
 
 /** Collects console errors and page errors; 404s are only tolerated for prefetches of PENDING_ROUTES. */
 function trackErrors(page: Page): string[] {

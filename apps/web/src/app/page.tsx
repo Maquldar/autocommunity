@@ -1,11 +1,10 @@
-import { ArrowRight, LifeBuoy, MapPinned, UsersRound } from 'lucide-react';
-import Link from 'next/link';
+import { LifeBuoy, MapPinned, UsersRound } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from '@/components/shell/language-switcher';
 import { Logo } from '@/components/shell/logo';
 import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { GetStartedButton } from './get-started-button';
 import { HeroMap } from './hero-map';
 
 export default async function LandingPage() {
@@ -35,9 +34,7 @@ export default async function LandingPage() {
           <p className="mt-5 max-w-xl text-lg leading-7 text-muted-foreground text-pretty">{t('landing.pitch')}</p>
 
           <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto">
-            <Button asChild size="xl" trailingIcon={<ArrowRight aria-hidden="true" className="rtl:rotate-180" />}>
-              <Link href="/login">{t('common.getStarted')}</Link>
-            </Button>
+            <GetStartedButton>{t('common.getStarted')}</GetStartedButton>
             <p className="text-sm text-muted-foreground sm:text-center">{t('landing.signIn')}</p>
           </div>
 

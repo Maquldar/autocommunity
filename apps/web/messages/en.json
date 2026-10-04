@@ -67,13 +67,38 @@
     "notFound": "Not found",
     "rateLimited": "Too many attempts. Try again in {seconds, plural, one {# second} other {# seconds}}.",
     "validation": "Please check the highlighted fields",
-    "server": "Server error. We're on it — try again later."
+    "server": "Server error. We're on it — try again later.",
+    "rateLimitedShort": "Too many attempts. Please wait a bit and try again.",
+    "otpInvalid": "Wrong code. {attemptsLeft, plural, =0 {No attempts left — request a new code.} one {# attempt left.} other {# attempts left.}}",
+    "otpExpired": "This code has expired or was used up. Request a new one.",
+    "sessionExpired": "Your session has ended. Please sign in again.",
+    "conflict": "This conflicts with existing data. Refresh and try again.",
+    "providerDisabled": "This sign-in method isn't available right now.",
+    "invalidIdToken": "Couldn't confirm your account with the provider. Try again.",
+    "smsUnavailable": "We can't send SMS right now. Try again in a few minutes.",
+    "nicknameTaken": "This nickname is already taken",
+    "phoneInUse": "This number is already linked to another account",
+    "phoneAlreadyVerified": "Your account already has a verified phone number",
+    "phoneNotSupported": "Only Kazakhstan numbers (+7) are supported for now",
+    "payloadTooLarge": "The request is too large",
+    "vehicleLimit": "You can add up to {max} cars",
+    "onboardingIncomplete": "Please fill in your name and nickname first",
+    "invalidUpload": "That file can't be used here. Upload it again.",
+    "fileTooLarge": "The file is too large (max {maxMb} MB)",
+    "unsupportedFileType": "Unsupported file. Use a JPEG, PNG, WebP or HEIC photo.",
+    "accountBlocked": "This account is blocked"
   },
   "form": {
     "required": "Required field",
     "charCount": "{count} of {max} characters used",
     "invalidPhone": "Enter a Kazakhstan number: +7 (7XX) XXX-XX-XX",
-    "invalidCode": "Enter all 6 digits"
+    "invalidCode": "Enter all 6 digits",
+    "tooShort": "At least {min, plural, one {# character} other {# characters}}",
+    "tooLong": "At most {max, plural, one {# character} other {# characters}}",
+    "numberMin": "Must be {min} or more",
+    "numberMax": "Must be {max} or less",
+    "chooseOption": "Choose one of the options",
+    "invalid": "Check this value"
   },
   "otp": {
     "label": "Verification code",
@@ -123,7 +148,8 @@
     "everyone": {
       "title": "Everyone",
       "description": "All drivers, with your position rounded to about 500 m."
-    }
+    },
+    "recommended": "Recommended"
   },
   "landing": {
     "eyebrow": "Pilot in Almaty",
@@ -273,6 +299,309 @@
       "demoUser": "Asset Ulymadiyar",
       "brand": "Brand",
       "model": "Model"
+    }
+  },
+  "auth": {
+    "metaTitle": "Sign in",
+    "title": "Sign in or create an account",
+    "subtitle": "Use your phone number. No passwords — we'll text you a one-time code.",
+    "codeTitle": "Enter the code",
+    "getCode": "Get code",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "or": "or",
+    "consent": "By continuing you accept the <terms>Terms of Use</terms> and the <privacy>Privacy Policy</privacy>.",
+    "codeSentTo": "We sent a 6-digit code to <phone></phone>.",
+    "changeNumber": "Change number",
+    "resend": "Send a new code",
+    "resendIn": "You can request a new code in {time}",
+    "codeResent": "New code sent",
+    "devCode": {
+      "title": "Demo mode: no SMS is sent",
+      "description": "This server runs without an SMS provider, so the code is shown here.",
+      "label": "Your code:",
+      "use": "Use this code"
+    },
+    "continueWithApple": "Continue with Apple",
+    "oauthUnavailable": "This sign-in method couldn't load. Use your phone number instead.",
+    "blocked": {
+      "title": "Your account is blocked",
+      "description": "You've been signed out. If you think this is a mistake, contact support.",
+      "home": "Go to the home page"
+    }
+  },
+  "cities": {
+    "Almaty": "Almaty",
+    "Astana": "Astana",
+    "Shymkent": "Shymkent",
+    "Karaganda": "Karaganda",
+    "Aktobe": "Aktobe",
+    "Taraz": "Taraz",
+    "Pavlodar": "Pavlodar",
+    "Ust-Kamenogorsk": "Ust-Kamenogorsk",
+    "Semey": "Semey",
+    "Atyrau": "Atyrau",
+    "Kostanay": "Kostanay",
+    "Kyzylorda": "Kyzylorda",
+    "Aktau": "Aktau",
+    "Uralsk": "Uralsk",
+    "Petropavlovsk": "Petropavlovsk",
+    "Taldykorgan": "Taldykorgan",
+    "Turkestan": "Turkestan",
+    "Konaev": "Konaev"
+  },
+  "profile": {
+    "metaTitle": "My profile",
+    "publicMetaTitle": "Driver profile",
+    "edit": "Edit profile",
+    "editTitle": "Edit profile",
+    "editDescription": "Other drivers see this on your profile and map card.",
+    "saved": "Profile saved",
+    "memberSince": "Member since {date}",
+    "blocked": "Blocked",
+    "noBio": "Tell other drivers about yourself — <link>add a bio</link>.",
+    "loading": "Loading profile…",
+    "notFoundTitle": "Driver not found",
+    "notFoundDescription": "The profile was deleted or the link is wrong.",
+    "backToMine": "Go to my profile",
+    "avatar": {
+      "uploading": "Uploading photo…",
+      "change": "Change photo",
+      "upload": "Upload photo",
+      "remove": "Remove photo",
+      "hint": "JPEG, PNG, WebP or HEIC, up to {maxMb} MB"
+    },
+    "fields": {
+      "name": "Name",
+      "nickname": "Nickname",
+      "nicknameHint": "{min}–{max} characters: a–z, 0–9, _ and .",
+      "nicknameFormat": "Use only latin letters a–z, digits, _ and .",
+      "nicknamePlaceholder": "asset_almaty",
+      "city": "City",
+      "cityPlaceholder": "Choose a city",
+      "cityNone": "Not specified",
+      "bio": "About you",
+      "bioPlaceholder": "Your car, driving experience, how you can help others…"
+    }
+  },
+  "vehicles": {
+    "title": "My cars",
+    "loading": "Loading cars…",
+    "primary": "Primary",
+    "add": "Add car",
+    "edit": "Edit",
+    "delete": "Delete",
+    "makePrimary": "Make primary",
+    "actionsFor": "Actions for {name}",
+    "primarySet": "{name} is now your primary car",
+    "retry": "Try again",
+    "deleted": "Car deleted",
+    "added": "Car added",
+    "updated": "Car updated",
+    "addTitle": "Add a car",
+    "editTitle": "Edit car",
+    "dialogDescription": "Your primary car is shown on your profile and, later, on your map card.",
+    "emptyTitle": "No cars yet",
+    "emptyDescription": "Add your car so drivers who come to help know whom to look for.",
+    "limitReached": "You've added the maximum of {max} cars. Delete one to add another.",
+    "count": "{count} of {max} cars",
+    "deleteTitle": "Delete this car?",
+    "deleteDescription": "{name} will be removed from your profile. This can't be undone.",
+    "noneForUser": "{name} hasn't added a car yet.",
+    "fields": {
+      "brand": "Brand",
+      "brandHint": "Pick from the list or type your own",
+      "brandPlaceholder": "Toyota",
+      "model": "Model",
+      "modelPlaceholder": "Camry",
+      "year": "Year",
+      "yearRange": "Enter a year from {min} to {max}",
+      "plate": "Licence plate (optional)",
+      "plateHint": "Never shown on the map. Only you and your friends see it.",
+      "plateFormat": "Use latin letters and digits only"
+    }
+  },
+  "onboarding": {
+    "metaTitle": "Getting started",
+    "loading": "Loading…",
+    "progressLabel": "Sign-up progress",
+    "stepOf": "Step {step} of {total}",
+    "stepDone": "Done:",
+    "steps": {
+      "profile": "Profile",
+      "car": "Car",
+      "privacy": "Privacy"
+    },
+    "profile": {
+      "title": "Tell drivers who you are",
+      "description": "Your name and nickname appear on your profile and in communities."
+    },
+    "car": {
+      "title": "Add your car",
+      "description": "Helpers find you faster when they know which car to look for. You can skip this and add it later.",
+      "skip": "Skip for now"
+    },
+    "privacy": {
+      "title": "Location and privacy",
+      "description": "Choose who can see you. You can change this at any time in Settings.",
+      "reasonMap": "Your location puts you on the drivers' map — only for the people you choose below.",
+      "reasonSos": "It lets us alert you when someone nearby needs help, and send your SOS to the nearest drivers.",
+      "reasonStorage": "We keep only your latest position, never a history of your trips.",
+      "modeLabel": "Who can see me on the map",
+      "consent": "I agree to the processing of my location and personal data under the <link>Privacy Policy</link>.",
+      "consentRequired": "Please confirm your consent to continue",
+      "finish": "Finish"
+    },
+    "next": "Next",
+    "back": "Back",
+    "done": "Welcome to AutoCommunity!"
+  },
+  "settings": {
+    "title": "Settings",
+    "saved": "Settings saved",
+    "retry": "Try again",
+    "privacy": {
+      "title": "Privacy",
+      "description": "Who can see your location on the map. Your licence plate is never shown there."
+    },
+    "sos": {
+      "label": "Receive SOS alerts nearby",
+      "hint": "Get notified when a driver near you needs help. Works even in Hidden mode."
+    },
+    "appearance": {
+      "title": "Language and theme",
+      "language": "Language",
+      "theme": "Theme"
+    },
+    "phone": {
+      "title": "Phone number",
+      "missing": "Add a phone number to use SOS and to sign in without Google or Apple.",
+      "none": "No phone number",
+      "verifiedHint": "Used to sign in and for SOS contact",
+      "verified": "Verified",
+      "link": "Add number",
+      "linked": "Phone number added",
+      "codeTitle": "Enter the code",
+      "linkTitle": "Add a phone number",
+      "linkDescription": "We'll text you a code to confirm the number.",
+      "confirm": "Confirm",
+      "getCode": "Get code"
+    },
+    "sessions": {
+      "title": "Sessions",
+      "description": "Sign out here or on every device where you're signed in.",
+      "logout": "Log out",
+      "logoutAll": "Log out everywhere",
+      "logoutAllTitle": "Log out on all devices?",
+      "logoutAllDescription": "You'll be signed out on this and every other device. You'll need a new code to sign in.",
+      "loggedOutAll": "Signed out on all devices"
+    },
+    "legal": {
+      "title": "Legal",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Use"
+    },
+    "delete": {
+      "title": "Delete account",
+      "description": "Removes your profile, cars, location and photos. Your account can't be restored.",
+      "action": "Delete account",
+      "confirmTitle": "Delete your account?",
+      "confirmDescription": "Your profile, cars, location and photos will be removed and you'll be signed out everywhere. This can't be undone.",
+      "confirmAction": "Delete forever",
+      "typeLabel": "Type {word} to confirm",
+      "done": "Your account has been deleted"
+    }
+  },
+  "legal": {
+    "draftBadge": "Draft",
+    "updated": "Last updated: {date}",
+    "draftNote": "This is a draft pending review by a lawyer. It describes how the service actually works today but is not yet a final legal document.",
+    "contents": "Contents",
+    "privacy": {
+      "short": "Privacy",
+      "title": "Privacy Policy",
+      "intro": "AutoCommunity is a social platform for drivers in Kazakhstan. This policy explains what personal data we collect, why, how long we keep it and what control you have over it.",
+      "sections": {
+        "controller": {
+          "title": "Who processes your data",
+          "body": "The operator of AutoCommunity processes your personal data as the owner and operator of the personal-data database within the meaning of the Law of the Republic of Kazakhstan \"On Personal Data and Their Protection\". Operator details will be published here before launch."
+        },
+        "data": {
+          "title": "What we collect",
+          "body": "Account data: phone number (or the identifier from Google / Apple if you sign in with them), name, nickname, city, a short bio and an optional profile photo. Photos are re-encoded on upload and their EXIF metadata (including GPS tags) is removed.\n\nCar data: brand, model, year and, if you add it, the licence plate.\n\nTechnical data: the device and browser used to sign in, IP address (for security and rate limits) and the time of your last activity."
+        },
+        "location": {
+          "title": "Geolocation",
+          "body": "We use your location only with your explicit consent, which you give during sign-up and can withdraw at any time by switching to Hidden mode or blocking location access in your browser.\n\nLocation is used to show you on the drivers' map according to the privacy mode you choose (Hidden, My communities, Friends, Everyone), to deliver SOS alerts about drivers nearby who need help, and to send your own SOS to the nearest drivers.\n\nIn Everyone mode other drivers see only an approximate position, rounded to about 500 m. In Hidden mode nobody sees your location, but you can still receive SOS alerts if you have turned them on."
+        },
+        "plates": {
+          "title": "Licence plates",
+          "body": "Your licence plate is never shown on the map. It is visible only to you and to drivers you have added as friends, on your profile."
+        },
+        "retention": {
+          "title": "How long we keep data",
+          "body": "We store only your latest position, not a history of your movements. A position older than 15 minutes is no longer shown to anyone. Account data is kept while your account exists. When you delete your account, your profile is anonymised and your location, cars, photos, friendships and sessions are deleted immediately."
+        },
+        "sharing": {
+          "title": "Who we share data with",
+          "body": "We do not sell personal data. We use service providers strictly to run the service: hosting, file storage and SMS delivery. Other users see only what your privacy settings allow."
+        },
+        "rights": {
+          "title": "Your rights",
+          "body": "You can view and correct your data in your profile, change who sees your location in Settings, withdraw consent to geolocation, and delete your account in Settings at any time. You can also contact us to request a copy of your data."
+        },
+        "law": {
+          "title": "Applicable law",
+          "body": "Personal data is processed in accordance with the Law of the Republic of Kazakhstan No. 94-V of 21 May 2013 \"On Personal Data and Their Protection\", including its requirements on consent and on storing personal data of citizens of Kazakhstan in databases located in Kazakhstan."
+        },
+        "contact": {
+          "title": "Contact",
+          "body": "Questions about personal data can be sent to the operator's support address, which will be published here before launch."
+        }
+      }
+    },
+    "terms": {
+      "short": "Terms",
+      "title": "Terms of Use",
+      "intro": "These terms govern your use of AutoCommunity. By creating an account you accept them.",
+      "sections": {
+        "acceptance": {
+          "title": "Accepting the terms",
+          "body": "You must be at least 18 years old and hold the right to drive a vehicle to use the service. One person may have one account."
+        },
+        "service": {
+          "title": "What the service is",
+          "body": "AutoCommunity connects drivers: a map of drivers nearby, car communities, chats and requests for help on the road (SOS) from other users who volunteer to help."
+        },
+        "emergency": {
+          "title": "Not an emergency service",
+          "body": "AutoCommunity does not replace emergency services. Help from other users is voluntary and is not guaranteed. If anyone is injured, in danger, or there is a road accident or fire, call 112 (or 103 for an ambulance) first."
+        },
+        "conduct": {
+          "title": "Your conduct",
+          "body": "Do not create fake SOS requests, harass other users, impersonate others, share other people's personal data or post illegal content. Breaking these rules lowers your trust rating and may lead to warnings or a block."
+        },
+        "rating": {
+          "title": "Trust rating",
+          "body": "Every account starts with a trust rating of 50 out of 100. It grows when you help others and receive good reviews, and drops after confirmed reports. Some features, such as responding to SOS, require a minimum rating."
+        },
+        "liability": {
+          "title": "Liability",
+          "body": "Users act at their own risk when giving or receiving help. The platform is not a party to agreements between users and is not responsible for their actions, to the extent permitted by law."
+        },
+        "account": {
+          "title": "Your account",
+          "body": "You can delete your account at any time in Settings. We may suspend accounts that break these terms."
+        },
+        "law": {
+          "title": "Applicable law",
+          "body": "These terms are governed by the laws of the Republic of Kazakhstan."
+        },
+        "changes": {
+          "title": "Changes",
+          "body": "We will notify you in the app before material changes to these terms take effect."
+        }
+      }
     }
   }
 }

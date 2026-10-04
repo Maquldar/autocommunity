@@ -16,6 +16,10 @@ export type ConfirmDialogProps = {
   tone?: 'default' | 'danger';
   /** May return a promise: the confirm button shows a spinner and the dialog closes when it resolves. */
   onConfirm: () => void | Promise<unknown>;
+  /** Extra content between the description and the buttons (e.g. a "type DELETE" field). */
+  children?: ReactNode;
+  /** Keeps confirm disabled until the extra content is satisfied. */
+  confirmDisabled?: boolean;
 };
 
 /**
@@ -31,6 +35,8 @@ export function ConfirmDialog({
   cancelLabel,
   tone = 'default',
   onConfirm,
+  children,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const t = useTranslations('common');
   const [pending, setPending] = useState(false);
@@ -54,11 +60,12 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={pending} autoFocus>
             {cancelLabel ?? t('cancel')}
           </Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={handleConfirm} loading={pending}>
+          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={handleConfirm} loading={pending} disabled={confirmDisabled}>
             {confirmLabel ?? t('confirm')}
           </Button>
         </DialogFooter>

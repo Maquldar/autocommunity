@@ -2,6 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithIntl } from '../../../test/render';
+import { FormField } from './form-field';
 import { OtpInput } from './otp-input';
 
 function Controlled({ initial = '', onComplete }: { initial?: string; onComplete?: (code: string) => void }) {
@@ -74,5 +75,22 @@ describe('<OtpInput>', () => {
     renderWithIntl(<Controlled initial="12" />);
     boxes()[5]!.focus();
     expect(boxes()[2]).toHaveFocus();
+  });
+
+  it('auto-advances when wrapped in FormField (its Slot passes a ref that must not replace the box refs)', () => {
+    function InField() {
+      const [code, setCode] = useState('');
+      return (
+        <FormField label="Code">
+          <OtpInput value={code} onChange={setCode} />
+        </FormField>
+      );
+    }
+    renderWithIntl(<InField />);
+    boxes()[0]!.focus();
+    fireEvent.change(boxes()[0]!, { target: { value: '4' } });
+    expect(document.activeElement).toBe(boxes()[1]);
+    expect(boxes()[0]).toHaveAttribute('id');
+    expect(screen.getByLabelText('Code')).toBe(boxes()[0]);
   });
 });

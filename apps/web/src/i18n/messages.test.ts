@@ -12,7 +12,8 @@ function flatten(tree: Tree, prefix = ''): Record<string, string> {
   );
 }
 
-const placeholders = (text: string) => [...text.matchAll(/\{(\w+)/g)].map((m) => m[1]).sort();
+// `{name}` or `{name, plural, …}`; plural branch text like `{No attempts left}` is not a placeholder.
+const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\s*[,}]/g)].map((m) => m[1]).sort();
 
 describe('message catalogs', () => {
   const enFlat = flatten(en);

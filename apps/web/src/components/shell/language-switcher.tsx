@@ -20,13 +20,14 @@ import { SegmentedControl } from '@/components/ui/segmented-control';
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
 /** Writes NEXT_LOCALE and re-renders server components in the new language. */
-function useSetLocale() {
+function useSetLocale(onLocaleChange?: (locale: Locale) => void) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   function setLocale(next: Locale) {
     const secure = window.location.protocol === 'https:' ? '; secure' : '';
     document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=${ONE_YEAR}; samesite=lax${secure}`;
     document.documentElement.lang = next;
+    onLocaleChange?.(next);
     startTransition(() => router.refresh());
   }
   return { setLocale, pending };
@@ -35,10 +36,19 @@ function useSetLocale() {
 /** Language names are always shown in their own language, so they need no translation. */
 const NATIVE_NAMES: Record<Locale, string> = { ru: 'Русский', en: 'English' };
 
-export function LanguageSwitcher({ variant = 'menu', className }: { variant?: 'menu' | 'segmented'; className?: string }) {
+export function LanguageSwitcher({
+  variant = 'menu',
+  className,
+  onLocaleChange,
+}: {
+  variant?: 'menu' | 'segmented';
+  className?: string;
+  /** Called after the cookie is written, e.g. to save the choice to the profile. */
+  onLocaleChange?: (locale: Locale) => void;
+}) {
   const t = useTranslations('language');
   const active = useLocale();
-  const { setLocale, pending } = useSetLocale();
+  const { setLocale, pending } = useSetLocale(onLocaleChange);
 
   if (variant === 'segmented') {
     return (

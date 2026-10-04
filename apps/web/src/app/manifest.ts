@@ -8,7 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'AutoComm',
     description: 'Сообщество водителей: карта, сообщества и помощь на дороге (SOS).',
     lang: 'ru',
-    start_url: '/map',
+    // Phase 1: no map yet. Phase 2 switches this (and HOME_ROUTE in lib/routes.ts) back to '/map'.
+    start_url: '/profile',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',

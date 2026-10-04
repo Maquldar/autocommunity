@@ -20,6 +20,9 @@ const apiWsOrigin = apiOrigin.replace(/^http/, 'ws');
 const mapStyleOrigin = originOf(process.env.NEXT_PUBLIC_MAP_STYLE_URL);
 
 const tileHosts = ['https://*.tile.openstreetmap.org', 'https://tiles.openfreemap.org'];
+// Google Identity Services and Sign in with Apple JS. Only used when GET /auth/providers enables them.
+const googleSignIn = 'https://accounts.google.com';
+const appleSignIn = ['https://appleid.cdn-apple.com', 'https://appleid.apple.com'];
 
 function directive(name: string, sources: Array<string | null | false>): string {
   const unique = [...new Set(sources.filter((s): s is string => Boolean(s)))];
@@ -29,9 +32,9 @@ function directive(name: string, sources: Array<string | null | false>): string 
 const contentSecurityPolicy = [
   directive('default-src', ["'self'"]),
   // Next.js App Router injects inline bootstrap scripts; 'unsafe-eval' is only needed by the dev overlay / HMR.
-  directive('script-src', ["'self'", "'unsafe-inline'", isDev && "'unsafe-eval'"]),
+  directive('script-src', ["'self'", "'unsafe-inline'", isDev && "'unsafe-eval'", googleSignIn, appleSignIn[0]!]),
   // Radix, MapLibre and next/font inject inline styles.
-  directive('style-src', ["'self'", "'unsafe-inline'"]),
+  directive('style-src', ["'self'", "'unsafe-inline'", googleSignIn]),
   directive('img-src', ["'self'", 'data:', 'blob:', 'https:', apiOrigin]),
   directive('media-src', ["'self'", 'blob:', apiOrigin, 'https:']),
   directive('font-src', ["'self'", 'data:']),
@@ -41,13 +44,15 @@ const contentSecurityPolicy = [
     apiWsOrigin,
     ...tileHosts,
     mapStyleOrigin,
+    googleSignIn,
+    ...appleSignIn,
     isDev && 'ws:',
   ]),
   // MapLibre GL spins up its tile workers from blob: URLs.
   directive('worker-src', ["'self'", 'blob:']),
   directive('child-src', ["'self'", 'blob:']),
   directive('manifest-src', ["'self'"]),
-  directive('frame-src', ["'none'"]),
+  directive('frame-src', [googleSignIn, ...appleSignIn]),
   directive('frame-ancestors', ["'none'"]),
   directive('object-src', ["'none'"]),
   directive('base-uri', ["'self'"]),

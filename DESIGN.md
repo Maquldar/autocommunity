@@ -244,7 +244,7 @@ All live in `src/components/ui/`. They are typed, accept `className` (merged wit
 | `Tabs` (+List/Trigger/Content) | `TabsList variant`: segmented · underline | Only when the tabs switch **panels**. For filtering one list use `SegmentedControl` |
 | `Dialog` (+Trigger/Content/Header/Title/Description/Footer/Close) | `hideClose` | Short focused tasks. Centred, max 28rem. Footer stacks on phones (primary on top) |
 | `Sheet` (+Trigger/Content/Header/Title/Description/Footer/Close) | `side`: auto (bottom on phones, right panel ≥1024px) · bottom · right | Filters, pickers, map object details. Drag handle shown on bottom sheets. Content scrolls and the footer stays visible |
-| `ConfirmDialog` | `tone`: default · danger; `onConfirm` may return a promise | Irreversible actions only. Focus starts on **Cancel**. Stays open if `onConfirm` rejects |
+| `ConfirmDialog` | `tone`: default · danger; `onConfirm` may return a promise; optional `children` (extra content, e.g. a "type DELETE" field) + `confirmDisabled` | Irreversible actions only. Focus starts on **Cancel**. Stays open if `onConfirm` rejects |
 | `DropdownMenu` (+Item `destructive`, CheckboxItem, RadioItem, Label, Separator, Sub) | Radix | Overflow actions (⋯). Destructive items go last, after a separator |
 | `Popover` | Radix | Contextual explanations ("What is the trust rating?"). Not for navigation |
 | `Avatar` | `id`, `name`, `src`, `size` xs–xl, `shape` circle · square, `decorative` | Initials fallback: the first letter/digit of up to two words, coloured deterministically from `id` (FNV-1a → `avatar-1..8`). Communities use `square`. Pass `decorative` when the name is printed next to it |
@@ -284,7 +284,7 @@ Shell (`src/components/shell/`): `AppShell`, `nav-config.ts`, `ThemeToggle` (men
 - **Safe areas:** `viewport-fit=cover`. Use the utilities `pt-safe`, `pb-safe`, `px-safe` and the variables `--safe-top/right/bottom/left`. The header, bottom bar, sheets and toasts already respect them.
 - **Skip link:** "Skip to content" (first focusable) jumps to `#main-content` (`tabIndex=-1`).
 - **No horizontal scrolling at 320px and up.** Grids use `grid-cols-1` (minmax 0) on mobile. Long words wrap (`break-words`). Checked by e2e at 320 and 390.
-- **PWA:** `app/manifest.ts` (standalone, `start_url: /map`, maskable icon). Icons live in `public/icons/` and `public/favicon.ico`.
+- **PWA:** `app/manifest.ts` (standalone, `start_url: /profile` until the map ships in Phase 2 — then `/map`, together with `HOME_ROUTE` in `src/lib/routes.ts`; maskable icon). Icons live in `public/icons/` and `public/favicon.ico`.
 
 ## 12. State patterns
 

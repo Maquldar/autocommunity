@@ -46,7 +46,11 @@ export function OtpInput({
   id,
   name,
   className,
-  ...aria
+  // Picked explicitly: in React 19 `ref` is a plain prop, and a wrapping Slot (FormField) passes one.
+  // Spreading "the rest" onto every box would replace the per-box refs and break auto-advance.
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
+  'aria-required': ariaRequired,
 }: OtpInputProps) {
   const t = useTranslations('otp');
   const refs = useRef<Array<HTMLInputElement | null>>([]);
@@ -155,7 +159,9 @@ export function OtpInput({
           disabled={disabled}
           value={code[index] ?? ''}
           aria-label={t('digit', { index: index + 1, total: length })}
-          {...aria}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          aria-required={ariaRequired}
           onChange={(event) => handleChange(index, event)}
           onKeyDown={(event) => handleKeyDown(index, event)}
           onPaste={(event) => handlePaste(index, event)}
