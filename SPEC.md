@@ -3,7 +3,7 @@
 Source: `PLAN.md` (AutoCommunity development plan, based on ТЗ v1.0).
 Product: a social platform for drivers — live map, communities, SOS roadside help, service-center catalog, trust rating.
 
-Status: **Step 0 draft.** Items marked ⚠️ are blockers awaiting the owner's answer (they change the architecture).
+Status: **Step 0 complete.** Blockers resolved by the owner on 2026-10-04 (see §8).
 
 ---
 
@@ -177,19 +177,19 @@ No password reset: there are no passwords (phone OTP + OAuth only).
 - **A-12 Legal**: privacy policy, ToS with "not a replacement for emergency services 103/112" disclaimer, and explicit geolocation consent screen. Texts are drafts, marked as needing lawyer review.
 - **A-13 Load/security testing**: k6 (or autocannon) script for map + SOS endpoints and an OWASP checklist run; results documented. Not a substitute for a real pentest.
 - **A-14 Store publishing**: out of scope for an automated build — needs developer accounts. Listed in KNOWN_GAPS.
-- **A-15 Repo location**: app lives in `autocommunity/` inside the current repo (pending answer to Q-4).
+- **A-15 Repo location**: temporarily `autocommunity/` in the current repo; moves to a dedicated repo (Q-4).
 
 ---
 
 ## 8. Open questions
 
-### ⚠️ Blockers (change architecture)
+### Resolved blockers (owner decisions, 2026-10-04)
 
-- **Q-1 Platform: Flutter native app vs. web app (PWA).** The plan picks Flutter. Your build instructions ask for TypeScript, mobile-first responsive, dark mode, end-to-end tests in a browser — that describes a web app. In this cloud environment Flutter isn't installed and there's no iOS/Android emulator, so I **cannot run or e2e-test a Flutter app here** — I'd be shipping untested code, which your rules forbid. Recommendation: **Next.js PWA (installable on phones, works on any device) + NestJS + PostgreSQL/PostGIS**, keeping the API mobile-ready so a Flutter client can be added later.
-- **Q-2 Scope**: MVP + v2.0 (my default), or MVP only first?
-- **Q-3 Third-party keys**: do you have Twilio / Google / Apple / Mapbox / R2 / FCM credentials, or do I build with the local adapters from A-2?
+- **Q-1 Platform → Next.js PWA.** Flutter isn't runnable/testable in this environment. Client = mobile-first installable web app; API stays mobile-ready for a future Flutter client. Deviation from PLAN.md §0 is intentional.
+- **Q-2 Scope → MVP + v2.0.** Stage 3 (monetization, v3.0) → KNOWN_GAPS.md.
+- **Q-3 Third-party keys → local adapters** as in A-2. Real providers enabled via env vars later.
+- **Q-4 Repo → new separate repo.** Work starts in `autocommunity/` here and moves to the new repo (with history) once the owner creates it.
 
 ### Minor (defaults chosen, no need to answer)
 
-- Q-4 Repo: this repo (`yv7m8fchnb-dev/claude`) also holds unrelated WeedZap code. A separate repo is cleaner for a portfolio. Default: subfolder `autocommunity/` here; can be moved out later with history.
 - Q-5 UI language: default Russian + English (i18n), Russian primary, since the pilot is Almaty.
