@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "screenshots": "node scripts/screenshots.mjs screenshots"
   },
   "dependencies": {
     "@autoc/shared": "workspace:*",

@@ -1,0 +1,443 @@
+@import 'tailwindcss';
+
+/*
+ * AutoCommunity design tokens. Documented in /DESIGN.md.
+ * Raw values live in CSS variables on :root / .dark so both themes swap at runtime;
+ * @theme inline maps them to Tailwind utilities (bg-primary, text-muted-foreground, ...).
+ * Every text/background pair is contrast-checked by scripts/check-contrast.mjs.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+
+  /* Neutrals — cool asphalt greys */
+  --background: #f4f5f7;
+  --foreground: #12161d;
+  --card: #ffffff;
+  --card-foreground: #12161d;
+  --popover: #ffffff;
+  --popover-foreground: #12161d;
+  --muted: #eaecf0;
+  --muted-foreground: #555e6c;
+  --accent: #e7eaef;
+  --accent-foreground: #12161d;
+  --border: #dde1e7;
+  --input: #7d8695;
+  --ring: #1f5ae0;
+  --overlay: rgb(10 13 18 / 0.48);
+
+  /* Primary — "road-sign blue" */
+  --primary: #1f5ae0;
+  --primary-hover: #1a4cc0;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e7eefd;
+  --primary-soft-foreground: #1a48b0;
+
+  --secondary: #e4e7ec;
+  --secondary-hover: #d7dbe2;
+  --secondary-foreground: #1b2029;
+
+  /* SOS — reserved for emergencies (SOS button, 112, accident). Never decorative. */
+  --sos: #d92a1f;
+  --sos-hover: #b8211a;
+  --sos-foreground: #ffffff;
+  --sos-soft: #fdecea;
+  --sos-soft-foreground: #a3160f;
+
+  /* Danger — destructive actions and validation errors */
+  --danger: #b42318;
+  --danger-hover: #971d14;
+  --danger-foreground: #ffffff;
+  --danger-soft: #fdf0ee;
+  --danger-soft-foreground: #8f1b12;
+
+  --success: #157a3b;
+  --success-foreground: #ffffff;
+  --success-soft: #e6f5eb;
+  --success-soft-foreground: #14622f;
+
+  --warning: #a35207;
+  --warning-foreground: #ffffff;
+  --warning-soft: #fdf3e0;
+  --warning-soft-foreground: #7f3f06;
+
+  /* Trust rating scale (0–29 low, 30–69 medium, 70–100 high). Low is orange, not SOS red. */
+  --trust-low: #c2410c;
+  --trust-low-soft: #fdeee6;
+  --trust-low-foreground: #96330a;
+  --trust-medium: #a16207;
+  --trust-medium-soft: #fbf3d9;
+  --trust-medium-foreground: #7a4a06;
+  --trust-high: #157a3b;
+  --trust-high-soft: #e6f5eb;
+  --trust-high-foreground: #14622f;
+
+  /* Avatar fallback palette (same in both themes; white initials on each) */
+  --avatar-1: #1f5ae0;
+  --avatar-2: #0f766e;
+  --avatar-3: #6d3fd1;
+  --avatar-4: #9a3412;
+  --avatar-5: #3f6212;
+  --avatar-6: #0e6f8a;
+  --avatar-7: #9d1d5a;
+  --avatar-8: #475467;
+
+  /* Elevation */
+  --shadow-color: 220 30% 10%;
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 1px 3px hsl(var(--shadow-color) / 0.08);
+  --shadow-md: 0 2px 4px hsl(var(--shadow-color) / 0.05), 0 6px 16px hsl(var(--shadow-color) / 0.08);
+  --shadow-lg: 0 4px 8px hsl(var(--shadow-color) / 0.06), 0 16px 32px hsl(var(--shadow-color) / 0.12);
+  --shadow-xl: 0 8px 16px hsl(var(--shadow-color) / 0.08), 0 24px 56px hsl(var(--shadow-color) / 0.18);
+
+  /* Layout */
+  --nav-height: 4rem;
+  --header-height: 3.5rem;
+  --sidebar-width: 16rem;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Z-index layers — always use these, never ad-hoc numbers */
+  --z-map: 0;
+  --z-raised: 10;
+  --z-header: 30;
+  --z-nav: 40;
+  --z-sheet: 50;
+  --z-modal: 60;
+  --z-popover: 70;
+  --z-toast: 80;
+  --z-skip: 90;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0e1116;
+  --foreground: #e8ebf0;
+  --card: #161a21;
+  --card-foreground: #e8ebf0;
+  --popover: #1b2028;
+  --popover-foreground: #e8ebf0;
+  --muted: #1f242d;
+  --muted-foreground: #9ba4b2;
+  --accent: #252b35;
+  --accent-foreground: #e8ebf0;
+  --border: #2a303a;
+  --input: #687284;
+  --ring: #7ba3ff;
+  --overlay: rgb(0 0 0 / 0.64);
+
+  --primary: #7ba3ff;
+  --primary-hover: #95b6ff;
+  --primary-foreground: #0a1633;
+  --primary-soft: #1a2747;
+  --primary-soft-foreground: #b0c7ff;
+
+  --secondary: #262c36;
+  --secondary-hover: #303743;
+  --secondary-foreground: #e8ebf0;
+
+  --sos: #d42a20;
+  --sos-hover: #b5211a;
+  --sos-foreground: #ffffff;
+  --sos-soft: #3a1513;
+  --sos-soft-foreground: #ffaaa3;
+
+  --danger: #ff8a80;
+  --danger-hover: #ffa49c;
+  --danger-foreground: #2b0705;
+  --danger-soft: #35171a;
+  --danger-soft-foreground: #ffb3ab;
+
+  --success: #4cc67d;
+  --success-foreground: #04200f;
+  --success-soft: #12291b;
+  --success-soft-foreground: #8ee0ae;
+
+  --warning: #f0a63a;
+  --warning-foreground: #2a1700;
+  --warning-soft: #2f2210;
+  --warning-soft-foreground: #f7c77d;
+
+  --trust-low: #ff8f57;
+  --trust-low-soft: #33200f;
+  --trust-low-foreground: #ffb68f;
+  --trust-medium: #efbf45;
+  --trust-medium-soft: #2e2611;
+  --trust-medium-foreground: #f5d47f;
+  --trust-high: #4cc67d;
+  --trust-high-soft: #12291b;
+  --trust-high-foreground: #8ee0ae;
+
+  --shadow-color: 220 40% 2%;
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.4);
+  --shadow-md: 0 2px 4px hsl(var(--shadow-color) / 0.3), 0 6px 16px hsl(var(--shadow-color) / 0.4);
+  --shadow-lg: 0 4px 8px hsl(var(--shadow-color) / 0.35), 0 16px 32px hsl(var(--shadow-color) / 0.5);
+  --shadow-xl: 0 8px 16px hsl(var(--shadow-color) / 0.4), 0 24px 56px hsl(var(--shadow-color) / 0.6);
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-sos: var(--sos);
+  --color-sos-hover: var(--sos-hover);
+  --color-sos-foreground: var(--sos-foreground);
+  --color-sos-soft: var(--sos-soft);
+  --color-sos-soft-foreground: var(--sos-soft-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-foreground: var(--danger-soft-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+
+  --color-trust-low: var(--trust-low);
+  --color-trust-low-soft: var(--trust-low-soft);
+  --color-trust-low-foreground: var(--trust-low-foreground);
+  --color-trust-medium: var(--trust-medium);
+  --color-trust-medium-soft: var(--trust-medium-soft);
+  --color-trust-medium-foreground: var(--trust-medium-foreground);
+  --color-trust-high: var(--trust-high);
+  --color-trust-high-soft: var(--trust-high-soft);
+  --color-trust-high-foreground: var(--trust-high-foreground);
+
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-5: var(--avatar-5);
+  --color-avatar-6: var(--avatar-6);
+  --color-avatar-7: var(--avatar-7);
+  --color-avatar-8: var(--avatar-8);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+}
+
+@theme {
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.5rem;
+
+  --container-narrow: 40rem;
+  --container-content: 60rem;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --animate-fade-in: fade-in 200ms var(--ease-standard);
+  --animate-fade-out: fade-out 150ms var(--ease-exit);
+  --animate-pop-in: pop-in 200ms var(--ease-standard);
+  --animate-pop-out: pop-out 150ms var(--ease-exit);
+  --animate-sheet-up: sheet-up 320ms var(--ease-standard);
+  --animate-sheet-down: sheet-down 200ms var(--ease-exit);
+  --animate-sheet-left: sheet-left 320ms var(--ease-standard);
+  --animate-sheet-right: sheet-right 200ms var(--ease-exit);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-sos-pulse: sos-pulse 2.4s var(--ease-standard) infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes fade-out {
+    to { opacity: 0; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  }
+  @keyframes pop-out {
+    to { opacity: 0; transform: scale(0.97); }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+  }
+  @keyframes sheet-down {
+    to { transform: translateY(100%); }
+  }
+  @keyframes sheet-left {
+    from { transform: translateX(100%); }
+  }
+  @keyframes sheet-right {
+    to { transform: translateX(100%); }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  @keyframes sos-pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sos) 45%, transparent); }
+    70% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--sos) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sos) 0%, transparent); }
+  }
+}
+
+/* Motion durations (used as duration-fast / duration-base / duration-slow) */
+@utility duration-fast {
+  transition-duration: 120ms;
+}
+@utility duration-base {
+  transition-duration: 200ms;
+}
+@utility duration-slow {
+  transition-duration: 320ms;
+}
+
+/* Z-index layers */
+@utility z-map {
+  z-index: var(--z-map);
+}
+@utility z-raised {
+  z-index: var(--z-raised);
+}
+@utility z-header {
+  z-index: var(--z-header);
+}
+@utility z-nav {
+  z-index: var(--z-nav);
+}
+@utility z-sheet {
+  z-index: var(--z-sheet);
+}
+@utility z-modal {
+  z-index: var(--z-modal);
+}
+@utility z-popover {
+  z-index: var(--z-popover);
+}
+@utility z-toast {
+  z-index: var(--z-toast);
+}
+@utility z-skip {
+  z-index: var(--z-skip);
+}
+
+/* iOS PWA safe areas */
+@utility pt-safe {
+  padding-top: var(--safe-top);
+}
+@utility pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+@utility pl-safe {
+  padding-left: var(--safe-left);
+}
+@utility pr-safe {
+  padding-right: var(--safe-right);
+}
+@utility px-safe {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* Shared focus ring: 2px ring + 2px offset in the background colour. */
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--secondary) 0%,
+    color-mix(in srgb, var(--secondary) 45%, var(--card)) 50%,
+    var(--secondary) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 28%, transparent);
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
