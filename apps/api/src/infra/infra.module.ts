@@ -15,7 +15,7 @@ import { Storage } from './storage/storage';
     { provide: RedisService, inject: [ENV], useFactory: (env: Env) => new RedisService(env.REDIS_URL) },
     RateLimiterService,
     { provide: SmsSender, inject: [ENV], useFactory: createSmsSender },
-    { provide: Storage, inject: [ENV], useFactory: createStorage },
+    { provide: Storage, inject: [ENV, PrismaService], useFactory: createStorage },
   ],
   exports: [PrismaService, RedisService, RateLimiterService, SmsSender, Storage],
 })

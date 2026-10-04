@@ -786,3 +786,15 @@ model PollVote {
   @@index([pollId, userId])
   @@map("poll_votes")
 }
+
+/* ------------------------------------------------------------------ file storage (STORAGE_DRIVER=postgres) */
+
+/// Upload bytes for deployments without a persistent disk or object store (demo hosting).
+model StoredFile {
+  key         String   @id
+  contentType String   @map("content_type")
+  body        Bytes
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("stored_files")
+}

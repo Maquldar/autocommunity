@@ -27,6 +27,21 @@ describe('env validation', () => {
     expect(parseEnvOrThrow({ ...base, NODE_ENV: 'production', ALLOW_CONSOLE_SMS: 'true' }).SMS_PROVIDER).toBe('console');
   });
 
+  it('supports demo hosting: PORT, bare-host origins, derived media URL and DEMO_MODE', () => {
+    const { PUBLIC_MEDIA_URL: _omit, ...noMedia } = base;
+    const env = parseEnvOrThrow({ ...noMedia, PORT: '10000', WEB_ORIGIN: 'autoc-web.onrender.com', NODE_ENV: 'production', DEMO_MODE: 'true' });
+    expect(env.API_PORT).toBe(10000);
+    expect(env.WEB_ORIGIN).toEqual(['https://autoc-web.onrender.com']);
+    expect(env.PUBLIC_MEDIA_URL).toBe('https://autoc-web.onrender.com/media');
+    expect(isDevOtpExposed(env)).toBe(true);
+    // An explicit API_PORT wins over PORT.
+    expect(parseEnvOrThrow({ ...base, PORT: '10000', API_PORT: '4001' }).API_PORT).toBe(4001);
+    // Without DEMO_MODE production still refuses console SMS and exposed codes.
+    expect(() => parseEnvOrThrow({ ...base, NODE_ENV: 'production', AUTH_EXPOSE_DEV_CODE: 'true', ALLOW_CONSOLE_SMS: 'true' })).toThrow(
+      /AUTH_EXPOSE_DEV_CODE/,
+    );
+  });
+
   it('fails fast listing every problem', () => {
     expect(() => parseEnvOrThrow({ JWT_ACCESS_SECRET: 'short' })).toThrow(/DATABASE_URL[\s\S]*JWT_ACCESS_SECRET/);
   });

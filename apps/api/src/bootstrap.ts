@@ -8,6 +8,7 @@ import { Errors } from './common/errors/api-exception';
 import { AllExceptionsFilter, internalError, sendError, toErrorResponse } from './common/errors/all-exceptions.filter';
 import { CSRF_HEADER } from './common/http/auth-cookies';
 import { LocalStorage } from './infra/storage/local-storage';
+import { PostgresStorage } from './infra/storage/postgres-storage';
 import { Storage } from './infra/storage/storage';
 
 export const API_PREFIX = 'api/v1';
@@ -80,6 +81,24 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
         // Media is embedded by the web app from another origin.
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       },
+    });
+  } else if (storage instanceof PostgresStorage) {
+    app.use('/media', (req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      storage
+        .get(decodeURIComponent(req.path.replace(/^\/+/, '')))
+        .then((file) => {
+          if (!file) {
+            res.status(404).json({ error: { code: 'NOT_FOUND', message: 'File not found' } });
+            return;
+          }
+          res.setHeader('Content-Type', file.contentType);
+          res.setHeader('Content-Length', String(file.body.length));
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.end(req.method === 'HEAD' ? undefined : file.body);
+        })
+        .catch(next);
     });
   }
 }

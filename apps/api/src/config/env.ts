@@ -18,7 +18,8 @@ export const envSchema = z
     WEB_ORIGIN: z
       .string()
       .default('http://localhost:3000')
-      .transform((v) => v.split(',').map((o) => o.trim()).filter(Boolean))
+      // Bare hosts (e.g. Render's `fromService.host`) are treated as https origins.
+      .transform((v) => v.split(',').map((o) => withScheme(o.trim())).filter(Boolean))
       .pipe(z.array(z.url()).min(1)),
     /**
      * Express "trust proxy": `false` (default: req.ip is the socket peer), a hop count, or subnets/names.
@@ -45,6 +46,11 @@ export const envSchema = z
       .pipe(z.array(z.string().regex(/^\+\d{1,6}$/, 'prefixes look like +7 or +77')).min(1)),
     /** Explicit opt-in to the console SMS sender in production (codes would only be logged). */
     ALLOW_CONSOLE_SMS: bool.default(false),
+    /**
+     * Public portfolio demo without an SMS provider: login codes are shown on screen, console SMS is
+     * allowed in production and the demo seed runs on an empty database. Never enable for real users.
+     */
+    DEMO_MODE: bool.default(false),
     TWILIO_ACCOUNT_SID: optionalString,
     TWILIO_AUTH_TOKEN: optionalString,
     /** Sender number in E.164, or a Messaging Service SID (MG…). */
@@ -54,13 +60,15 @@ export const envSchema = z
     APPLE_CLIENT_ID: optionalString,
     APPLE_REDIRECT_URI: optionalString,
 
-    STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+    /** `postgres` keeps files in the database: for hosts without a persistent disk (demo deployments). */
+    STORAGE_DRIVER: z.enum(['local', 's3', 'postgres']).default('local'),
     UPLOAD_DIR: z.string().default('./uploads-data'),
     /** Base URL files are served from, without trailing slash (e.g. http://localhost:4000/media). */
     PUBLIC_MEDIA_URL: z
       .string()
       .url()
-      .transform((v) => v.replace(/\/+$/, '')),
+      .transform((v) => v.replace(/\/+$/, ''))
+      .optional(),
     S3_ENDPOINT: optionalString,
     S3_REGION: z.string().default('auto'),
     S3_BUCKET: optionalString,
@@ -77,15 +85,20 @@ export const envSchema = z
     if (env.SMS_PROVIDER === 'twilio') need(['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'], 'SMS_PROVIDER=twilio');
     if (env.STORAGE_DRIVER === 's3') need(['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'], 'STORAGE_DRIVER=s3');
     if (env.APPLE_CLIENT_ID) need(['APPLE_REDIRECT_URI'], 'APPLE_CLIENT_ID is set');
-    if (env.NODE_ENV === 'production' && env.SMS_PROVIDER === 'console' && !env.ALLOW_CONSOLE_SMS) {
+    if (env.NODE_ENV === 'production' && env.SMS_PROVIDER === 'console' && !env.ALLOW_CONSOLE_SMS && !env.DEMO_MODE) {
       ctx.addIssue({ code: 'custom', path: ['SMS_PROVIDER'], message: 'console SMS in production requires ALLOW_CONSOLE_SMS=true' });
     }
-    if (env.NODE_ENV === 'production' && env.AUTH_EXPOSE_DEV_CODE) {
+    if (env.NODE_ENV === 'production' && env.AUTH_EXPOSE_DEV_CODE && !env.DEMO_MODE) {
       ctx.addIssue({ code: 'custom', path: ['AUTH_EXPOSE_DEV_CODE'], message: 'must not be enabled in production' });
     }
   });
 
-export type Env = z.output<typeof envSchema>;
+type ParsedEnv = z.output<typeof envSchema>;
+export type Env = Omit<ParsedEnv, 'PUBLIC_MEDIA_URL'> & { PUBLIC_MEDIA_URL: string };
+
+function withScheme(value: string): string {
+  return value === '' || /^[a-z]+:\/\//i.test(value) ? value : `https://${value}`;
+}
 
 export const ENV = Symbol('ENV');
 
@@ -102,14 +115,19 @@ export function loadDotEnv(file = resolve(process.cwd(), '.env')): void {
 export function parseEnvOrThrow(source: NodeJS.ProcessEnv = process.env): Env {
   // `KEY=` in a .env file means "unset", not an empty value.
   const defined = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v.trim() !== ''));
+  // PaaS hosts (Render, Heroku) assign the port through PORT.
+  if (!defined.API_PORT && defined.PORT) defined.API_PORT = defined.PORT;
   const result = envSchema.safeParse(defined);
   if (!result.success) {
     const lines = result.error.issues.map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`);
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
   }
-  return result.data;
+  const env = result.data;
+  // Behind a same-origin proxy the web app serves /media too, so the first web origin is the default.
+  return { ...env, PUBLIC_MEDIA_URL: env.PUBLIC_MEDIA_URL ?? `${env.WEB_ORIGIN[0]}/media` };
 }
 
 export const isCookieSecure = (env: Env): boolean => env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
 
-export const isDevOtpExposed = (env: Env): boolean => env.SMS_PROVIDER === 'console' && env.AUTH_EXPOSE_DEV_CODE;
+export const isDevOtpExposed = (env: Env): boolean =>
+  env.SMS_PROVIDER === 'console' && (env.AUTH_EXPOSE_DEV_CODE || env.DEMO_MODE);

@@ -14,9 +14,20 @@ function originOf(url: string | undefined): string | null {
   }
 }
 
-const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL) ?? 'http://localhost:4000';
+const sameOriginApi = process.env.NEXT_PUBLIC_API_URL === '/';
+// Server-side target for the same-origin proxy. Bare hosts (Render's `fromService.host`) mean https.
+const proxyTarget = (() => {
+  const raw = process.env.API_PROXY_TARGET?.trim().replace(/\/+$/, '');
+  if (!raw) return null;
+  return /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+})();
+if (sameOriginApi && !proxyTarget) {
+  throw new Error('NEXT_PUBLIC_API_URL=/ (same-origin API) requires API_PROXY_TARGET');
+}
+
+const apiOrigin = sameOriginApi ? "'self'" : (originOf(process.env.NEXT_PUBLIC_API_URL) ?? 'http://localhost:4000');
 // Socket.IO upgrades to WebSocket on the same host, so allow the ws(s):// form too.
-const apiWsOrigin = apiOrigin.replace(/^http/, 'ws');
+const apiWsOrigin = sameOriginApi ? null : apiOrigin.replace(/^http/, 'ws');
 const mapStyleOrigin = originOf(process.env.NEXT_PUBLIC_MAP_STYLE_URL);
 
 const tileHosts = ['https://*.tile.openstreetmap.org', 'https://tiles.openfreemap.org'];
@@ -58,7 +69,9 @@ const contentSecurityPolicy = [
   directive('base-uri', ["'self'"]),
   directive('form-action', ["'self'"]),
   // Only for real HTTPS deployments; on http://localhost it would break `next start`.
-  !isDev && apiOrigin.startsWith('https:') ? 'upgrade-insecure-requests' : null,
+  !isDev && (sameOriginApi ? proxyTarget!.startsWith('https:') : apiOrigin.startsWith('https:'))
+    ? 'upgrade-insecure-requests'
+    : null,
 ]
   .filter(Boolean)
   .join('; ');
@@ -85,6 +98,13 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@autoc/shared'],
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
+  },
+  async rewrites() {
+    if (!proxyTarget) return [];
+    return [
+      { source: '/api/v1/:path*', destination: `${proxyTarget}/api/v1/:path*` },
+      { source: '/media/:path*', destination: `${proxyTarget}/media/:path*` },
+    ];
   },
 };
 

@@ -16,13 +16,15 @@ import { createRng, type Rng } from './rng';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
-if (env.NODE_ENV === 'production') {
-  console.error('Refusing to seed: NODE_ENV=production');
+// `--if-empty`: used on demo deployments at boot; seeds only a database without users and never wipes.
+const ifEmpty = process.argv.includes('--if-empty');
+if (env.NODE_ENV === 'production' && !(env.DEMO_MODE && ifEmpty)) {
+  console.error('Refusing to seed: NODE_ENV=production (only `--if-empty` with DEMO_MODE=true is allowed)');
   process.exit(1);
 }
 
 const prisma = new PrismaClient();
-const storage = createStorage(env);
+const storage = createStorage(env, prisma);
 const rng = createRng(20261004);
 const NOW = Date.now();
 const DAY = 86_400_000;
@@ -245,6 +247,10 @@ async function wipe(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (ifEmpty && (await prisma.user.count()) > 0) {
+    console.log('Seed skipped: database already has users');
+    return;
+  }
   const users = buildUsers();
   await wipe();
 
