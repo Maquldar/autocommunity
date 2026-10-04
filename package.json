@@ -14,7 +14,7 @@
     "db:seed": "pnpm --filter @autoc/api db:seed",
     "e2e": "pnpm --filter @autoc/web e2e",
     "setup:local": "node scripts/setup-local.mjs",
-    "dev": "pnpm --filter @autoc/shared build && pnpm -r --parallel --filter ./apps/* dev"
+    "dev": "pnpm --filter @autoc/shared build && pnpm --parallel --filter @autoc/api --filter @autoc/web dev"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
