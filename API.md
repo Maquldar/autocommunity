@@ -64,7 +64,7 @@ type UserMini = { id: string; nickname: string; name: string; avatarUrl: string 
 | GET | `/users/:id` | ✓ | — | `UserPublic` |
 | GET | `/users/:id/vehicles` | ✓ | — | `VehicleDto[]` |
 | GET | `/users` | ✓ | `q` (≥2 chars, nickname/name prefix), cursor, limit | page of `UserPublic` |
-| POST | `/uploads` | ✓ | multipart: `file`, `purpose` ∈ `avatar, community, sos, message, voice, post, video, service, order` | `UploadDto` |
+| POST | `/uploads` | ✓ | multipart: `file`, `purpose` ∈ `avatar, community, sos, message, voice, post, video, service, order`, `durationSec?` (voice/video, client-measured, clamped to limits) | `UploadDto` |
 | GET | `/health` | public | — | `{ status: 'ok', db: 'ok', redis: 'ok' }` |
 
 Rules

@@ -1,0 +1,40 @@
+# Local infrastructure: Postgres + PostGIS, Redis, MinIO (S3-compatible, stands in for Cloudflare R2).
+# Usage: docker compose up -d   (the API and web app run on the host with pnpm, see README)
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: autoc
+      POSTGRES_PASSWORD: autoc
+      POSTGRES_DB: autoc
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoc"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: autoc
+      MINIO_ROOT_PASSWORD: autoc-secret
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - miniodata:/data
+    profiles: ["s3"]
+
+volumes:
+  pgdata:
+  miniodata:

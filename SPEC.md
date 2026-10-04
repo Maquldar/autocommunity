@@ -177,6 +177,7 @@ No password reset: there are no passwords (phone OTP + OAuth only).
 - **A-12 Legal**: privacy policy, ToS with "not a replacement for emergency services 103/112" disclaimer, and explicit geolocation consent screen. Texts are drafts, marked as needing lawyer review.
 - **A-13 Load/security testing**: k6 (or autocannon) script for map + SOS endpoints and an OWASP checklist run; results documented. Not a substitute for a real pentest.
 - **A-14 Store publishing**: out of scope for an automated build — needs developer accounts. Listed in KNOWN_GAPS.
+- **A-16 SOS phone sharing**: the plan's "Call" button would expose the requester's phone to every nearby user. Default: the requester opts in per SOS (`sharePhone`); otherwise the phone is revealed only to the accepted helper (and the helper's to the requester).
 - **A-15 Repo location**: temporarily `autocommunity/` in the current repo; moves to a dedicated repo (Q-4).
 
 ---
