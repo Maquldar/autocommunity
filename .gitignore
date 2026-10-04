@@ -9,3 +9,4 @@ test-results
 uploads-data
 *.tsbuildinfo
 next-env.d.ts
+node-compile-cache
