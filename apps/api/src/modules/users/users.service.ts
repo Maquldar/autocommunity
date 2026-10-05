@@ -134,6 +134,29 @@ export class UsersService {
       await tx.authIdentity.deleteMany({ where: { userId } });
       await tx.refreshToken.deleteMany({ where: { userId } });
       await tx.friendship.deleteMany({ where: { OR: [{ requesterId: userId }, { addresseeId: userId }] } });
+      // Communities: leave every community (keeping memberCount right) and close the ones the user owns.
+      await tx.$executeRaw`
+        UPDATE communities c SET member_count = c.member_count - 1
+        FROM community_members m
+        WHERE m.community_id = c.id AND m.user_id = ${userId}::uuid AND m.status = 'active' AND c.owner_id <> ${userId}::uuid`;
+      await tx.$executeRaw`
+        DELETE FROM chat_members cm USING chats ch, communities c
+        WHERE cm.chat_id = ch.id AND ch.type = 'community' AND ch.ref_id = c.id::text
+          AND c.owner_id = ${userId}::uuid AND c.deleted_at IS NULL`;
+      await tx.$executeRaw`UPDATE communities SET deleted_at = now() WHERE owner_id = ${userId}::uuid AND deleted_at IS NULL`;
+      await tx.$executeRaw`
+        DELETE FROM chat_members cm USING chats ch
+        WHERE cm.chat_id = ch.id AND ch.type = 'community' AND cm.user_id = ${userId}::uuid`;
+      await tx.communityMember.deleteMany({ where: { userId } });
+      // Notifications: the user's own are personal data; in others' notifications the user appears as the
+      // actor (payload.user) — those become an anonymous "Deleted user", and dead friend requests go away.
+      await tx.notification.deleteMany({ where: { userId } });
+      await tx.$executeRaw`
+        DELETE FROM notifications WHERE type = 'friend_request' AND payload->'user'->>'id' = ${userId}`;
+      const anonymous = { id: userId, nickname: '', name: DELETED_USER_NAME, avatarUrl: null, rating: 0 };
+      await tx.$executeRaw`
+        UPDATE notifications SET payload = jsonb_set(payload, '{user}', ${JSON.stringify(anonymous)}::jsonb)
+        WHERE payload->'user'->>'id' = ${userId}`;
       await tx.upload.deleteMany({ where: { id: { in: avatars.map((a) => a.id) } } });
       return avatars;
     });

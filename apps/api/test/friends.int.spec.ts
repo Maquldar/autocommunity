@@ -57,6 +57,8 @@ describe('friend requests lifecycle', () => {
     expect(((await api(b.token).friends().expect(200)).body.items as UserPublic[]).map((u) => u.id)).toEqual([a.id]);
     expect((await api(b.token).requests('in').expect(200)).body.items).toEqual([]);
 
+    // The accepted request's notification is removed for b.
+    expect((await notificationsOf(b.id)).filter((n) => n.type === 'friend_request')).toEqual([]);
     const accepted = await notificationsOf(a.id);
     expect(accepted).toHaveLength(1);
     expect(accepted[0]).toMatchObject({ type: 'friend_accepted', payload: { user: { id: b.id, nickname: 'fr_bob' } } });
@@ -72,9 +74,9 @@ describe('friend requests lifecycle', () => {
     expect(second.body).toEqual({ id: first.body.id, status: 'accepted' });
     expect(await api(a.token).relation(b.id)).toBe('friend');
     expect(await t.prisma.friendship.count({ where: { OR: [{ requesterId: a.id }, { addresseeId: a.id }] } })).toBe(1);
-    // a (the original requester) is told b accepted.
+    // a (the original requester) is told b accepted; b's notification about a's (now accepted) request is gone.
     expect((await notificationsOf(a.id)).map((n) => n.type)).toEqual(['friend_accepted']);
-    expect((await notificationsOf(b.id)).map((n) => n.type)).toEqual(['friend_request']);
+    expect(await notificationsOf(b.id)).toEqual([]);
   });
 
   it('settles simultaneous mutual requests into one friendship', async () => {
@@ -137,7 +139,8 @@ describe('friend requests lifecycle', () => {
     expect(await api(a.token).relation(b.id)).toBe('none');
     await api(b.token).decline(id).expect(404);
 
-    // After a decline a new request is possible; the requester may cancel it.
+    // After the cooldown a new request is possible; the requester may cancel it.
+    await t.redis.del(`friend-cooldown:${a.id}:${b.id}`);
     const id2 = (await api(a.token).send(b.id).expect(201)).body.id as string;
     await api(a.token).cancel(id2).expect(204);
     await api(a.token).cancel(id2).expect(404);
@@ -169,6 +172,41 @@ describe('friend requests lifecycle', () => {
     const b = await createUser(t);
     const res = await api(a.token).send(b.id).expect(429);
     expect(res.body.error.code).toBe('RATE_LIMITED');
+  });
+});
+
+describe('friend request cooldown and cleanup', () => {
+  it('blocks re-requesting the same person for 24 h after a decline or cancel, and removes stale notifications', async () => {
+    const a = await createUser(t);
+    const b = await createUser(t);
+    const id = (await api(a.token).send(b.id).expect(201)).body.id as string;
+    expect(await t.prisma.notification.count({ where: { userId: b.id, type: 'friend_request' } })).toBe(1);
+    await api(b.token).decline(id).expect(204);
+    expect(await t.prisma.notification.count({ where: { userId: b.id, type: 'friend_request' } })).toBe(0);
+    const res = await api(a.token).send(b.id).expect(409);
+    expect(res.body.error.code).toBe('FRIEND_REQUEST_COOLDOWN');
+    expect(res.body.error.details.retryAfterSec).toBeGreaterThan(23 * 3600);
+    expect(res.body.error.details.retryAfterSec).toBeLessThanOrEqual(24 * 3600);
+    // Directional: the one who declined can still ask.
+    const back = (await api(b.token).send(a.id).expect(201)).body.id as string;
+    // Cancel → cooldown for the canceller, and the addressee's notification disappears.
+    await api(b.token).cancel(back).expect(204);
+    expect(await t.prisma.notification.count({ where: { userId: a.id, type: 'friend_request' } })).toBe(0);
+    expect((await api(b.token).send(a.id).expect(409)).body.error.code).toBe('FRIEND_REQUEST_COOLDOWN');
+    // Expired cooldown → allowed again.
+    await t.redis.del(`friend-cooldown:${a.id}:${b.id}`);
+    await api(a.token).send(b.id).expect(201);
+  });
+
+  it('accept re-checks that the requester is still active and onboarded', async () => {
+    for (const change of [{ status: 'blocked' as const }, { status: 'deleted' as const }, { onboardedAt: null }]) {
+      const requester = await createUser(t);
+      const me = await createUser(t);
+      const id = (await api(requester.token).send(me.id).expect(201)).body.id as string;
+      await t.prisma.user.update({ where: { id: requester.id }, data: change });
+      await api(me.token).accept(id).expect(404);
+      expect(await t.prisma.friendship.findUniqueOrThrow({ where: { id } })).toMatchObject({ status: 'pending' });
+    }
   });
 });
 

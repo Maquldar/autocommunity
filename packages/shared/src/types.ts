@@ -1,3 +1,4 @@
+import type { ChatReadEvent, ChatTypingEvent, MessageDeletedEvent, MessageDto } from './communities';
 import type { Locale, PrivacyMode, UserRole } from './constants';
 
 export type Paginated<T> = { items: T[]; nextCursor: string | null };
@@ -117,8 +118,19 @@ export type ServerToClientEvents = {
   'notification:count': (p: { count: number }) => void;
   'friends:changed': (p: Record<string, never>) => void;
   'session:revoked': (p: Record<string, never>) => void;
+  /* phase 3 */
+  'message:new': (m: MessageDto) => void;
+  'message:deleted': (p: MessageDeletedEvent) => void;
+  'chat:typing': (p: ChatTypingEvent) => void;
+  'chat:read': (p: ChatReadEvent) => void;
+  /** The user's chat list or community memberships changed (joined, left, removed, approved, deleted). */
+  'chats:changed': (p: Record<string, never>) => void;
 };
 
-export type ClientToServerEvents = Record<string, never>;
+export type ClientToServerEvents = {
+  'chat:join': (p: { chatId: string }, ack?: (r: { ok: boolean }) => void) => void;
+  'chat:leave': (p: { chatId: string }) => void;
+  'chat:typing': (p: { chatId: string }) => void;
+};
 
 export type PushPayload = { title: string; body: string; url: string; tag: string };

@@ -64,19 +64,27 @@ describe('PUT/DELETE /me/location', () => {
     const u = await createUser(t);
     const res = await request(t.http).put('/api/v1/me/location').set(bearer(u.token)).send({ lat: 91, lng: 0 }).expect(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    // JSON bodies take real numbers only (no string coercion).
+    for (const body of [{ lat: '43.2', lng: 76.9 }, { lat: 43.2, lng: '76.9' }, { lat: 43.2, lng: 76.9, accuracyM: '5' }, { lat: '', lng: 0 }]) {
+      expect((await request(t.http).put('/api/v1/me/location').set(bearer(u.token)).send(body).expect(400)).body.error.code).toBe('VALIDATION_ERROR');
+    }
     await request(t.http).put('/api/v1/me/location').send({ lat: 1, lng: 1 }).expect(401);
   });
 });
 
 describe('GET /map/users visibility', () => {
-  type Rel = 'stranger' | 'friend' | 'co_member' | 'pending_out' | 'pending_in' | 'friend_and_co_member';
+  type Rel = 'stranger' | 'friend' | 'co_public' | 'co_private' | 'pending_out' | 'pending_in' | 'friend_and_co_public';
   const modes: PrivacyMode[] = ['hidden', 'friends', 'community', 'everyone'];
-  const rels: Rel[] = ['stranger', 'friend', 'co_member', 'pending_out', 'pending_in', 'friend_and_co_member'];
+  const rels: Rel[] = ['stranger', 'friend', 'co_public', 'co_private', 'pending_out', 'pending_in', 'friend_and_co_public'];
 
-  /** Expected outcome per (mode, relation): null = not visible. */
+  /**
+   * Expected outcome per (mode, relation): null = not visible. Exact positions only for friends and
+   * co-members of a shared private community; co-members of public communities are approximate.
+   */
   function expected(mode: PrivacyMode, rel: Rel): { relation: MapUser['relation']; approximate: boolean } | null {
-    const isFriend = rel === 'friend' || rel === 'friend_and_co_member';
-    const isCo = rel === 'co_member' || rel === 'friend_and_co_member';
+    const isFriend = rel === 'friend' || rel === 'friend_and_co_public';
+    const isCo = rel === 'co_public' || rel === 'co_private' || rel === 'friend_and_co_public';
+    const exact = isFriend || rel === 'co_private';
     const strongest = isFriend ? 'friend' : isCo ? 'community' : 'public';
     switch (mode) {
       case 'hidden':
@@ -84,16 +92,17 @@ describe('GET /map/users visibility', () => {
       case 'friends':
         return isFriend ? { relation: 'friend', approximate: false } : null;
       case 'community':
-        return isFriend || isCo ? { relation: strongest, approximate: false } : null;
+        return isFriend || isCo ? { relation: strongest, approximate: !exact } : null;
       case 'everyone':
-        return { relation: strongest, approximate: !(isFriend || isCo) };
+        return { relation: strongest, approximate: !exact };
     }
   }
 
   it('applies the privacy-mode × relation matrix in SQL', async () => {
     const a = area();
     const viewer = await createUser(t);
-    const coMembers: string[] = [];
+    const coPublic: string[] = [];
+    const coPrivate: string[] = [];
     const cases: { mode: PrivacyMode; rel: Rel; id: string; lat: number; lng: number }[] = [];
     let i = 0;
     for (const mode of modes) {
@@ -103,14 +112,18 @@ describe('GET /map/users visibility', () => {
         const lng = a.lng + 0.0013 * i;
         i++;
         await setLocation(t, u.id, lat, lng, 1);
-        if (rel === 'friend' || rel === 'friend_and_co_member') await makeFriends(t, viewer.id, u.id);
+        if (rel === 'friend' || rel === 'friend_and_co_public') await makeFriends(t, viewer.id, u.id);
         if (rel === 'pending_out') await makeFriends(t, viewer.id, u.id, 'pending');
         if (rel === 'pending_in') await makeFriends(t, u.id, viewer.id, 'pending');
-        if (rel === 'co_member' || rel === 'friend_and_co_member') coMembers.push(u.id);
+        if (rel === 'co_public' || rel === 'friend_and_co_public') coPublic.push(u.id);
+        if (rel === 'co_private') coPrivate.push(u.id);
         cases.push({ mode, rel, id: u.id, lat, lng });
       }
     }
-    await createCommunity(t, viewer.id, coMembers.map((userId) => ({ userId })));
+    await createCommunity(t, viewer.id, coPublic.map((userId) => ({ userId })));
+    // Co-members of a private community also share a public one: private wins (exact).
+    await createCommunity(t, viewer.id, coPrivate.map((userId) => ({ userId })), { isPrivate: true });
+    await createCommunity(t, viewer.id, coPrivate.map((userId) => ({ userId })));
 
     const res = await mapUsers(viewer.token, `bbox=${a.bbox}`).expect(200);
     expect(res.body.truncated).toBe(false);
@@ -128,6 +141,7 @@ describe('GET /map/users visibility', () => {
       if (want.approximate) {
         expect(got!.lat === c.lat && got!.lng === c.lng, label).toBe(false);
         expect(metersBetween(c, got!), label).toBeLessThan(400);
+        expect(new Date(got!.updatedAt).getUTCSeconds() + new Date(got!.updatedAt).getUTCMilliseconds(), label).toBe(0);
       } else {
         expect(got!.lat, label).toBeCloseTo(c.lat, 9);
         expect(got!.lng, label).toBeCloseTo(c.lng, 9);
@@ -287,7 +301,7 @@ describe('GET /map/users filters and limits', () => {
     const m2 = await createUser(t, { privacyMode: 'everyone' });
     const other = await createUser(t, { privacyMode: 'everyone' });
     const pendingInC1 = await createUser(t, { privacyMode: 'everyone' });
-    const c1 = await createCommunity(t, viewer.id, [{ userId: m1.id }, { userId: pendingInC1.id, status: 'pending' }]);
+    const c1 = await createCommunity(t, viewer.id, [{ userId: m1.id }, { userId: pendingInC1.id, status: 'pending' }], { isPrivate: true });
     const c2 = await createCommunity(t, m2.id, [{ userId: viewer.id }]);
     for (const u of [m1, m2, other, pendingInC1]) await setLocation(t, u.id, a.lat, a.lng, 1);
 
@@ -295,7 +309,9 @@ describe('GET /map/users filters and limits', () => {
     expect((r1.body.items as MapUser[]).map((i) => i.userId)).toEqual([m1.id]);
     const r2 = await mapUsers(viewer.token, `bbox=${a.bbox}&communityIds=${c1},${c2}`).expect(200);
     expect((r2.body.items as MapUser[]).map((i) => i.userId).sort()).toEqual([m1.id, m2.id].sort());
-    expect((r2.body.items as MapUser[]).every((i) => i.relation === 'community' && !i.approximate)).toBe(true);
+    const r2map = byId(r2.body.items as MapUser[]);
+    expect(r2map.get(m1.id)).toMatchObject({ relation: 'community', approximate: false }); // private community
+    expect(r2map.get(m2.id)).toMatchObject({ relation: 'community', approximate: true }); // public community only
 
     // Not a member / pending member / deleted community → 403.
     const foreign = await createCommunity(t, other.id);
@@ -361,9 +377,14 @@ describe('GET /map/users filters and limits', () => {
     expect(res.body.items).toHaveLength(MAP_MAX_USERS);
     const times = (res.body.items as MapUser[]).map((i) => new Date(i.updatedAt).getTime());
     expect([...times].sort((x, y) => y - x)).toEqual(times);
-    // The 5 oldest are the ones cut off.
+    // The cut-off rows are the oldest (approximate times are minute-rounded, ties broken by id).
     const returned = new Set((res.body.items as MapUser[]).map((i) => i.userId));
-    expect(ids.slice(-5).some((id) => returned.has(id))).toBe(false);
+    const cut = ids.filter((id) => !returned.has(id));
+    expect(cut).toHaveLength(5);
+    const cutTimes = await t.prisma.$queryRaw<{ m: Date }[]>`
+      SELECT date_trunc('minute', updated_at) AS m FROM user_locations WHERE user_id = ANY(${cut}::uuid[])`;
+    const oldestReturned = Math.min(...times);
+    expect(cutTimes.every((r) => r.m.getTime() <= oldestReturned)).toBe(true);
   });
 });
 
@@ -391,5 +412,38 @@ describe('map query plan', () => {
     // "Index Scan using …" or "Bitmap Index Scan on …", depending on statistics.
     expect(text).toMatch(/Index Scan (using|on) user_locations_location_gist/);
     expect(text).not.toMatch(/Seq Scan on user_locations/);
+  });
+});
+
+describe('map access rules', () => {
+  it('requires a completed onboarding (403 ONBOARDING_INCOMPLETE)', async () => {
+    const fresh = await createUser(t, { onboarded: false, nickname: null });
+    const res = await mapUsers(fresh.token, 'bbox=76,43,77,44').expect(403);
+    expect(res.body.error.code).toBe('ONBOARDING_INCOMPLETE');
+  });
+
+  it('rate limits to 60 requests per minute per user', async () => {
+    const u = await createUser(t);
+    const now = Date.now();
+    await t.redis.zadd(`rl:map:${u.id}`, ...Array.from({ length: 60 }, (_, i) => [now - i, `m${i}`]).flat());
+    const res = await mapUsers(u.token, 'bbox=76,43,77,44').expect(429);
+    expect(res.body.error.code).toBe('RATE_LIMITED');
+    const other = await createUser(t);
+    await mapUsers(other.token, 'bbox=76,43,77,44').expect(200);
+  });
+
+  it('rounds updatedAt to the minute for approximate entries only', async () => {
+    const a = area();
+    const viewer = await createUser(t);
+    const stranger = await createUser(t, { privacyMode: 'everyone' });
+    const friend = await createUser(t, { privacyMode: 'everyone' });
+    await makeFriends(t, viewer.id, friend.id);
+    await t.prisma.$executeRaw`
+      INSERT INTO user_locations (user_id, location, updated_at) VALUES
+        (${stranger.id}::uuid, ST_SetSRID(ST_MakePoint(${a.lng}::float8, ${a.lat}::float8), 4326)::geography, date_trunc('minute', now()) + interval '17.25 seconds' - interval '1 minute'),
+        (${friend.id}::uuid, ST_SetSRID(ST_MakePoint(${a.lng}::float8, ${a.lat}::float8), 4326)::geography, date_trunc('minute', now()) + interval '17.25 seconds' - interval '1 minute')`;
+    const items = byId((await mapUsers(viewer.token, `bbox=${a.bbox}`).expect(200)).body.items);
+    expect(new Date(items.get(stranger.id)!.updatedAt).getUTCSeconds()).toBe(0);
+    expect(new Date(items.get(friend.id)!.updatedAt).getUTCSeconds()).toBe(17);
   });
 });

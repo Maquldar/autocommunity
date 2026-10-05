@@ -23,3 +23,19 @@ describe('pushPayloadFor', () => {
     expect(pushPayloadFor('friend_request', {}, 'ru')).toBeNull();
   });
 });
+
+describe('pushPayloadFor (communities)', () => {
+  const c = { communityId: '0192f0c0-0000-7000-8000-0000000000cc', communityName: 'Land Cruiser Club' };
+
+  it('renders request / approved / role texts with community links', () => {
+    expect(pushPayloadFor('community_request', { ...c, user }, 'ru')).toEqual({
+      title: 'Заявка в сообщество',
+      body: 'Айдар (@aidar) хочет вступить в «Land Cruiser Club»',
+      url: `/communities/${c.communityId}/requests`,
+      tag: `community_request:${c.communityId}:${user.id}`,
+    });
+    expect(pushPayloadFor('community_approved', c, 'en')).toMatchObject({ body: "You've been accepted to “Land Cruiser Club”", url: `/communities/${c.communityId}` });
+    expect(pushPayloadFor('community_role', { ...c, role: 'moderator' }, 'ru')?.body).toBe('Теперь вы — модератор сообщества «Land Cruiser Club»');
+    expect(pushPayloadFor('community_role', { ...c, role: 'owner' }, 'en')?.body).toBe('You are now the owner of “Land Cruiser Club”');
+  });
+});

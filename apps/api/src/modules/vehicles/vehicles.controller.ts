@@ -1,5 +1,5 @@
 import { Controller, Delete, Get, HttpCode, Patch, Post } from '@nestjs/common';
-import { updateVehicleSchema, vehicleSchema, type VehicleDto, type VehicleInput } from '@autoc/shared';
+import { updateVehicleBodySchema, vehicleBodySchema, type VehicleDto, type VehicleInput } from '@autoc/shared';
 import { CurrentUser, type AuthUser } from '../../common/auth/decorators';
 import { IdParam, ZBody } from '../../common/validation/zod.pipe';
 import { VehiclesService } from './vehicles.service';
@@ -14,7 +14,7 @@ export class VehiclesController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @ZBody(vehicleSchema) body: VehicleInput): Promise<VehicleDto> {
+  create(@CurrentUser() user: AuthUser, @ZBody(vehicleBodySchema) body: VehicleInput): Promise<VehicleDto> {
     return this.vehicles.create(user.id, body);
   }
 
@@ -22,7 +22,7 @@ export class VehiclesController {
   update(
     @CurrentUser() user: AuthUser,
     @IdParam() id: string,
-    @ZBody(updateVehicleSchema) body: Partial<VehicleInput>,
+    @ZBody(updateVehicleBodySchema) body: Partial<VehicleInput>,
   ): Promise<VehicleDto> {
     return this.vehicles.update(user.id, id, body);
   }

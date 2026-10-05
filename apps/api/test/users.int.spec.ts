@@ -325,3 +325,29 @@ describe('DELETE /me', () => {
     expect(again.user.id).not.toBe(s.user.id);
   });
 });
+
+describe('DELETE /me and notifications', () => {
+  it('anonymizes the deleted actor in other users\' notifications and drops their dead friend requests', async () => {
+    const leaver = await createUser(t, { name: 'Leaving Person', nickname: 'leaving_person' });
+    const friend = await createUser(t);
+    const asked = await createUser(t);
+    const owner = await createUser(t);
+    await makeFriends(t, friend.id, leaver.id, 'pending');
+    const f = await t.prisma.friendship.findFirstOrThrow({ where: { requesterId: friend.id, addresseeId: leaver.id } });
+    await request(t.http).post(`/api/v1/friends/requests/${f.id}/accept`).set(bearer(leaver.token)).expect(204);
+    await request(t.http).post('/api/v1/friends/requests').set(bearer(leaver.token)).send({ userId: asked.id }).expect(201);
+    const { body: com } = await request(t.http).post('/api/v1/communities').set(bearer(owner.token)).send({ name: `Anon ${Date.now()}`, isPrivate: true }).expect(201);
+    await request(t.http).post(`/api/v1/communities/${com.id}/join`).set(bearer(leaver.token)).expect(200);
+    expect(await t.prisma.notification.count({ where: { userId: leaver.id } })).toBeGreaterThanOrEqual(0);
+
+    await request(t.http).delete('/api/v1/me').set(bearer(leaver.token)).send({ confirm: 'DELETE' }).expect(204);
+
+    const accepted = await t.prisma.notification.findFirstOrThrow({ where: { userId: friend.id, type: 'friend_accepted' } });
+    expect(accepted.payload).toEqual({ user: { id: leaver.id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 } });
+    expect(await t.prisma.notification.count({ where: { userId: asked.id, type: 'friend_request' } })).toBe(0);
+    const req = await t.prisma.notification.findFirstOrThrow({ where: { userId: owner.id, type: 'community_request' } });
+    expect((req.payload as { user: { name: string } }).user.name).toBe('Deleted user');
+    expect(JSON.stringify(await t.prisma.notification.findMany())).not.toContain('Leaving Person');
+    expect(await t.prisma.notification.count({ where: { userId: leaver.id } })).toBe(0);
+  });
+});

@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [postgis, citext]
+  extensions = [postgis, citext, pg_trgm]
 }
 
 /* ------------------------------------------------------------------ users & auth */
@@ -165,11 +165,18 @@ model Vehicle {
   @@map("vehicles")
 }
 
+/// Who wrote a position: the demo seed (moved by DEMO_LIVE_LOCATIONS) or a client (PUT /me/location).
+enum LocationSource {
+  seed
+  client
+}
+
 /// Latest position only; history is never stored (privacy).
 model UserLocation {
   userId    String                                @id @map("user_id") @db.Uuid
   location  Unsupported("geography(Point,4326)")
   accuracyM Float?                                @map("accuracy_m")
+  source    LocationSource                        @default(client)
   updatedAt DateTime                              @default(now()) @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

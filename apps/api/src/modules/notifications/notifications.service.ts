@@ -70,6 +70,17 @@ export class NotificationsService {
     if (count) await this.emitCount(userId);
   }
 
+  /**
+   * Removes the `friend_request` notification of a request that no longer exists (accepted, declined or
+   * cancelled), so the client never offers Accept on a dead request.
+   */
+  async removeFriendRequest(userId: string, requestId: string): Promise<void> {
+    const { count } = await this.prisma.notification.deleteMany({
+      where: { userId, type: 'friend_request', payload: { path: ['requestId'], equals: requestId } },
+    });
+    if (count) await this.emitCount(userId);
+  }
+
   private async deliver(userId: string, dto: NotificationDto): Promise<void> {
     this.realtime.emitToUser(userId, 'notification:new', dto);
     await this.emitCount(userId);

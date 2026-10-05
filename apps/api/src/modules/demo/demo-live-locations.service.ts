@@ -7,12 +7,13 @@ import { demoStep } from './demo-path';
 
 export const DEMO_TICK_MS = 60_000;
 export const DEMO_LOCK_KEY = 'demo:live-locations:lock';
-/** Seeded accounts someone signed in as within this window are left alone (their position is the visitor's). */
-export const DEMO_SKIP_ACTIVE_MINUTES = 15;
 
 /**
  * DEMO_LIVE_LOCATIONS: every minute, seeded users with a location move one step along a small deterministic
- * loop and get a fresh `updated_at`, so the demo map is never empty. Only `users.is_seed` rows are touched.
+ * loop and get a fresh `updated_at`, so the demo map is never empty. Only positions written by the seed
+ * (`user_locations.source = 'seed'`) of `users.is_seed` accounts are touched: once anyone — e.g. a visitor
+ * signed in to the shared demo account — sends a real position (source `client`), it is never refreshed and
+ * expires after 15 minutes like any other.
  * With several API instances a Redis lock (expiring before the next tick) elects one runner per tick.
  */
 @Injectable()
@@ -53,8 +54,7 @@ export class DemoLiveLocationsService implements OnApplicationBootstrap, OnAppli
       SELECT ul.user_id AS "userId", ST_Y(ul.location::geometry) AS lat, ST_X(ul.location::geometry) AS lng
       FROM user_locations ul
       JOIN users u ON u.id = ul.user_id
-      WHERE u.is_seed AND u.status = 'active'
-        AND (u.last_active_at IS NULL OR u.last_active_at < now() - make_interval(mins => ${DEMO_SKIP_ACTIVE_MINUTES}::int))`;
+      WHERE ul.source = 'seed' AND u.is_seed AND u.status = 'active'`;
     if (!rows.length) return 0;
     const next = rows.map((r) => demoStep(r.userId, r.lat, r.lng, tick));
     await this.prisma.$executeRaw`
@@ -62,7 +62,7 @@ export class DemoLiveLocationsService implements OnApplicationBootstrap, OnAppli
       SET location = ST_SetSRID(ST_MakePoint(d.lng, d.lat), 4326)::geography, updated_at = now()
       FROM unnest(${rows.map((r) => r.userId)}::uuid[], ${next.map((p) => p.lat)}::float8[], ${next.map((p) => p.lng)}::float8[])
         AS d(user_id, lat, lng)
-      WHERE ul.user_id = d.user_id`;
+      WHERE ul.user_id = d.user_id AND ul.source = 'seed'`;
     return rows.length;
   }
 }

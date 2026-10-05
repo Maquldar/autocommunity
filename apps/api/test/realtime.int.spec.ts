@@ -4,6 +4,7 @@ import { io, type Socket } from 'socket.io-client';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { SessionService } from '../src/common/auth/session.service';
+import { UserStateService } from '../src/common/auth/user-state.service';
 import { bearer, createTestApp, createUser, makeFriends, type TestApp } from './support/app';
 
 let t: TestApp;
@@ -155,5 +156,25 @@ describe('Socket.IO /rt', () => {
     // The old token can't reconnect.
     const again = connect(me.token);
     expect((await once<Error>(again, 'connect_error')).message).toBe('UNAUTHORIZED');
+  });
+
+  it('re-checks revocation after joining rooms (revocation racing the handshake)', async () => {
+    const me = await createUser(t);
+    const states = t.app.get(UserStateService);
+    const original = states.getForAuth.bind(states);
+    let calls = 0;
+    // First check passes; the session is revoked before the second (post-join) check.
+    states.getForAuth = async (userId: string) => {
+      const r = await original(userId);
+      if (userId === me.id && ++calls === 1) await t.app.get(SessionService).markRevoked(me.id);
+      return r;
+    };
+    try {
+      const socket = connect(me.token);
+      expect((await once<Error>(socket, 'connect_error')).message).toBe('UNAUTHORIZED');
+      expect(calls).toBeGreaterThanOrEqual(2);
+    } finally {
+      states.getForAuth = original;
+    }
   });
 });

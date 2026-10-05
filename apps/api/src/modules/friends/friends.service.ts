@@ -7,6 +7,7 @@ import { newId } from '../../common/ids';
 import { decodeCursor, keysetOrderBy, keysetWhere, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
+import { RedisService } from '../../infra/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { friendPairKey } from '../users/relation.service';
@@ -16,6 +17,10 @@ export type FriendRequestResult = { id: string; status: 'pending' | 'accepted' }
 
 /** Sending friend requests is rate limited per user (spam protection). */
 export const FRIEND_REQUESTS_PER_HOUR = 50;
+/** After a decline or cancel the same requester can't ask the same person again for this long. */
+export const FRIEND_REQUEST_COOLDOWN_SEC = 24 * 3600;
+
+export const friendCooldownKey = (requesterId: string, addresseeId: string) => `friend-cooldown:${requesterId}:${addresseeId}`;
 
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
@@ -27,6 +32,7 @@ export class FriendsService {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeService,
     private readonly rateLimiter: RateLimiterService,
+    private readonly redis: RedisService,
   ) {}
 
   /** Accepted friends, most recently accepted first. */
@@ -108,6 +114,12 @@ export class FriendsService {
             if (!count) throw new RetryableRace();
             return { row: existing, status: 'accepted' as const };
           }
+          const cooldownMs = await this.redis.pttl(friendCooldownKey(userId, targetId));
+          if (cooldownMs > 0) {
+            throw Errors.conflict('FRIEND_REQUEST_COOLDOWN', 'You can send this person a new request later', {
+              retryAfterSec: Math.ceil(cooldownMs / 1000),
+            });
+          }
           const row = await tx.friendship.create({
             data: { id: newId(), requesterId: userId, addresseeId: targetId, pairKey, status: 'pending' },
           });
@@ -125,8 +137,16 @@ export class FriendsService {
 
   /** Only the addressee of a pending request may accept it; anyone else gets 404. */
   async accept(userId: string, requestId: string): Promise<void> {
-    const row = await this.prisma.friendship.findFirst({ where: { id: requestId, addresseeId: userId, status: 'pending' } });
+    const row = await this.prisma.friendship.findFirst({
+      where: { id: requestId, addresseeId: userId, status: 'pending' },
+      include: { requester: { select: { status: true, blockedUntil: true, onboardedAt: true } } },
+    });
     if (!row) throw Errors.notFound('Friend request not found');
+    // The requester may have been blocked or deleted since sending.
+    const r = row.requester;
+    if (!r.onboardedAt || isUserBlocked({ status: r.status, blockedUntil: r.blockedUntil?.toISOString() ?? null })) {
+      throw Errors.notFound('Friend request not found');
+    }
     const { count } = await this.prisma.friendship.updateMany({
       where: { id: row.id, status: 'pending' },
       data: { status: 'accepted', acceptedAt: new Date() },
@@ -143,6 +163,11 @@ export class FriendsService {
     await this.removePending(requestId, { requesterId: userId });
   }
 
+  /** Per-pair, directional: the requester of a declined/cancelled request waits before asking again. */
+  private async startCooldown(requesterId: string, addresseeId: string): Promise<void> {
+    await this.redis.set(friendCooldownKey(requesterId, addresseeId), '1', 'EX', FRIEND_REQUEST_COOLDOWN_SEC);
+  }
+
   async unfriend(userId: string, otherId: string): Promise<void> {
     const { count } = await this.prisma.friendship.deleteMany({ where: { pairKey: friendPairKey(userId, otherId), status: 'accepted' } });
     if (!count) throw Errors.notFound('Not friends with this user');
@@ -154,6 +179,8 @@ export class FriendsService {
     if (!row) throw Errors.notFound('Friend request not found');
     const { count } = await this.prisma.friendship.deleteMany({ where: { id: row.id, status: 'pending' } });
     if (!count) throw Errors.notFound('Friend request not found');
+    await this.startCooldown(row.requesterId, row.addresseeId);
+    await this.notifications.removeFriendRequest(row.addresseeId, row.id);
     this.realtime.emitToUsers([row.requesterId, row.addresseeId], 'friends:changed', {});
   }
 
@@ -165,6 +192,7 @@ export class FriendsService {
 
   /** The original requester learns their request was accepted (also when accepted via a reverse request). */
   private async afterAccepted(row: Friendship): Promise<void> {
+    await this.notifications.removeFriendRequest(row.addresseeId, row.id);
     const addressee = await this.prisma.user.findUniqueOrThrow({ where: { id: row.addresseeId }, include: userViewInclude });
     await this.notifications.create(row.requesterId, 'friend_accepted', { user: this.view.toMini(addressee) });
     this.realtime.emitToUsers([row.requesterId, row.addresseeId], 'friends:changed', {});

@@ -185,7 +185,7 @@ const DELETE_WORD = 'DELETE';
 
 function DeleteAccountSection() {
   const t = useTranslations('settings.delete');
-  const { forgetSession } = useAuth();
+  const { forgetSession, expectSessionEnd } = useAuth();
   const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
@@ -213,9 +213,11 @@ function DeleteAccountSection() {
         confirmLabel={t('confirmAction')}
         confirmDisabled={typed.trim() !== DELETE_WORD}
         onConfirm={async () => {
+          expectSessionEnd('/');
           try {
             await api.me.remove();
           } catch (error) {
+            expectSessionEnd(null);
             notify.error(errorMessage(error));
             throw error;
           }

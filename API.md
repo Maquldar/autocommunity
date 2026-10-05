@@ -124,7 +124,8 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
   - `hidden` → never;
   - `friends` → the viewer is an accepted friend;
   - `community` → the viewer is an accepted friend or shares ≥ 1 *active* community membership;
-  - `everyone` → any authenticated viewer. Friends and co-members get exact coordinates; everyone else gets coordinates snapped to the centre of a ~500 m grid cell, with `approximate: true`.
+  - `everyone` → any authenticated viewer.
+  - **Exact vs approximate** (applies to `community` and `everyone` targets): exact coordinates go only to friends and to co-members of a shared **private** community (membership is approval-gated). Everyone else who may see the target — including co-members of public communities only — gets coordinates snapped to the centre of a ~500 m grid cell, with `approximate: true` (co-members keep `relation: 'community'`).
   - `relation` = `friend` > `community` > `public`, the strongest that applies.
 - **Filters** (combined with AND):
   - `friends=true` → friends only;
@@ -156,9 +157,18 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
 
 ### Phase 2 clarifications (added during implementation)
 
+- **Review fixes (Phase 2 audit):**
+  - `GET /map/users` requires a completed onboarding → `403 ONBOARDING_INCOMPLETE`; rate limit 60/min per user → `429`. Approximate entries have `updatedAt` rounded down to the minute and are ordered by that value.
+  - Friend requests: after a decline or a cancel, the same requester can't ask the same person again for 24 h → `409 FRIEND_REQUEST_COOLDOWN` (details `{ retryAfterSec }`); the reverse direction is not affected. The `friend_request` notification is deleted when the request is accepted (also auto-accepted), declined or cancelled (a `notification:count` follows). Accept re-checks that the requester is still active and onboarded → else `404`.
+  - JSON bodies take real numbers only (no string coercion): `PUT /me/location` (`lat`, `lng`, `accuracyM`), message `location`, and vehicle `year` (`vehicleBodySchema` / `updateVehicleBodySchema` in shared; `vehicleSchema` still coerces for web forms). Query strings keep coercion.
+  - Account deletion: the user's own notifications are deleted; in other users' notifications the user (`payload.user`) is replaced by `{ id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 }`, and their pending `friend_request` notifications are deleted. (Actors are snapshotted at creation time, not rendered at read time.)
+  - Read notifications older than 90 days are deleted by a daily job (Redis lock, at most once a day across instances). Unread ones are kept.
+  - Push endpoints: exact hosts `fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.push.services.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`; host must be `[a-z0-9.-]` (no IP literals, userinfo or non-443 ports) and parse identically with WHATWG `URL` and Node's legacy `url.parse` (what web-push uses). The normalized URL is stored. An endpoint registered to another account → `409 PUSH_ENDPOINT_IN_USE` (the client must unsubscribe on sign-out).
+  - Demo live locations only move positions written by the seed (`user_locations.source = 'seed'`); `PUT /me/location` marks the row `client`, so a visitor's real position on a shared demo account is never refreshed and expires after 15 min.
+
 - **Map:**
   - Grid: cells are 0.0045° of latitude (~500 m) high and 0.0045°/cos(lat) of longitude wide (~500 m) in each latitude row; approximate users are returned at their cell's centre (stable while they stay in the cell).
-  - For approximate (`public`) users the bbox test uses the *returned* point, not the exact one, so moving the bbox edge can't reveal the exact position. Their point may therefore lie up to half a cell outside the bbox, and a user just outside the bbox may appear.
+  - For approximate users the bbox test uses the *returned* point, not the exact one, so moving the bbox edge can't reveal the exact position. Their point may therefore lie up to half a cell outside the bbox, and a user just outside the bbox may appear.
   - Ties in `updated_at` are ordered by `userId` desc. A temporarily blocked user whose `blockedUntil` has passed counts as active.
   - `vehicle` is the primary vehicle (`null` if none). Bbox: `minLng < maxLng`, `minLat < maxLat` (no antimeridian wrap), else `VALIDATION_ERROR`.
 - **Friends:**
@@ -168,8 +178,8 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
   - `GET /friends` is ordered by acceptance time, newest first; `GET /friends/requests` by request time, newest first; each item's `user.relation` is `request_in` / `request_out`.
 - **Notifications:** `POST /notifications/:id/read` → `404` unless the notification is the caller's; reading twice is a no-op `204`.
 - **Web Push:**
-  - `endpoint` must be an `https` URL of a browser push service (`*.googleapis.com`, `*.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`), else `400 INVALID_PUSH_ENDPOINT` (the server POSTs to it, so arbitrary URLs would be SSRF).
-  - Subscribing an endpoint already registered by another account moves it to the caller (same browser, new account). At most 10 subscriptions per user (oldest dropped). `DELETE` is idempotent and only removes the caller's own subscription.
+  - `endpoint` must be a browser push service URL (see the review fixes above), else `400 INVALID_PUSH_ENDPOINT` (the server POSTs to it, so arbitrary URLs would be SSRF).
+  - At most 10 subscriptions per user (oldest dropped). `DELETE` is idempotent and only removes the caller's own subscription.
   - Push `url` is a web path: `/u/{userId}` (the other user) for `friend_request` and `friend_accepted`; `tag` is `friend_request:{userId}` / `friend_accepted:{userId}`.
   - `GET /push/vapid-public-key` requires auth (like every Phase 2 route); `key` is `null` only if the key pair can't be loaded.
   - Delivery runs on a BullMQ queue (one job per subscription, 5 attempts with exponential backoff on 429/5xx/network errors; other 4xx are dropped). Push failures never fail the HTTP request.
@@ -178,7 +188,7 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
   - `friends:changed {}` goes to both users whenever a request between them is created, accepted (also auto-accepted), declined or cancelled, and on unfriend.
   - `connect_error` always has `message: 'UNAUTHORIZED'`; `err.data.code` is `UNAUTHORIZED` or `ACCOUNT_BLOCKED`. Sockets whose `Origin` header isn't in `WEB_ORIGIN` are refused. Expiry of the access token after the handshake doesn't disconnect the socket; revocation does.
   - The web app's same-origin proxy must forward `/socket.io/*` to the API (polling works through a plain HTTP rewrite).
-- **Demo live locations:** seeded users are marked by the `users.is_seed` flag (set by the seed; not a phone pattern). The tick runs once at boot and then every 60 s, one instance per tick (Redis lock). Seeded accounts someone signed in as within the last 15 min (`last_active_at`) are not moved, so a visitor's own position on the shared demo account stays put.
+- **Demo live locations:** seeded users are marked by the `users.is_seed` flag (set by the seed; not a phone pattern), and only their seed-written positions (`source = 'seed'`) move. The tick runs once at boot and then every 60 s, one instance per tick (Redis lock).
 
 ## 3. Phase 3 — Communities & chats (FROZEN)
 
@@ -244,6 +254,35 @@ Map filter: `/map/users?communityIds=` only accepts communities the viewer is an
 **Socket.IO** namespace `/rt`, `auth: { token }`.
 Client → server: `chat:join {chatId}` (ack `{ok}`), `chat:leave {chatId}`, `chat:typing {chatId}`.
 Server → client: `message:new MessageDto`, `message:deleted {chatId, messageId}`, `chat:typing {chatId, user: UserMini}`, `notification:new NotificationDto`, `sos:new SosDto`, `sos:update SosDto`, `session:revoked`.
+
+### Phase 3 clarifications (added during implementation)
+
+- **Shared:** schemas and types live in `packages/shared/src/communities.ts` (`CommunityDto`, `CommunityMemberDto`, `ChatDto`, `MessageDto`, event payloads, `COMMUNITY_LIMITS`, `CHAT_LIMITS`, request schemas). `ServerToClientEvents` / `ClientToServerEvents` in `types.ts` include the chat events.
+- **Communities:**
+  - `POST /communities` → `201 CommunityDto`; `POST /communities/:id/join` → `200 { status }`.
+  - Unknown or deleted community → `404` on every route. Acting without the required role → `403 FORBIDDEN`.
+  - `PATCH`: moderators may change `name`, `description`, `avatarUploadId` (null removes; the old avatar upload is deleted); `city` and `isPrivate` are owner-only (`403` for moderators). Making a private community public doesn't approve pending requests.
+  - `POST /communities/:id/leave`: the owner → `400 OWNER_CANNOT_LEAVE`; a pending user leaving cancels the request; not a member → `404`.
+  - Members list item: `{ user: UserPublic, role, status, joinedAt: string | null (null while pending), requestedAt }`, newest first. `status=active` of a public community is visible to every signed-in user; of a private one to active members only (`403` otherwise). `status=pending` → owner/moderators only.
+  - approve/reject a user who has no pending request → `404`.
+  - `PATCH /members/:userId`: owner only; target must be an active member (`404`); targeting yourself → `400 INVALID_TARGET`; same role → no-op `204` without notification. Transfer to a user who already owns 10 communities → `409 COMMUNITY_LIMIT`.
+  - `DELETE /members/:userId` also removes pending requests; targeting yourself → `400 INVALID_TARGET` (use leave).
+  - `community_role` payload: `{ communityId, communityName, role }` (also sent to the new owner on transfer). `community_approved`: `{ communityId, communityName }`. All three community notifications are pushed (ru/en) with `url` `/communities/{id}` (`/communities/{id}/requests` for requests).
+  - `GET /communities`: `q` (1–60 chars) matches a case-insensitive substring (prefix included; LIKE wildcards are literal), `city` from `CITIES`, `mine=true` = active and pending. Cursor is opaque (keyset on memberCount desc, name, id).
+  - Account deletion leaves all communities (memberCount kept) and soft-deletes communities the user owns.
+- **Chats:**
+  - A chat the caller isn't a member of (or whose community is deleted) → `404` on every chat route (existence isn't revealed).
+  - `POST /chats/direct` → `200 ChatDto` (get or create; one chat per pair even under concurrent calls); self → `400 INVALID_TARGET`; missing/blocked/deleted/un-onboarded peer → `404`. `refId` is `null` for direct chats; `title` = peer name (nickname if empty).
+  - `POST /chats/:id/messages` → `201 MessageDto`. Photo `text` is optional (≤ 4000). An upload that isn't the caller's or has the wrong purpose → `400 INVALID_UPLOAD`.
+  - Unread counts exclude deleted messages and your own; sending a message marks the chat read up to it; joining a community starts with nothing unread (history stays readable).
+  - `DELETE /chats/:id/messages/:messageId`: sender, or an active owner/moderator for community chats (`403` otherwise); unknown message → `404`; deleting twice is a no-op `204`. Deleted messages also withhold `lat`/`lng`, and the attached upload (file) is deleted.
+  - Rate limit 30 messages/min per user → `429 RATE_LIMITED` with `Retry-After`.
+  - `GET /chats` keyset is on (`lastMessageAt`, id); chats without messages sort by creation time.
+- **Realtime:**
+  - `chat:read { chatId, userId, lastReadAt }` goes to the chat room (all members' sockets, including the reader's other tabs).
+  - `chat:join` acks `{ ok: false }` for chats the user can't access; `chat:typing` from a socket not in the room is ignored; typing goes to every socket in the room except all of the typer's sockets.
+  - `chats:changed {}` goes to the affected user(s) on: community create, join (public), approve, leave, removal, community delete (all former chat members), and direct-chat creation (both users).
+  - Direct-message push: `{ title: sender name, body: text preview (≤ 120 chars) or a localized media label, url: '/chats/{chatId}', tag: 'chat:{chatId}' }`, skipped when any socket of the recipient is in the chat room (with auto-join that means: connected).
 
 ## 4. Phase 4 — SOS (DRAFT)
 

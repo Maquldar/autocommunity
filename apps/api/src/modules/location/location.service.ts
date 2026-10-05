@@ -22,15 +22,16 @@ export class LocationService {
     const fresh = await this.redis.set(throttleKey(userId), '1', 'PX', LOCATION_MIN_INTERVAL_MS, 'NX');
     if (fresh !== 'OK') return false;
     await this.prisma.$executeRaw`
-      INSERT INTO user_locations (user_id, location, accuracy_m, updated_at)
+      INSERT INTO user_locations (user_id, location, accuracy_m, source, updated_at)
       VALUES (
         ${userId}::uuid,
         ST_SetSRID(ST_MakePoint(${input.lng}::float8, ${input.lat}::float8), 4326)::geography,
         ${input.accuracyM ?? null}::float8,
+        'client',
         now()
       )
       ON CONFLICT (user_id) DO UPDATE
-        SET location = EXCLUDED.location, accuracy_m = EXCLUDED.accuracy_m, updated_at = EXCLUDED.updated_at`;
+        SET location = EXCLUDED.location, accuracy_m = EXCLUDED.accuracy_m, source = 'client', updated_at = EXCLUDED.updated_at`;
     return true;
   }
 

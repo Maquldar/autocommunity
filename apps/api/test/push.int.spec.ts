@@ -59,7 +59,7 @@ describe('VAPID public key', () => {
 });
 
 describe('push subscriptions', () => {
-  it('upserts by endpoint, moves ownership to the latest subscriber and only lets the owner delete', async () => {
+  it('upserts by endpoint for its owner, refuses endpoints owned by others and only lets the owner delete', async () => {
     const a = await createUser(t);
     const b = await createUser(t);
     const ep = endpoint();
@@ -67,15 +67,35 @@ describe('push subscriptions', () => {
     await subscribe(a.token, ep).expect(204);
     expect(await t.prisma.pushSubscription.findMany({ where: { endpoint: ep } })).toEqual([expect.objectContaining({ userId: a.id })]);
 
-    // Same browser, other account signed in.
-    await subscribe(b.token, ep).expect(204);
-    expect(await t.prisma.pushSubscription.findMany({ where: { endpoint: ep } })).toEqual([expect.objectContaining({ userId: b.id })]);
+    // Another account can't take over (or overwrite the keys of) an endpoint registered by someone else.
+    const res = await request(t.http)
+      .post('/api/v1/push/subscriptions')
+      .set(bearer(b.token))
+      .send({ endpoint: ep, keys: { p256dh: 'B'.repeat(80), auth: 'attackerAuth1' } })
+      .expect(409);
+    expect(res.body.error.code).toBe('PUSH_ENDPOINT_IN_USE');
+    expect(await t.prisma.pushSubscription.findUniqueOrThrow({ where: { endpoint: ep } })).toMatchObject({ userId: a.id, p256dh: keys.p256dh, auth: keys.auth });
 
-    await unsubscribe(a.token, ep).expect(204); // not a's anymore: no effect
+    await unsubscribe(b.token, ep).expect(204); // not b's: no effect
     expect(await t.prisma.pushSubscription.count({ where: { endpoint: ep } })).toBe(1);
-    await unsubscribe(b.token, ep).expect(204);
+    await unsubscribe(a.token, ep).expect(204);
     expect(await t.prisma.pushSubscription.count({ where: { endpoint: ep } })).toBe(0);
-    await unsubscribe(b.token, ep).expect(204);
+    await unsubscribe(a.token, ep).expect(204);
+    // Once released (the owner signed out), the browser can register for the other account.
+    await subscribe(b.token, ep).expect(204);
+  });
+
+  it('stores the normalized endpoint and refuses parser-differential SSRF endpoints', async () => {
+    const u = await createUser(t);
+    await subscribe(u.token, 'https://FCM.googleapis.com:443/fcm/send/norm-1').expect(204);
+    expect(await t.prisma.pushSubscription.count({ where: { endpoint: 'https://fcm.googleapis.com/fcm/send/norm-1' } })).toBe(1);
+    await unsubscribe(u.token, 'https://FCM.googleapis.com:443/fcm/send/norm-1').expect(204);
+    expect(await t.prisma.pushSubscription.count({ where: { userId: u.id } })).toBe(0);
+    for (const ep of ['https://127.0.0.1;.googleapis.com/ssrf-proof', 'https://169.254.169.254;.googleapis.com/latest/meta-data', 'https://localhost;.mozilla.com/x']) {
+      const res = await subscribe(u.token, ep).expect(400);
+      expect(res.body.error.code).toMatch(/INVALID_PUSH_ENDPOINT|VALIDATION_ERROR/);
+    }
+    expect(await t.prisma.pushSubscription.count({ where: { userId: u.id } })).toBe(0);
   });
 
   it('accepts only browser push services and validates the body', async () => {

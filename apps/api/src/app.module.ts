@@ -6,6 +6,8 @@ import { ENV, type Env } from './config/env';
 import { loggerOptions } from './config/logger';
 import { InfraModule } from './infra/infra.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ChatsModule } from './modules/chats/chats.module';
+import { CommunitiesModule } from './modules/communities/communities.module';
 import { DemoModule } from './modules/demo/demo.module';
 import { FriendsModule } from './modules/friends/friends.module';
 import { HealthModule } from './modules/health/health.module';
@@ -34,6 +36,8 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     LocationModule,
     MapModule,
     FriendsModule,
+    ChatsModule,
+    CommunitiesModule,
     DemoModule,
     HealthModule,
   ],

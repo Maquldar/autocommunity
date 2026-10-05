@@ -22,8 +22,12 @@ export const phoneSchema = z
 
 export const otpCodeSchema = z.string().regex(new RegExp(`^\\d{${LIMITS.otpLength}}$`), 'Code must be 6 digits');
 
+/** Query-string coordinates (strings coerced to numbers). */
 export const latSchema = z.coerce.number().min(-90).max(90);
 export const lngSchema = z.coerce.number().min(-180).max(180);
+/** JSON-body coordinates: real numbers only (no string coercion). */
+export const bodyLatSchema = z.number().min(-90).max(90);
+export const bodyLngSchema = z.number().min(-180).max(180);
 
 export const paginationQuerySchema = z.object({
   cursor: z.string().max(200).optional(),
@@ -74,7 +78,7 @@ export const appleAuthSchema = z.object({
  * are handled per field), zero-width space/non-joiner, bidi marks and overrides, word joiners, BOM, soft
  * hyphen. ZWJ (U+200D) stays allowed because emoji sequences need it.
  */
-const INVISIBLE_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+export const INVISIBLE_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 const LINE_BREAK_RE = /[\t\n]/;
 
 /** Display name: single line, no invisible characters, at least one letter or digit. */
@@ -149,6 +153,18 @@ export const vehicleSchema = z.object({
   isPrimary: z.boolean().optional(),
 });
 export const updateVehicleSchema = vehicleSchema.partial();
+/**
+ * JSON bodies of POST/PATCH /me/vehicles: like `vehicleSchema` (which coerces the year so web forms can use
+ * it) but the year must be a real number.
+ */
+export const vehicleBodySchema = vehicleSchema.extend({
+  year: z
+    .number()
+    .int()
+    .min(LIMITS.minVehicleYear)
+    .refine((y) => y <= currentYear() + 1, 'Year is in the future'),
+});
+export const updateVehicleBodySchema = vehicleBodySchema.partial();
 export type VehicleInput = z.infer<typeof vehicleSchema>;
 
 /* ---------- users ---------- */
@@ -174,9 +190,9 @@ export type UploadBody = z.infer<typeof uploadBodySchema>;
 /* ---------- location & map (phase 2) ---------- */
 
 export const updateLocationSchema = z.object({
-  lat: latSchema,
-  lng: lngSchema,
-  accuracyM: z.coerce.number().min(0).max(100_000).optional(),
+  lat: bodyLatSchema,
+  lng: bodyLngSchema,
+  accuracyM: z.number().min(0).max(100_000).optional(),
 });
 
 export const mapUsersQuerySchema = z.object({

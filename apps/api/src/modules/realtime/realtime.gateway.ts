@@ -1,5 +1,6 @@
 import { Inject, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { OnGatewayInit, WebSocketGateway } from '@nestjs/websockets';
+import { Prisma } from '@prisma/client';
 import Redis from 'ioredis';
 import type { Namespace, Socket } from 'socket.io';
 import { AccessTokenService } from '../../common/auth/access-token.service';
@@ -7,7 +8,10 @@ import { SESSION_REVOKED_CHANNEL } from '../../common/auth/session.service';
 import { isUserBlocked, UserStateService } from '../../common/auth/user-state.service';
 import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { RealtimeService, userRoom } from './realtime.service';
+import { chatRefSchema, CHAT_LIMITS } from '@autoc/shared';
+import { RedisService } from '../../infra/redis/redis.service';
+import { UserViewService, userViewInclude } from '../users/user-view.service';
+import { chatRoom, RealtimeService, userRoom } from './realtime.service';
 
 export const REALTIME_NAMESPACE = '/rt';
 
@@ -37,6 +41,8 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     private readonly userState: UserStateService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly redis: RedisService,
+    private readonly userView: UserViewService,
   ) {}
 
   afterInit(ns: Namespace): void {
@@ -70,12 +76,70 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     if (isUserBlocked(state)) throw unauthorized('ACCOUNT_BLOCKED');
     (socket.data as SocketData).userId = claims.sub;
     // Joined before `connect` reaches the client, so no event emitted after that can be missed.
-    await socket.join(userRoom(claims.sub));
+    const chatIds = await this.chatIdsOf(claims.sub);
+    await socket.join([userRoom(claims.sub), ...chatIds.map(chatRoom)]);
+    // A revocation published between the first check and the join would have missed this socket: check again.
+    const after = await this.userState.getForAuth(claims.sub);
+    const revoked = after.revokedBeforeMs !== null && claims.issuedAtMs <= after.revokedBeforeMs;
+    if (!after.state || revoked || isUserBlocked(after.state)) {
+      for (const room of [...socket.rooms]) if (room !== socket.id) await socket.leave(room);
+      throw unauthorized(after.state && isUserBlocked(after.state) ? 'ACCOUNT_BLOCKED' : 'UNAUTHORIZED');
+    }
+  }
+
+  /** Chats the user may read: membership, and for community chats a live (non-deleted) community. */
+  private async chatIdsOf(userId: string, onlyChatId?: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT c.id FROM chat_members cm
+      JOIN chats c ON c.id = cm.chat_id
+      LEFT JOIN communities com ON c.type = 'community' AND com.id = CASE WHEN c.type = 'community' THEN c.ref_id::uuid END
+      WHERE cm.user_id = ${userId}::uuid
+        AND (c.type <> 'community' OR com.deleted_at IS NULL)
+        ${onlyChatId ? Prisma.sql`AND c.id = ${onlyChatId}::uuid` : Prisma.empty}`;
+    return rows.map((r) => r.id);
+  }
+
+  private registerChatHandlers(socket: Socket, userId: string): void {
+    socket.on('chat:join', (payload: unknown, ack?: unknown) => {
+      const reply = typeof ack === 'function' ? (ack as (r: { ok: boolean }) => void) : () => undefined;
+      const parsed = chatRefSchema.safeParse(payload);
+      if (!parsed.success) return reply({ ok: false });
+      this.chatIdsOf(userId, parsed.data.chatId)
+        .then(async (ids) => {
+          if (!ids.length) return reply({ ok: false });
+          await socket.join(chatRoom(parsed.data.chatId));
+          reply({ ok: true });
+        })
+        .catch((err: unknown) => {
+          this.logger.warn({ err }, 'chat:join failed');
+          reply({ ok: false });
+        });
+    });
+    socket.on('chat:leave', (payload: unknown) => {
+      const parsed = chatRefSchema.safeParse(payload);
+      if (parsed.success) void socket.leave(chatRoom(parsed.data.chatId));
+    });
+    socket.on('chat:typing', (payload: unknown) => {
+      const parsed = chatRefSchema.safeParse(payload);
+      // Room membership mirrors chat membership (joined on connect / grant, left on revoke).
+      if (!parsed.success || !socket.rooms.has(chatRoom(parsed.data.chatId))) return;
+      void this.relayTyping(userId, parsed.data.chatId).catch((err: unknown) => this.logger.warn({ err }, 'chat:typing failed'));
+    });
+  }
+
+  /** At most one `chat:typing` per user per chat every CHAT_LIMITS.typingThrottleMs, across instances. */
+  private async relayTyping(userId: string, chatId: string): Promise<void> {
+    const first = await this.redis.set(`typing:${chatId}:${userId}`, '1', 'PX', CHAT_LIMITS.typingThrottleMs, 'NX');
+    if (first !== 'OK') return;
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: userViewInclude });
+    if (!user) return;
+    this.realtime.emitToChatExcept(chatId, userId, 'chat:typing', { chatId, user: this.userView.toMini(user) });
   }
 
   /** Sends the current unread count so the badge is right after (re)connecting. */
   private onConnection(socket: Socket): void {
     const { userId } = socket.data as SocketData;
+    this.registerChatHandlers(socket, userId);
     this.prisma.notification
       .count({ where: { userId, readAt: null } })
       .then((count) => socket.emit('notification:count', { count }))

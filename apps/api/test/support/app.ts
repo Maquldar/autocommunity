@@ -133,12 +133,19 @@ export async function makeFriends(t: TestApp, a: string, b: string, status: 'pen
 }
 
 /** Stores a position directly (bypassing the 10 s throttle), `minutesAgo` old. */
-export async function setLocation(t: TestApp, userId: string, lat: number, lng: number, minutesAgo = 0): Promise<void> {
+export async function setLocation(
+  t: TestApp,
+  userId: string,
+  lat: number,
+  lng: number,
+  minutesAgo = 0,
+  source: 'seed' | 'client' = 'client',
+): Promise<void> {
   await t.prisma.$executeRaw`
-    INSERT INTO user_locations (user_id, location, updated_at)
+    INSERT INTO user_locations (user_id, location, source, updated_at)
     VALUES (${userId}::uuid, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography,
-            now() - make_interval(secs => ${minutesAgo * 60}::float8))
-    ON CONFLICT (user_id) DO UPDATE SET location = EXCLUDED.location, updated_at = EXCLUDED.updated_at`;
+            ${source}::"LocationSource", now() - make_interval(secs => ${minutesAgo * 60}::float8))
+    ON CONFLICT (user_id) DO UPDATE SET location = EXCLUDED.location, source = EXCLUDED.source, updated_at = EXCLUDED.updated_at`;
 }
 
 export async function getLocation(t: TestApp, userId: string): Promise<{ lat: number; lng: number; updatedAt: Date } | null> {
@@ -148,22 +155,44 @@ export async function getLocation(t: TestApp, userId: string): Promise<{ lat: nu
   return rows[0] ?? null;
 }
 
-/** A community owned by `ownerId` with the given members (status active unless stated). */
+/** A community owned by `ownerId` with the given members (status active unless stated), its chat and a consistent memberCount. */
 export async function createCommunity(
   t: TestApp,
   ownerId: string,
-  members: { userId: string; status?: 'active' | 'pending' }[] = [],
-  opts: { deleted?: boolean } = {},
+  members: { userId: string; status?: 'active' | 'pending'; role?: 'member' | 'moderator' }[] = [],
+  opts: { deleted?: boolean; isPrivate?: boolean; name?: string } = {},
 ): Promise<string> {
   const id = newId();
+  const active = members.filter((m) => (m.status ?? 'active') === 'active');
   await t.prisma.community.create({
-    data: { id, name: `Community ${id.slice(-6)}`, ownerId, deletedAt: opts.deleted ? new Date() : null },
+    data: {
+      id,
+      name: opts.name ?? `Community ${id.slice(-12)}`,
+      ownerId,
+      isPrivate: opts.isPrivate ?? false,
+      memberCount: 1 + active.length,
+      deletedAt: opts.deleted ? new Date() : null,
+    },
   });
   await t.prisma.communityMember.createMany({
     data: [
       { communityId: id, userId: ownerId, role: 'owner', status: 'active', joinedAt: new Date() },
-      ...members.map((m) => ({ communityId: id, userId: m.userId, role: 'member' as const, status: m.status ?? 'active' })),
+      ...members.map((m) => ({
+        communityId: id,
+        userId: m.userId,
+        role: m.role ?? ('member' as const),
+        status: m.status ?? ('active' as const),
+        joinedAt: (m.status ?? 'active') === 'active' ? new Date() : null,
+      })),
     ],
+  });
+  await t.prisma.chat.create({
+    data: {
+      id: newId(),
+      type: 'community',
+      refId: id,
+      members: { create: opts.deleted ? [] : [{ userId: ownerId }, ...active.map((m) => ({ userId: m.userId }))] },
+    },
   });
   return id;
 }

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { MapUser, MapUsersQuery } from '@autoc/shared';
 import { Errors } from '../../common/errors/api-exception';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { Storage } from '../../infra/storage/storage';
 
 export const MAP_MAX_USERS = 500;
@@ -15,6 +16,8 @@ export const LOCATION_FRESH_MINUTES = 15;
  * GRID_CELL_DEG / cos(lat) of longitude wide (~500 m), so they stay roughly square anywhere.
  */
 export const GRID_CELL_DEG = 0.0045;
+/** GET /map/users per user per minute. */
+export const MAP_REQUESTS_PER_MINUTE = 60;
 
 type Row = {
   userId: string;
@@ -40,9 +43,13 @@ export class MapService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: Storage,
+    private readonly rateLimiter: RateLimiterService,
   ) {}
 
   async users(viewerId: string, query: MapUsersQuery): Promise<{ items: MapUser[]; truncated: boolean }> {
+    const viewer = await this.prisma.user.findUniqueOrThrow({ where: { id: viewerId }, select: { onboardedAt: true } });
+    if (!viewer.onboardedAt) throw Errors.forbidden('Complete your profile to see the map', 'ONBOARDING_INCOMPLETE');
+    await this.rateLimiter.consumeOrThrow([{ key: `map:${viewerId}`, limit: MAP_REQUESTS_PER_MINUTE, windowSec: 60 }]);
     const { minLng, minLat, maxLng, maxLat } = query.bbox;
     if (maxLng - minLng > MAP_MAX_BBOX_DEG || maxLat - minLat > MAP_MAX_BBOX_DEG) {
       throw Errors.badRequest('BBOX_TOO_LARGE', `The map area may cover at most ${MAP_MAX_BBOX_DEG}° × ${MAP_MAX_BBOX_DEG}°`);
@@ -82,11 +89,13 @@ export class MapService {
   /**
    * The whole visibility rule (API.md §2, SPEC A-3) runs in this one statement, so rows the viewer may not
    * see never leave the database:
-   * - friend_ids / co_member_ids: the viewer's accepted friends and active co-members of live communities;
+   * - friend_ids / co_member_ids: the viewer's accepted friends and active co-members of live communities
+   *   (`via_private`: they share at least one *private* community, whose membership is approval-gated);
    * - candidates: GiST bbox pre-filter (`&&` on the geography index) on an envelope widened by one grid
    *   cell, freshness, account state and the privacy-mode rule, plus the optional filters;
-   * - placed: friends and co-members keep exact coordinates, everyone else is snapped to the centre of their
-   *   ~500 m grid cell;
+   * - placed: friends and co-members of a shared private community keep exact coordinates; everyone else
+   *   (including co-members of public communities only) is snapped to the centre of their ~500 m grid cell,
+   *   and their `updatedAt` is rounded down to the minute;
    * - page: the bbox test runs on the *returned* point — testing the exact point would let a client find a
    *   stranger's precise position by moving the bbox edge;
    * - the final select joins avatar and primary vehicle (unique partial index: at most one) — no N+1.
@@ -124,17 +133,19 @@ export class MapService {
         WHERE f.status = 'accepted' AND (f.requester_id = ${viewer} OR f.addressee_id = ${viewer})
       ),
       co_member_ids AS (
-        SELECT DISTINCT other.user_id
+        SELECT other.user_id, bool_or(c.is_private) AS via_private
         FROM community_members mine
         JOIN communities c ON c.id = mine.community_id AND c.deleted_at IS NULL
         JOIN community_members other ON other.community_id = mine.community_id AND other.status = 'active'
         WHERE mine.user_id = ${viewer} AND mine.status = 'active' AND other.user_id <> ${viewer}
+        GROUP BY other.user_id
       ),
       candidates AS (
         SELECT ul.user_id, ul.updated_at, ul.location::geometry AS geom,
                u.nickname, u.rating, u.avatar_upload_id,
                fr.user_id IS NOT NULL AS is_friend,
-               cm.user_id IS NOT NULL AS is_co_member
+               cm.user_id IS NOT NULL AS is_co_member,
+               coalesce(cm.via_private, false) AS via_private
         FROM user_locations ul
         JOIN users u ON u.id = ul.user_id
         LEFT JOIN friend_ids fr ON fr.user_id = ul.user_id
@@ -153,10 +164,11 @@ export class MapService {
       ),
       placed AS (
         SELECT c.*,
-               (c.is_friend OR c.is_co_member) AS exact,
-               CASE WHEN c.is_friend OR c.is_co_member THEN c.geom
+               (c.is_friend OR c.via_private) AS exact,
+               CASE WHEN c.is_friend OR c.via_private THEN c.geom
                     ELSE ST_SnapToGrid(c.geom, cell.width / 2, ${H}::float8, cell.width, ${S}::float8)
-               END AS pt
+               END AS pt,
+               CASE WHEN c.is_friend OR c.via_private THEN c.updated_at ELSE date_trunc('minute', c.updated_at) END AS shown_at
         FROM candidates c
         CROSS JOIN LATERAL (
           -- Longitude width of the cell row the point falls in (row centres: H + k·S, as ST_SnapToGrid rounds).
@@ -167,16 +179,16 @@ export class MapService {
         SELECT * FROM placed
         WHERE ST_X(pt) BETWEEN ${minLng}::float8 AND ${maxLng}::float8
           AND ST_Y(pt) BETWEEN ${minLat}::float8 AND ${maxLat}::float8
-        ORDER BY updated_at DESC, user_id DESC
+        ORDER BY shown_at DESC, user_id DESC
         LIMIT ${MAP_MAX_USERS + 1}::int
       )
-      SELECT p.user_id AS "userId", p.nickname::text AS nickname, p.rating, p.updated_at AS "updatedAt",
+      SELECT p.user_id AS "userId", p.nickname::text AS nickname, p.rating, p.shown_at AS "updatedAt",
              ST_Y(p.pt) AS lat, ST_X(p.pt) AS lng, NOT p.exact AS approximate,
              CASE WHEN p.is_friend THEN 'friend' WHEN p.is_co_member THEN 'community' ELSE 'public' END AS relation,
              up.key AS "avatarKey", up.thumb_key AS "avatarThumbKey", v.brand, v.model
       FROM page p
       LEFT JOIN uploads up ON up.id = p.avatar_upload_id
       LEFT JOIN vehicles v ON v.user_id = p.user_id AND v.is_primary
-      ORDER BY p.updated_at DESC, p.user_id DESC`;
+      ORDER BY p.shown_at DESC, p.user_id DESC`;
   }
 }
