@@ -1,6 +1,6 @@
 import { SOS_LIMITS, SOS_OPEN_STATUSES, type SosResponseStatus, type SosStatus } from '@autoc/shared';
 
-export type SosAction = 'respond' | 'withdraw' | 'accept' | 'decline' | 'arrived' | 'close' | 'cancel' | 'expire';
+export type SosAction = 'respond' | 'withdraw' | 'accept' | 'decline' | 'arrived' | 'close' | 'cancel' | 'expire' | 'timeout';
 
 export type SosStateInput = {
   sos: SosStatus;
@@ -53,6 +53,10 @@ export function sosTransition(input: SosStateInput, action: SosAction): SosTrans
       return { ok: true, sos: 'cancelled', response };
     case 'expire':
       if (sos !== 'created') return invalid;
+      return { ok: true, sos: 'expired', response };
+    case 'timeout':
+      // System only: an accepted / in-progress SOS that nobody closed within 24 h of acceptance.
+      if (sos !== 'accepted' && sos !== 'in_progress') return invalid;
       return { ok: true, sos: 'expired', response };
   }
 }

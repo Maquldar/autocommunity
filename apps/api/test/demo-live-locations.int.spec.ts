@@ -114,4 +114,34 @@ describe('demo live locations', () => {
     const map = await request(t.http).get('/api/v1/map/users?bbox=12.4,51.5,14.4,53.5').set(bearer(viewer.token)).expect(200);
     expect(map.body.items).toEqual([]);
   });
+
+  it('keeps one open SOS from a seed account near the centre', async () => {
+    const service = t.app.get(DemoLiveLocationsService);
+    await t.prisma.$executeRaw`UPDATE sos_requests SET status = 'cancelled' WHERE status IN ('created', 'accepted', 'in_progress')`;
+    await t.prisma.$executeRaw`UPDATE users SET is_seed = false`;
+    const demoAccount = await createUser(t, { isSeed: true, phone: '+77000000002' });
+    const seedA = await createUser(t, { isSeed: true });
+    const seedB = await createUser(t, { isSeed: true });
+    const first = await service.ensureDemoSos();
+    expect(first).not.toBeNull();
+    const row = await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: first! } });
+    expect([seedA.id, seedB.id]).toContain(row.userId);
+    expect(row.userId).not.toBe(demoAccount.id);
+    expect(row.status).toBe('created');
+    const pos = await t.prisma.$queryRaw<{ d: number }[]>`
+      SELECT ST_Distance(location, ST_SetSRID(ST_MakePoint(76.8897, 43.2389), 4326)::geography) AS d FROM sos_requests WHERE id = ${first}::uuid`;
+    expect(pos[0]!.d).toBeLessThan(1500);
+    // Already one open → nothing new.
+    expect(await service.ensureDemoSos()).toBeNull();
+    // Closed/cancelled/expired → a new one appears.
+    await t.prisma.sosRequest.update({ where: { id: first! }, data: { status: 'expired', closedAt: new Date() } });
+    const second = await service.ensureDemoSos(Date.now() + 60_000);
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+    // A real user's open SOS doesn't count.
+    await t.prisma.sosRequest.update({ where: { id: second! }, data: { status: 'cancelled', closedAt: new Date() } });
+    const real = await createUser(t);
+    await request(t.http).post('/api/v1/sos').set(bearer(real.token)).send({ type: 'other', lat: 43.24, lng: 76.89, sharePhone: false }).expect(201);
+    expect(await service.ensureDemoSos(Date.now() + 120_000)).not.toBeNull();
+  });
 });

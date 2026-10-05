@@ -5,11 +5,12 @@
  *   pnpm --filter @autoc/api db:seed
  */
 import { PrismaClient, type PrivacyMode } from '@prisma/client';
-import { CAR_BRANDS, DEFAULT_MAP_CENTER, RATING } from '@autoc/shared';
+import { CAR_BRANDS, computeRating, DEFAULT_MAP_CENTER, RATING } from '@autoc/shared';
 import sharp from 'sharp';
 import { loadDotEnv, parseEnvOrThrow } from '../../src/config/env';
 import { v7 } from 'uuid';
 import { createStorage } from '../../src/infra/storage/create-storage';
+import { loadRatingInput } from '../../src/modules/rating/rating-input';
 import { ALMATY_BOUNDS } from '../../src/modules/demo/demo-path';
 import { friendPairKey } from '../../src/modules/users/relation.service';
 import { WARN_ACTION } from '../../src/modules/users/user-view.service';
@@ -222,6 +223,7 @@ function buildUsers(): SeedUser[] {
       person: { first: first.name, last },
       city: inAlmaty ? 'Almaty' : rng.pick(OTHER_CITIES),
       bio: rng.pick(BIOS),
+      // Placeholder (keeps the RNG sequence stable); the real rating is computed from the seeded data at the end.
       rating: Math.min(RATING.max, Math.max(RATING.min, Math.round(rng.normal(62, 14)))),
       privacyMode: privacyFor(rng),
       createdAt: new Date(NOW - rng.int(3, 330) * DAY - rng.int(0, DAY)),
@@ -277,6 +279,22 @@ function arrangeDemoNeighbourhood(users: SeedUser[]): void {
     u.city = 'Almaty';
     u.location = { lat: DEFAULT_MAP_CENTER.lat + n.dLat, lng: DEFAULT_MAP_CENTER.lng + n.dLng, minutesAgo: n.minutesAgo };
   }
+}
+
+/** Sets users.rating from computeRating over the seeded data and records a `recalc` ledger row. */
+async function recomputeSeedRatings(ids: string[]): Promise<{ count: number; min: number; max: number }> {
+  const now = new Date(NOW);
+  const ratings: number[] = [];
+  for (const id of ids) {
+    const input = await loadRatingInput(prisma, id, now);
+    if (!input) continue;
+    const { rating } = computeRating(input, now);
+    const old = (await prisma.user.findUniqueOrThrow({ where: { id }, select: { rating: true } })).rating;
+    await prisma.user.update({ where: { id }, data: { rating } });
+    if (rating !== old) await prisma.ratingEvent.create({ data: { id: newId(), userId: id, delta: rating - old, reason: 'recalc', createdAt: now } });
+    ratings.push(rating);
+  }
+  return { count: ratings.length, min: Math.min(...ratings), max: Math.max(...ratings) };
 }
 
 async function wipe(): Promise<void> {
@@ -370,7 +388,16 @@ async function main(): Promise<void> {
     demo: users[1]!,
     closedRequester: others[10]!,
     expiredRequester: others[11]!,
+    extraHelps: [
+      { requester: others[12]!, helper: others[3]!, daysAgo: 12, helperStars: 5, requesterStars: 5, comment: 'Вытащил из сугроба тросом, очень выручил.' },
+      { requester: others[14]!, helper: others[5]!, daysAgo: 40, helperStars: 4, requesterStars: 4, comment: 'Помог поменять колесо.' },
+      { requester: others[16]!, helper: others[3]!, daysAgo: 95, helperStars: 5, requesterStars: null, comment: 'Прикурил за пять минут!' },
+      { requester: others[18]!, helper: others[7]!, daysAgo: 200, helperStars: 3, requesterStars: 5, comment: 'Помог, но пришлось долго ждать.' },
+    ],
   });
+
+  // Ratings: every user's rating is computed from the seeded data with the real formula.
+  const recomputed = await recomputeSeedRatings(users.map((u) => u.id));
 
   // One warning on a regular user so the admin/warnings UI has data.
   const admin = users[0]!;
@@ -396,7 +423,10 @@ async function main(): Promise<void> {
     `Seeded ${communities.communities} communities, ${communities.directChats} direct chats, ${communities.messages} messages ` +
       '(demo: member of Toyota Club KZ and Offroad 4x4 Алматы, pending in Night Drive).',
   );
-  console.log(`Seeded ${sosSeed.sos} SOS: open (flat tire, ~1 km from the centre), closed (demo helped), expired.`);
+  console.log(
+    `Seeded ${sosSeed.sos} SOS (open flat tire ~1 km from the centre, closed ones incl. one demo helped, expired) and ` +
+      `${sosSeed.reviews} reviews; ratings computed for ${recomputed.count} users (range ${recomputed.min}–${recomputed.max}).`,
+  );
   console.log('Sign in: admin +77000000001, demo +77000000002 (dev OTP code is returned by /auth/otp/request).');
   console.log(
     `Demo map: ${DEMO_NEIGHBOURHOOD.length} users around ${DEFAULT_MAP_CENTER.lat},${DEFAULT_MAP_CENTER.lng} ` +

@@ -177,6 +177,9 @@ model UserLocation {
   location  Unsupported("geography(Point,4326)")
   accuracyM Float?                                @map("accuracy_m")
   source    LocationSource                        @default(client)
+  /// Set when an update implied an impossible speed (> 300 km/h): until then the position is ignored for
+  /// SOS visibility, /sos/nearby, /map/sos and dispatch.
+  untrustedUntil DateTime?                         @map("untrusted_until")
   updatedAt DateTime                              @default(now()) @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -226,6 +229,9 @@ enum MembershipStatus {
 model Community {
   id             String    @id @db.Uuid
   name           String
+  /// Normalized (NFKC, collapsed whitespace, trimmed, no trailing punctuation), lower-cased name; unique
+  /// among non-deleted communities.
+  nameKey        String    @map("name_key")
   description    String    @default("")
   city           String?
   isPrivate      Boolean   @default(false) @map("is_private")
@@ -343,6 +349,8 @@ model SosDispatch {
   sosId     String   @map("sos_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   distanceM Int      @map("distance_m")
+  /// Set once the user's notification/push/socket event went out; a retried job notifies rows still null.
+  notifiedAt DateTime? @map("notified_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@id([sosId, userId])
@@ -513,6 +521,7 @@ model Review {
 
   @@unique([authorId, targetType, targetId, refId])
   @@index([targetType, targetId, createdAt])
+  @@index([refId])
   @@map("reviews")
 }
 
@@ -523,6 +532,10 @@ model RatingEvent {
   delta     Int
   reason    String
   refId     String?  @map("ref_id") @db.Uuid
+  /// Penalty rows only (reason "penalty"): the penalty's points (e.g. -10) and kind; `delta` is the
+  /// resulting rating change. computeRating sums these points over 365 days.
+  penaltyPoints Int?    @map("penalty_points")
+  penaltyKind   String? @map("penalty_kind")
   createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

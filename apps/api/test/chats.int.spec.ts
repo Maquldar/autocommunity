@@ -272,3 +272,56 @@ describe('direct message push', () => {
     expect(sender.sent.map((s) => s.payload.body)).toEqual(['direct again']);
   });
 });
+
+describe('exclusive attachments (review M5)', () => {
+  it('an upload can be attached once: messages (also concurrently), community avatars, SOS photos', async () => {
+    const a = await createUser(t);
+    const b = await createUser(t);
+    const chat = (await api(a).direct(b.id).expect(200)).body as ChatDto;
+    const photo = await upload(a, 'message', await pngImage(), 'p.png', 'image/png');
+    await clearRate(a);
+    await api(a).send(chat.id, { type: 'photo', uploadId: photo.id }).expect(201);
+    expect((await api(a).send(chat.id, { type: 'photo', uploadId: photo.id }).expect(400)).body.error.code).toBe('INVALID_UPLOAD');
+    const p2 = await upload(a, 'message', await pngImage(), 'p.png', 'image/png');
+    const both = await Promise.all([1, 2].map(() => request(t.http).post(`/api/v1/chats/${chat.id}/messages`).set(bearer(a.token)).send({ type: 'photo', uploadId: p2.id })));
+    expect(both.map((r) => r.status).sort()).toEqual([201, 400]);
+
+    const avatar = await upload(a, 'community', await pngImage(), 'c.png', 'image/png');
+    await request(t.http).post('/api/v1/communities').set(bearer(a.token)).send({ name: `Avatar A ${newId().slice(-6)}`, isPrivate: false, avatarUploadId: avatar.id }).expect(201);
+    const second = await request(t.http).post('/api/v1/communities').set(bearer(a.token)).send({ name: `Avatar B ${newId().slice(-6)}`, isPrivate: false, avatarUploadId: avatar.id }).expect(400);
+    expect(second.body.error.code).toBe('INVALID_UPLOAD');
+
+    const sosPhoto = await upload(a, 'sos', await pngImage(), 's.png', 'image/png');
+    const first = await request(t.http).post('/api/v1/sos').set(bearer(a.token)).send({ type: 'other', lat: 43.2, lng: 76.9, sharePhone: false, photoUploadIds: [sosPhoto.id] }).expect(201);
+    await request(t.http).post(`/api/v1/sos/${first.body.id}/cancel`).set(bearer(a.token)).send({}).expect(200);
+    const reuse = await request(t.http).post('/api/v1/sos').set(bearer(a.token)).send({ type: 'other', lat: 43.2, lng: 76.9, sharePhone: false, photoUploadIds: [sosPhoto.id] }).expect(400);
+    expect(reuse.body.error.code).toBe('INVALID_UPLOAD');
+  });
+});
+
+describe('review fixes for chats', () => {
+  it('direct messages re-check the peer (blocked / deleted / un-onboarded → 404)', async () => {
+    for (const change of [{ status: 'blocked' as const }, { status: 'deleted' as const }, { onboardedAt: null }]) {
+      const a = await createUser(t);
+      const b = await createUser(t);
+      const chat = (await api(a).direct(b.id).expect(200)).body as ChatDto;
+      await api(a).text(chat.id, 'hi').expect(201);
+      await t.prisma.user.update({ where: { id: b.id }, data: change });
+      await api(a).text(chat.id, 'still there?').expect(404);
+      await api(a).messages(chat.id).expect(200); // history stays readable
+    }
+  });
+
+  it('caps unreadCount at 99 ("99+")', async () => {
+    const a = await createUser(t);
+    const b = await createUser(t);
+    const chat = (await api(a).direct(b.id).expect(200)).body as ChatDto;
+    const base = Date.now() + 1000;
+    await t.prisma.message.createMany({
+      data: Array.from({ length: 120 }, (_, i) => ({ id: newId(), chatId: chat.id, senderId: a.id, type: 'text' as const, text: `m${i}`, createdAt: new Date(base + i) })),
+    });
+    expect((await api(b).get(chat.id).expect(200)).body.unreadCount).toBe(99);
+    await t.prisma.message.deleteMany({ where: { chatId: chat.id, text: { not: 'm0' } } });
+    expect((await api(b).get(chat.id).expect(200)).body.unreadCount).toBe(1);
+  });
+});

@@ -23,3 +23,20 @@ describe('profile text validation', () => {
     expect(nicknameSchema.safeParse('a__').success).toBe(true);
   });
 });
+
+import { communityNameKey, createCommunitySchema, normalizeCommunityName } from './communities';
+
+describe('community names', () => {
+  it('normalizes NFKC, whitespace, trailing punctuation; keys are case-insensitive', () => {
+    const base = 'Cafe Club';
+    const variants = ['Cafe Club', 'CAFE CLUB', '  Cafe Club  ', 'Cafe  Club', 'Cafe\u00a0Club', 'Ｃafe Club', 'Cafe\u3000Club', 'Cafe Club.', 'Cafe Club!!!'];
+    for (const v of variants) expect(communityNameKey(v)).toBe('cafe club');
+    expect(communityNameKey('Café Club'.normalize('NFD'))).toBe(communityNameKey('Café Club'.normalize('NFC')));
+    expect(normalizeCommunityName('  Night   Drive!  ')).toBe('Night Drive');
+    expect(createCommunitySchema.parse({ name: ' Ｔoyota  Club. ', isPrivate: false }).name).toBe('Toyota Club');
+    // Confusables are out of scope: Cyrillic С stays different.
+    expect(communityNameKey('\u0421afe Club')).not.toBe(communityNameKey(base));
+    expect(createCommunitySchema.safeParse({ name: '!!!', isPrivate: false }).success).toBe(false);
+    expect(createCommunitySchema.safeParse({ name: 'Ab.', isPrivate: false }).success).toBe(false);
+  });
+});

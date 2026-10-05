@@ -3,6 +3,7 @@
  * Deterministic: speakers and members come from the seed RNG, texts are fixed.
  */
 import type { PrismaClient } from '@prisma/client';
+import { communityNameKey } from '@autoc/shared';
 import type { Rng } from './rng';
 
 export type SeedCommunityUser = { id: string; createdAt: Date };
@@ -175,6 +176,7 @@ export async function seedCommunities(
       data: {
         id: communityId,
         name: spec.name,
+        nameKey: communityNameKey(spec.name),
         description: spec.description,
         city: 'Almaty',
         isPrivate: spec.isPrivate,

@@ -15,6 +15,7 @@ import {
 } from '@autoc/shared';
 import type { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../../common/auth/decorators';
+import { RequireOnboarded } from '../../common/auth/onboarded.guard';
 import { IdParam, ZBody, ZQuery } from '../../common/validation/zod.pipe';
 import { CommunitiesService } from './communities.service';
 
@@ -27,6 +28,7 @@ export class CommunitiesController {
     return this.communities.list(user.id, query);
   }
 
+  @RequireOnboarded()
   @Post()
   create(@CurrentUser() user: AuthUser, @ZBody(createCommunitySchema) body: CreateCommunityInput): Promise<CommunityDto> {
     return this.communities.create(user.id, body);
@@ -48,6 +50,7 @@ export class CommunitiesController {
     return this.communities.remove(user.id, id);
   }
 
+  @RequireOnboarded()
   @Post(':id/join')
   @HttpCode(200)
   join(@CurrentUser() user: AuthUser, @IdParam() id: string): Promise<{ status: MembershipStatus }> {

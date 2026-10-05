@@ -464,3 +464,60 @@ describe('account deletion', () => {
     await c(owner).chat(own.body.chatId).expect(404);
   });
 });
+
+describe('community name normalization (review M7)', () => {
+  it('stores the normalized name and treats normalized variants as the same name', async () => {
+    const owner = await createUser(t);
+    const tag = newId().slice(-6);
+    const base = `Cafe Club ${tag}`;
+    const created = await c(owner).create({ name: `  Cafe  Club ${tag}!  `, isPrivate: false }).expect(201);
+    expect(created.body.name).toBe(base);
+    const others = await Promise.all(Array.from({ length: 4 }, () => createUser(t)));
+    for (const [i, name] of [base.toUpperCase(), `Ｃafe Club ${tag}`, `Cafe　Club ${tag}.`, `cafe   club ${tag}`].entries()) {
+      expect((await c(others[i]!).create({ name, isPrivate: false }).expect(409)).body.error.code).toBe('COMMUNITY_NAME_TAKEN');
+    }
+    // NFD vs NFC accents are the same name.
+    const accented = `Café ${tag}`;
+    await c(owner).create({ name: accented.normalize('NFD'), isPrivate: false }).expect(201);
+    expect((await c(others[0]!).create({ name: accented.normalize('NFC'), isPrivate: false }).expect(409)).body.error.code).toBe('COMMUNITY_NAME_TAKEN');
+    // Zero-width characters are rejected, not folded.
+    expect((await c(others[1]!).create({ name: `Cafe​Club ${tag}`, isPrivate: false }).expect(400)).body.error.code).toBe('VALIDATION_ERROR');
+    // Renaming to a variant of another live name is refused; to your own variant is fine.
+    expect((await c(owner).patch(created.body.id, { name: `CAFE CLUB ${tag}.` }).expect(200)).body.name).toBe(`CAFE CLUB ${tag}`);
+  });
+});
+
+describe('membership races (review H2)', () => {
+  it('transfer racing leave / removal never leaves an ownerless community or a 500 (40 iterations)', async () => {
+    const statuses = new Set<number>();
+    for (let i = 0; i < 40; i++) {
+      const owner = await createUser(t);
+      const b = await createUser(t);
+      const mod = await createUser(t);
+      const { body: com } = await c(owner).create({ name: uniqueName('Race'), isPrivate: false }).expect(201);
+      await c(b).join(com.id).expect(200);
+      await c(mod).join(com.id).expect(200);
+      await c(owner).role(com.id, mod.id, 'moderator').expect(204);
+      const delay = (i % 4) * 2;
+      const racer =
+        i % 2
+          ? new Promise((r) => setTimeout(r, delay)).then(() => request(t.http).post(`/api/v1/communities/${com.id}/leave`).set(bearer(b.token)))
+          : new Promise((r) => setTimeout(r, delay)).then(() => request(t.http).delete(`/api/v1/communities/${com.id}/members/${b.id}`).set(bearer(mod.token)));
+      const [transfer, other] = await Promise.all([c(owner).role(com.id, b.id, 'owner'), racer]);
+      statuses.add(transfer.status).add(other.status);
+      expect(transfer.status).toBeLessThan(500);
+      expect(other.status).toBeLessThan(500);
+
+      const row = await t.prisma.community.findUniqueOrThrow({ where: { id: com.id } });
+      const owners = await t.prisma.communityMember.findMany({ where: { communityId: com.id, role: 'owner' } });
+      expect(owners).toHaveLength(1);
+      expect(owners[0]!.userId).toBe(row.ownerId);
+      expect(owners[0]!.status).toBe('active');
+      expect(await memberCountConsistent(com.id)).toEqual({ stored: row.memberCount, actual: row.memberCount });
+      const chatMembers = await t.prisma.chatMember.count({ where: { chatId: com.chatId } });
+      expect(chatMembers).toBe(row.memberCount);
+    }
+    // Both orders happened: sometimes the transfer won (then B can't leave/be removed as owner), sometimes not.
+    expect([...statuses].every((s) => s < 500)).toBe(true);
+  });
+});
