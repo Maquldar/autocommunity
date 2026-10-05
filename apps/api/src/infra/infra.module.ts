@@ -3,6 +3,7 @@ import { ENV, type Env } from '../config/env';
 import { PrismaService } from './prisma/prisma.service';
 import { RateLimiterService } from './rate-limit/rate-limiter.service';
 import { RedisService } from './redis/redis.service';
+import { BackgroundTasks } from './tasks/background-tasks';
 import { createSmsSender } from './sms/create-sms-sender';
 import { SmsSender } from './sms/sms-sender';
 import { createStorage } from './storage/create-storage';
@@ -14,9 +15,10 @@ import { Storage } from './storage/storage';
     PrismaService,
     { provide: RedisService, inject: [ENV], useFactory: (env: Env) => new RedisService(env.REDIS_URL) },
     RateLimiterService,
+    BackgroundTasks,
     { provide: SmsSender, inject: [ENV], useFactory: createSmsSender },
     { provide: Storage, inject: [ENV, PrismaService], useFactory: createStorage },
   ],
-  exports: [PrismaService, RedisService, RateLimiterService, SmsSender, Storage],
+  exports: [PrismaService, RedisService, RateLimiterService, BackgroundTasks, SmsSender, Storage],
 })
 export class InfraModule {}

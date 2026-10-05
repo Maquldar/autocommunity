@@ -12,10 +12,16 @@ import { useAuth } from '@/lib/auth/auth-provider';
 import { notify } from '@/lib/toast';
 import { describeNotification } from '@/features/notifications/describe';
 import { useNotificationTitle } from '@/features/notifications/notification-item';
-import { bindRealtimeHandlers, createRealtimeConnection, type IoFactory } from './client';
+import { bindRealtimeHandlers, createRealtimeConnection, type IoFactory, type RealtimeSocket } from './client';
 import { createAppRealtimeHandlers } from './handlers';
 
 const RealtimeStatusContext = createContext<boolean>(false);
+const RealtimeSocketContext = createContext<RealtimeSocket | null>(null);
+
+/** The live socket (null while signed out). Used to emit `chat:join` / `chat:typing`. */
+export function useRealtimeSocket(): RealtimeSocket | null {
+  return useContext(RealtimeSocketContext);
+}
 
 /** Whether the realtime socket is connected (e.g. to slow down polling fallbacks). */
 export function useRealtimeConnected(): boolean {
@@ -24,7 +30,11 @@ export function useRealtimeConnected(): boolean {
 
 /** Keeps one Socket.IO connection per tab while signed in; wires server events into the query cache. */
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+  const { status, me } = useAuth();
+  const myId = me.data?.id ?? null;
+  const myIdRef = useRef(myId);
+  myIdRef.current = myId;
+  const [socket, setSocket] = useState<RealtimeSocket | null>(null);
   const queryClient = useQueryClient();
   const router = useRouter();
   const t = useTranslations('notifications');
@@ -44,6 +54,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       refresh: (stale) => session.refresh(stale),
     });
     const { socket } = connection;
+    setSocket(socket);
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
     socket.on('connect', onConnect);
@@ -54,6 +65,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       createAppRealtimeHandlers({
         queryClient,
         logout: () => session.clear('expired'),
+        getMyId: () => myIdRef.current,
         toast: (notification: NotificationDto) => {
           const { titleFor: title, router: nav, t: tr } = latest.current;
           const { href } = describeNotification(notification);
@@ -78,6 +90,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       socket.off('disconnect', onDisconnect);
       connection.disconnect();
       setConnected(false);
+      setSocket(null);
     };
   }, [status, queryClient]);
 
@@ -86,5 +99,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.realtime = connected ? 'connected' : 'disconnected';
   }, [connected]);
 
-  return <RealtimeStatusContext.Provider value={connected}>{children}</RealtimeStatusContext.Provider>;
+  return (
+    <RealtimeStatusContext.Provider value={connected}>
+      <RealtimeSocketContext.Provider value={socket}>{children}</RealtimeSocketContext.Provider>
+    </RealtimeStatusContext.Provider>
+  );
 }

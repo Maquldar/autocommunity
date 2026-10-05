@@ -1,7 +1,8 @@
 'use client';
 
-import { CAR_BRANDS } from '@autoc/shared';
-import { SlidersHorizontal } from 'lucide-react';
+import { CAR_BRANDS, type CommunityDto } from '@autoc/shared';
+import { SlidersHorizontal, UsersRound } from 'lucide-react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 import { CountBadge } from '@/components/ui/badge';
@@ -9,14 +10,25 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { Avatar } from '@/components/ui/avatar';
 import { activeFilterCount, DEFAULT_FILTERS, type MapFilters } from './geojson';
 
 const ANY = '__any';
 const BRANDS = Object.keys(CAR_BRANDS).sort((a, b) => a.localeCompare(b));
 
-/** Filters button + sheet: friends only and car brand. (Community filter arrives with communities, Phase 3.) */
-export function MapFiltersControl({ value, onChange }: { value: MapFilters; onChange: (next: MapFilters) => void }) {
+/** Filters button + sheet: friends only, the viewer's communities (multi-select) and car brand. */
+export function MapFiltersControl({
+  value,
+  onChange,
+  communities,
+}: {
+  value: MapFilters;
+  onChange: (next: MapFilters) => void;
+  /** The viewer's active communities (undefined while loading). */
+  communities: CommunityDto[] | undefined;
+}) {
   const t = useTranslations('map.filters');
   const [open, setOpen] = useState(false);
   const friendsId = useId();
@@ -60,6 +72,12 @@ export function MapFiltersControl({ value, onChange }: { value: MapFilters; onCh
             />
           </div>
 
+          <CommunityFilter
+            communities={communities}
+            selected={value.communityIds}
+            onChange={(communityIds) => onChange({ ...value, communityIds })}
+          />
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={brandId}>{t('brand')}</Label>
             <Select value={value.brand ?? ANY} onValueChange={(brand) => onChange({ ...value, brand: brand === ANY ? null : brand })}>
@@ -88,5 +106,65 @@ export function MapFiltersControl({ value, onChange }: { value: MapFilters; onCh
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+function CommunityFilter({
+  communities,
+  selected,
+  onChange,
+}: {
+  communities: CommunityDto[] | undefined;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const t = useTranslations('map.filters');
+  const hintId = useId();
+  const toggle = (id: string, checked: boolean) =>
+    onChange(checked ? [...new Set([...selected, id])].sort() : selected.filter((other) => other !== id));
+
+  return (
+    <fieldset className="flex flex-col gap-2" aria-describedby={hintId} data-testid="community-filter">
+      <legend className="pb-1.5 text-[0.9375rem] font-medium">{t('communities')}</legend>
+      <p id={hintId} className="-mt-1 text-sm text-muted-foreground">
+        {t('communitiesHint')}
+      </p>
+      {communities === undefined ? (
+        <div aria-busy="true" className="flex flex-col gap-2">
+          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-11 w-full rounded-xl" />
+        </div>
+      ) : communities.length === 0 ? (
+        <p className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-3 text-sm text-muted-foreground">
+          <UsersRound aria-hidden="true" className="size-4 shrink-0" />
+          <span>
+            {t('noCommunities')}{' '}
+            <Link href="/communities" className="font-medium text-primary underline-offset-4 hover:underline focus-ring rounded-sm">
+              {t('findCommunities')}
+            </Link>
+          </span>
+        </p>
+      ) : (
+        <ul className="flex flex-col overflow-hidden rounded-xl border bg-card [&>li+li]:border-t">
+          {communities.map((community) => {
+            const checked = selected.includes(community.id);
+            return (
+              <li key={community.id}>
+                <label className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => toggle(community.id, event.target.checked)}
+                    className="size-5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none"
+                  />
+                  <Avatar id={community.id} name={community.name} src={community.avatarUrl} shape="square" size="sm" decorative />
+                  <span className="min-w-0 flex-1 truncate text-[0.9375rem]">{community.name}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </fieldset>
   );
 }

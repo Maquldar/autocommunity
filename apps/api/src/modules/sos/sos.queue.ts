@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { ENV, type Env } from '../../config/env';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { SosDispatchService } from './sos-dispatch.service';
 
 export const SOS_QUEUE_NAME = 'sos';
@@ -31,6 +32,7 @@ export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplica
     @Inject(ENV) private readonly env: Env,
     private readonly dispatch: SosDispatchService,
     private readonly redis: RedisService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   onModuleInit(): void {
@@ -49,12 +51,14 @@ export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplica
       { connection: this.connection(), concurrency: 5 },
     );
     this.worker.on('error', (err) => this.logger.warn({ err }, 'SOS worker error'));
+    this.tasks.registerProducer('sos worker', () => this.worker?.close());
     this.worker.on('failed', (job, err) => this.logger.warn({ err, job: job?.name }, 'SOS job failed'));
   }
 
   onApplicationBootstrap(): void {
-    this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS);
+    this.sweepTimer = setInterval(() => this.tasks.run('SOS expiry sweep', () => this.sweep()), SWEEP_MS);
     this.sweepTimer.unref();
+    this.tasks.registerProducer('sos sweep timer', () => this.sweepTimer && clearInterval(this.sweepTimer));
   }
 
   async onApplicationShutdown(): Promise<void> {

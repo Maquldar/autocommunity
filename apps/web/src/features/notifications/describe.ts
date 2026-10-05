@@ -7,7 +7,19 @@ import type { NotificationDto, UserMini } from '@autoc/shared';
 export type NotificationView =
   | { kind: 'friend_request'; user: UserMini | null; requestId: string | null; href: string | null }
   | { kind: 'friend_accepted'; user: UserMini | null; href: string | null }
+  | { kind: 'community_request'; user: UserMini | null; communityId: string | null; communityName: string; href: string | null }
+  | { kind: 'community_approved'; communityId: string | null; communityName: string; href: string | null }
+  | {
+      kind: 'community_role';
+      communityId: string | null;
+      communityName: string;
+      role: 'owner' | 'moderator' | 'member';
+      href: string | null;
+    }
   | { kind: 'generic'; type: string; href: string | null };
+
+/** Kinds that carry a user (actor). */
+export type UserNotificationView = Extract<NotificationView, { user: UserMini | null }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -31,6 +43,15 @@ function safePath(value: unknown): string | null {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : null;
 }
 
+/** Ids go into URLs: accept only plain id characters. */
+function safeId(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(value) ? value : null;
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export function describeNotification(notification: Pick<NotificationDto, 'type' | 'payload'>): NotificationView {
   const payload = isRecord(notification.payload) ? notification.payload : {};
   switch (notification.type) {
@@ -42,6 +63,37 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
     case 'friend_accepted': {
       const user = parseUserMini(payload.user);
       return { kind: 'friend_accepted', user, href: user ? `/u/${user.id}` : null };
+    }
+    case 'community_request': {
+      const communityId = safeId(payload.communityId);
+      return {
+        kind: 'community_request',
+        user: parseUserMini(payload.user),
+        communityId,
+        communityName: text(payload.communityName),
+        // Same target as the push URL: the Requests tab.
+        href: communityId ? `/communities/${communityId}/requests` : null,
+      };
+    }
+    case 'community_approved': {
+      const communityId = safeId(payload.communityId);
+      return {
+        kind: 'community_approved',
+        communityId,
+        communityName: text(payload.communityName),
+        href: communityId ? `/communities/${communityId}` : null,
+      };
+    }
+    case 'community_role': {
+      const communityId = safeId(payload.communityId);
+      const role = payload.role === 'owner' || payload.role === 'moderator' ? payload.role : 'member';
+      return {
+        kind: 'community_role',
+        communityId,
+        communityName: text(payload.communityName),
+        role,
+        href: communityId ? `/communities/${communityId}` : null,
+      };
     }
     default:
       return { kind: 'generic', type: String(notification.type), href: safePath(payload.url) };

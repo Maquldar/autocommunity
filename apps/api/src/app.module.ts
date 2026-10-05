@@ -17,6 +17,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PushModule } from './modules/push/push.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SosModule } from './modules/sos/sos.module';
+import { RatingModule } from './modules/rating/rating.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
@@ -40,6 +43,9 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     ChatsModule,
     CommunitiesModule,
     SosModule,
+    RatingModule,
+    ReviewsModule,
+    ReportsModule,
     DemoModule,
     HealthModule,
   ],

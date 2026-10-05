@@ -43,8 +43,17 @@ export async function seedSos(
   prisma: PrismaClient,
   storage: Storage,
   newId: () => string,
-  opts: { now: number; centre: { lat: number; lng: number }; openRequester: SeedUser; demo: SeedUser; closedRequester: SeedUser; expiredRequester: SeedUser },
-): Promise<{ sos: number }> {
+  opts: {
+    now: number;
+    centre: { lat: number; lng: number };
+    openRequester: SeedUser;
+    demo: SeedUser;
+    closedRequester: SeedUser;
+    expiredRequester: SeedUser;
+    /** More finished helps between seed users (each with reviews), for realistic ratings. */
+    extraHelps: { requester: SeedUser; helper: SeedUser; daysAgo: number; helperStars: number; requesterStars: number | null; comment: string }[];
+  },
+): Promise<{ sos: number; reviews: number }> {
   const { now, centre } = opts;
 
   // 1. Open: flat tire ~1 km from the map centre, 12 minutes ago, with a photo.
@@ -139,6 +148,49 @@ export async function seedSos(
     data: lines.map(([min, senderId, type, text], i) => ({ id: newId(), chatId, senderId, type, text, createdAt: new Date(t(min).getTime() + i) })),
   });
 
+  // Both sides reviewed each other.
+  await prisma.review.createMany({
+    data: [
+      { id: newId(), authorId: opts.closedRequester.id, targetType: 'user', targetId: opts.demo.id, refId: closedId, stars: 5, comment: 'Приехал быстро, всё объяснил. Спасибо огромное!', createdAt: t(50) },
+      { id: newId(), authorId: opts.demo.id, targetType: 'user', targetId: opts.closedRequester.id, refId: closedId, stars: 5, comment: 'Всё чётко, ждала на месте.', createdAt: t(55) },
+    ],
+  });
+  let reviews = 2;
+
+  // More closed helps between seed users.
+  for (const [i, h] of opts.extraHelps.entries()) {
+    const id = newId();
+    const created = new Date(now - h.daysAgo * DAY);
+    const at = (min: number) => new Date(created.getTime() + min * 60_000);
+    await insertSos(prisma, {
+      id,
+      userId: h.requester.id,
+      type: (['stuck', 'flat_tire', 'battery', 'breakdown'] as const)[i % 4]!,
+      description: 'Помощь уже оказана — спасибо сообществу!',
+      photoIds: [],
+      lat: centre.lat + 0.02 * Math.sin(i + 1),
+      lng: centre.lng + 0.03 * Math.cos(i + 1),
+      status: 'closed',
+      sharePhone: false,
+      radiusM: 5000,
+      createdAt: created,
+      acceptedAt: at(5),
+      closedAt: at(50),
+      expiresAt: new Date(created.getTime() + 2 * HOUR),
+    });
+    await prisma.sosResponse.create({ data: { id: newId(), sosId: id, helperId: h.helper.id, status: 'arrived', createdAt: at(3) } });
+    await prisma.review.create({
+      data: { id: newId(), authorId: h.requester.id, targetType: 'user', targetId: h.helper.id, refId: id, stars: h.helperStars, comment: h.comment, createdAt: at(70) },
+    });
+    reviews++;
+    if (h.requesterStars !== null) {
+      await prisma.review.create({
+        data: { id: newId(), authorId: h.helper.id, targetType: 'user', targetId: h.requester.id, refId: id, stars: h.requesterStars, comment: null, createdAt: at(80) },
+      });
+      reviews++;
+    }
+  }
+
   // 3. Expired: nobody answered 5 days ago.
   const expiredCreated = new Date(now - 5 * DAY);
   await insertSos(prisma, {
@@ -157,5 +209,5 @@ export async function seedSos(
     closedAt: new Date(expiredCreated.getTime() + 2 * HOUR),
     expiresAt: new Date(expiredCreated.getTime() + 2 * HOUR),
   });
-  return { sos: 3 };
+  return { sos: 3 + opts.extraHelps.length, reviews };
 }

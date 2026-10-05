@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
+import { CountBadge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { OfflineBanner } from '@/components/ui/offline-banner';
 import { cn } from '@/lib/cn';
@@ -24,22 +25,35 @@ export type AppShellProps = {
   accountSlot?: ReactNode;
   /** Override the nav source (tests, styleguide). Defaults to NAV_ITEMS. */
   navItems?: readonly NavItem[];
+  /** Unread counters per nav item key (e.g. `{ chats: 3 }`), drawn as a badge on the icon. */
+  badges?: Partial<Record<string, number>>;
 };
 
 /** Pages that fill the whole content area edge to edge (no gutters, no page scroll): the map. */
 export const FULL_BLEED_ROUTES: readonly string[] = ['/map'];
 
+/** A conversation (/chats/{id}): full height with its own composer, so the phone tab bar steps aside. */
+const CONVERSATION_RE = /^\/chats\/[^/]+\/?$/;
+
+export function isFullBleedRoute(pathname: string): boolean {
+  return FULL_BLEED_ROUTES.includes(pathname) || CONVERSATION_RE.test(pathname);
+}
+
+export function hidesTabBar(pathname: string): boolean {
+  return CONVERSATION_RE.test(pathname);
+}
+
 /**
  * Signed-in app frame: mobile top bar + bottom tab bar, desktop (≥1024px) sidebar.
  * Handles safe areas, the skip link and the offline banner.
  */
-export function AppShell({ children, title, actions, notificationSlot, accountSlot, navItems = NAV_ITEMS }: AppShellProps) {
+export function AppShell({ children, title, actions, notificationSlot, accountSlot, navItems = NAV_ITEMS, badges = {} }: AppShellProps) {
   const t = useTranslations('shell');
   const pathname = usePathname();
   const tabs = getNavItems('tab', navItems);
   const secondary = getNavItems('secondary', navItems);
-  const hasTabs = tabs.length > 0;
-  const fullBleed = FULL_BLEED_ROUTES.includes(pathname);
+  const hasTabs = tabs.length > 0 && !hidesTabBar(pathname);
+  const fullBleed = isFullBleedRoute(pathname);
 
   return (
     <div className={fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh'}>
@@ -53,7 +67,7 @@ export function AppShell({ children, title, actions, notificationSlot, accountSl
         {t('skipToContent')}
       </a>
 
-      <Sidebar tabs={tabs} secondary={secondary} pathname={pathname} />
+      <Sidebar tabs={tabs} secondary={secondary} pathname={pathname} badges={badges} />
 
       <div className={cn('flex flex-col lg:ps-[var(--sidebar-width)]', fullBleed ? 'h-dvh' : 'min-h-dvh')}>
         <header className="sticky top-0 z-header border-b bg-background/85 pt-safe backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
@@ -92,12 +106,24 @@ export function AppShell({ children, title, actions, notificationSlot, accountSl
         </main>
       </div>
 
-      {hasTabs ? <BottomTabBar items={tabs} pathname={pathname} /> : null}
+      {hasTabs ? <BottomTabBar items={tabs} pathname={pathname} badges={badges} /> : null}
     </div>
   );
 }
 
-function BottomTabBar({ items, pathname }: { items: NavItem[]; pathname: string }) {
+type Badges = Partial<Record<string, number>>;
+
+/** Accessible name for a nav item with an unread count ("Chats, 3 unread"). */
+function useNavLabel() {
+  const t = useTranslations();
+  return (item: NavItem, count: number) => {
+    const label = t(`nav.${item.labelKey}`);
+    return count > 0 ? t('shell.navUnread', { label, count }) : label;
+  };
+}
+
+function BottomTabBar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
+  const navLabel = useNavLabel();
   const t = useTranslations();
   return (
     <nav
@@ -112,6 +138,7 @@ function BottomTabBar({ items, pathname }: { items: NavItem[]; pathname: string 
           const active = isNavItemActive(item, pathname);
           const Icon = item.icon;
           const label = t(`nav.${item.labelKey}`);
+          const count = badges[item.key] ?? 0;
 
           if (item.emphasis === 'sos') {
             return (
@@ -135,6 +162,8 @@ function BottomTabBar({ items, pathname }: { items: NavItem[]; pathname: string 
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
+                aria-label={count > 0 ? navLabel(item, count) : undefined}
+                data-testid={`nav-${item.key}`}
                 className={cn(
                   'group flex flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium focus-visible:outline-none',
                   active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
@@ -142,11 +171,14 @@ function BottomTabBar({ items, pathname }: { items: NavItem[]; pathname: string 
               >
                 <span
                   className={cn(
-                    'flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-base group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ring',
+                    'relative flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-base group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ring',
                     active && 'bg-primary-soft text-primary-soft-foreground',
                   )}
                 >
                   <Icon aria-hidden="true" className="size-[1.375rem]" strokeWidth={active ? 2.25 : 1.75} />
+                  {count > 0 ? (
+                    <CountBadge aria-hidden="true" count={count} className="absolute -top-1 start-[calc(50%+0.375rem)] ring-card" />
+                  ) : null}
                 </span>
                 <span className={cn('max-w-full truncate px-1', active && 'font-semibold')}>{label}</span>
               </Link>
@@ -158,7 +190,7 @@ function BottomTabBar({ items, pathname }: { items: NavItem[]; pathname: string 
   );
 }
 
-function Sidebar({ tabs, secondary, pathname }: { tabs: NavItem[]; secondary: NavItem[]; pathname: string }) {
+function Sidebar({ tabs, secondary, pathname, badges }: { tabs: NavItem[]; secondary: NavItem[]; pathname: string; badges: Badges }) {
   const t = useTranslations();
   const sos = tabs.find((item) => item.emphasis === 'sos');
   const primary = tabs.filter((item) => item.emphasis !== 'sos');
@@ -182,7 +214,7 @@ function Sidebar({ tabs, secondary, pathname }: { tabs: NavItem[]; secondary: Na
             {t(`nav.${sos.labelKey}`)}
           </Link>
         ) : null}
-        {primary.length > 0 ? <SidebarList items={primary} pathname={pathname} /> : null}
+        {primary.length > 0 ? <SidebarList items={primary} pathname={pathname} badges={badges} /> : null}
         {secondary.length > 0 ? (
           <div className="flex flex-col gap-1">
             {primary.length > 0 ? (
@@ -190,7 +222,7 @@ function Sidebar({ tabs, secondary, pathname }: { tabs: NavItem[]; secondary: Na
                 {t('shell.more')}
               </p>
             ) : null}
-            <SidebarList items={secondary} pathname={pathname} />
+            <SidebarList items={secondary} pathname={pathname} badges={badges} />
           </div>
         ) : null}
       </nav>
@@ -206,18 +238,22 @@ function Sidebar({ tabs, secondary, pathname }: { tabs: NavItem[]; secondary: Na
   );
 }
 
-function SidebarList({ items, pathname }: { items: NavItem[]; pathname: string }) {
+function SidebarList({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
   const t = useTranslations('nav');
+  const navLabel = useNavLabel();
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item) => {
         const active = isNavItemActive(item, pathname);
         const Icon = item.icon;
+        const count = badges[item.key] ?? 0;
         return (
           <li key={item.key}>
             <Link
               href={item.href}
               aria-current={active ? 'page' : undefined}
+              aria-label={count > 0 ? navLabel(item, count) : undefined}
+              data-testid={`sidebar-${item.key}`}
               className={cn(
                 'flex min-h-11 items-center gap-3 rounded-lg px-3 text-[0.9375rem] font-medium transition-colors duration-fast focus-ring',
                 active
@@ -226,7 +262,8 @@ function SidebarList({ items, pathname }: { items: NavItem[]; pathname: string }
               )}
             >
               <Icon aria-hidden="true" className="size-5 shrink-0" strokeWidth={active ? 2.25 : 1.75} />
-              {t(item.labelKey)}
+              <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+              {count > 0 ? <CountBadge aria-hidden="true" count={count} className="ring-0" /> : null}
             </Link>
           </li>
         );

@@ -10,6 +10,7 @@ import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { chatRefSchema, CHAT_LIMITS } from '@autoc/shared';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
 import { chatRoom, RealtimeService, sosRoom, userRoom } from './realtime.service';
 
@@ -43,6 +44,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     private readonly realtime: RealtimeService,
     private readonly redis: RedisService,
     private readonly userView: UserViewService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   afterInit(ns: Namespace): void {
@@ -134,7 +136,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
       const parsed = chatRefSchema.safeParse(payload);
       // Room membership mirrors chat membership (joined on connect / grant, left on revoke).
       if (!parsed.success || !socket.rooms.has(chatRoom(parsed.data.chatId))) return;
-      void this.relayTyping(userId, parsed.data.chatId).catch((err: unknown) => this.logger.warn({ err }, 'chat:typing failed'));
+      this.tasks.run('chat:typing', () => this.relayTyping(userId, parsed.data.chatId));
     });
   }
 
@@ -151,10 +153,10 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
   private onConnection(socket: Socket): void {
     const { userId } = socket.data as SocketData;
     this.registerChatHandlers(socket, userId);
-    this.prisma.notification
-      .count({ where: { userId, readAt: null } })
-      .then((count) => socket.emit('notification:count', { count }))
-      .catch((err: unknown) => this.logger.warn({ err }, 'Failed to send the unread count'));
+    this.tasks.run('Initial notification:count', async () => {
+      const count = await this.prisma.notification.count({ where: { userId, readAt: null } });
+      socket.emit('notification:count', { count });
+    });
   }
 
   private subscribeToRevocations(): void {

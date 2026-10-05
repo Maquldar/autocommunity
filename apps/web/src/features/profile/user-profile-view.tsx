@@ -13,6 +13,7 @@ import { ListItemSkeleton } from '@/components/ui/skeleton';
 import { useErrorMessage } from '@/hooks/use-error-message';
 import { hasErrorCode } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/auth/guards';
+import { MessageButton } from '@/features/chats/message-button';
 import { FriendButton } from '@/features/friends/friend-button';
 import { HOME_ROUTE } from '@/lib/routes';
 import { ProfileHeader, ProfileHeaderSkeleton } from './profile-header';
@@ -67,7 +68,10 @@ export function UserProfileView({ userId }: { userId: string }) {
         user={user.data}
         actions={
           user.data.status === 'active' ? (
-            <FriendButton user={{ id: user.data.id, name: user.data.name, relation: user.data.relation }} />
+            <>
+              <FriendButton user={{ id: user.data.id, name: user.data.name, relation: user.data.relation }} />
+              <MessageButton userId={user.data.id} />
+            </>
           ) : null
         }
       />

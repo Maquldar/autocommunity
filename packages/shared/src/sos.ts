@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { bodyLatSchema, bodyLngSchema, idSchema, paginationQuerySchema } from './schemas';
-import type { UploadDto, UserPublic } from './types';
+import type { UploadDto, UserMini, UserPublic } from './types';
 
 /* ---------- enums ---------- */
 
@@ -73,7 +73,10 @@ export type SosDto = {
   myRole: SosRole;
   contactPhone: string | null;
   chatId: string | null;
+  /** True when the viewer has at least one review left to write for this SOS (closed, within 14 days). */
   canReview: boolean;
+  /** Who the viewer can still review for this SOS. */
+  reviewTargets: UserMini[];
 };
 
 export type SosMapItem = { id: string; type: SosType; lat: number; lng: number; status: SosStatus; createdAt: string };
@@ -105,9 +108,10 @@ export type CreateSosInput = z.output<typeof createSosSchema>;
 export const cancelSosSchema = z.object({ reason: z.string().trim().max(SOS_LIMITS.descriptionMax).optional() });
 
 /** Query coordinates (strings from the URL). */
+/** Optional hints: used only when within 1 km of the viewer's stored location. */
 export const sosNearbyQuerySchema = z.object({
-  lat: z.coerce.number().min(-90).max(90),
-  lng: z.coerce.number().min(-180).max(180),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
 });
 
 export const sosHistoryQuerySchema = paginationQuerySchema;

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { SosResponse, Upload } from '@prisma/client';
 import {
+  REVIEW_LIMITS,
   SOS_OPEN_STATUSES,
   type Relation,
   type SosDto,
@@ -37,6 +38,8 @@ type Loaded = {
   responses: (SosResponse & { helper: UserWithView; distanceM: number | null })[];
   photos: Upload[];
   chat: { id: string; memberIds: Set<string> } | null;
+  /** `${authorId}:${targetId}` of user reviews written for this SOS. */
+  reviewed: Set<string>;
 };
 
 const ACTIVE_HELP = new Set(['accepted', 'arrived']);
@@ -107,7 +110,7 @@ export class SosViewService {
     if (!rows.length) return new Map();
     const sosIds = rows.map((r) => r.id);
     const photoIds = [...new Set(rows.flatMap((r) => r.photoUploadIds))];
-    const [requesters, responses, helperDistances, photos, chats] = await Promise.all([
+    const [requesters, responses, helperDistances, photos, chats, reviews] = await Promise.all([
       this.prisma.user.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.userId))] } }, include: userViewInclude }),
       this.prisma.sosResponse.findMany({
         where: { sosId: { in: sosIds } },
@@ -122,6 +125,7 @@ export class SosViewService {
         WHERE r.sos_id = ANY(${sosIds}::uuid[])`,
       photoIds.length ? this.prisma.upload.findMany({ where: { id: { in: photoIds } } }) : Promise.resolve([] as Upload[]),
       this.prisma.chat.findMany({ where: { refId: { in: sosIds }, type: 'sos' }, select: { id: true, refId: true, members: { select: { userId: true } } } }),
+      this.prisma.review.findMany({ where: { refId: { in: sosIds }, targetType: 'user' }, select: { authorId: true, targetId: true, refId: true } }),
     ]);
     const requesterById = new Map(requesters.map((u) => [u.id, u]));
     const distById = new Map(helperDistances.map((d) => [d.id, d.d]));
@@ -137,6 +141,7 @@ export class SosViewService {
         responses: responses.filter((r) => r.sosId === sos.id).map((r) => ({ ...r, distanceM: distById.get(r.id) ?? null })),
         photos: sos.photoUploadIds.map((id) => photoById.get(id)).filter((p): p is Upload => !!p),
         chat: chatBySos.get(sos.id) ?? null,
+        reviewed: new Set(reviews.filter((r) => r.refId === sos.id).map((r) => `${r.authorId}:${r.targetId}`)),
       });
     }
     return out;
@@ -172,6 +177,16 @@ export class SosViewService {
       createdAt: r.createdAt.toISOString(),
     }));
     const activeHelper = !!mine && ACTIVE_HELP.has(mine.status);
+    // Reviews: closed SOS, within the window, requester ↔ helpers who reached `arrived`, one per direction.
+    const windowOpen = sos.status === 'closed' && !!sos.closedAt && Date.now() - sos.closedAt.getTime() < REVIEW_LIMITS.windowDays * 24 * 3600 * 1000;
+    const candidates = !windowOpen
+      ? []
+      : isRequester
+        ? l.responses.filter((r) => r.status === 'arrived').map((r) => r.helper)
+        : mine?.status === 'arrived'
+          ? [l.requester]
+          : [];
+    const reviewTargets = candidates.filter((u) => !l.reviewed.has(`${viewerId}:${u.id}`)).map((u) => this.userView.toMini(u));
     return {
       id: sos.id,
       type: sos.type,
@@ -190,7 +205,8 @@ export class SosViewService {
       myRole: isRequester ? 'requester' : mine ? 'helper' : 'viewer',
       contactPhone: open && !isRequester && (sos.sharePhone || activeHelper) ? (l.requester.phone ?? null) : null,
       chatId: l.chat && l.chat.memberIds.has(viewerId) ? l.chat.id : null,
-      canReview: false,
+      canReview: reviewTargets.length > 0,
+      reviewTargets,
     };
   }
 }

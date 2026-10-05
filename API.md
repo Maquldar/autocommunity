@@ -476,6 +476,55 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 - `/map/sos` keeps bbox semantics but returns only SOS within 20 km of the viewer's stored location (otherwise empty), so SOS positions can't be harvested city-wide.
 - **Demo:** when `DEMO_LIVE_LOCATIONS` is on, the ticker makes sure there is always one open SOS from a seed account near the centre (re-created when the previous one expires, closes or is cancelled), so the demo always has something to help with.
 
+### Phase 5 clarifications (added during implementation)
+
+- **Shared:**
+  - `packages/shared/src/rating.ts`: `computeRating(input, now)`, `RATING_FORMULA`, `RATING_PENALTIES`, `RatingInput`, `RatingDto`, `RatingEventDto`.
+  - `reviews-reports.ts`: `ReviewDto`, `ReportDto`, `createSosReviewSchema`, `createReportSchema`, `REVIEW_LIMITS`, `REPORT_LIMITS`.
+  - `SosDto` gains `reviewTargets: UserMini[]`.
+- **Formula details:**
+  - A "month" for tenure is 30 days.
+  - Activity days are calendar days in Asia/Almaty. System chat messages don't count.
+  - Help age counts from the SOS `closedAt`.
+  - Breakdown components are reported with 2 decimals; the rating is computed from unrounded values, then rounded and clamped.
+  - The reviews component approaches ±15 asymptotically (Bayesian prior).
+- **Penalties:**
+  - A penalty is one `rating_events` row with `reason: 'penalty'`, carrying the penalty points in the new columns `penalty_points` / `penalty_kind` (`report_confirmed` | `fake_sos`).
+  - Its `delta` is the actual rating change (e.g. 0 when already at 0).
+  - `computeRating` sums `penalty_points`, not negative deltas, so decay or recalculation deltas are never counted as penalties.
+  - Phase 6 calls `RatingService.applyPenalty(userId, kind, refId)`.
+- **Ledger:**
+  - A recompute that doesn't change the rating writes no row; `applyPenalty` always writes one.
+  - Closing an SOS recomputes every `arrived` helper (`help_confirmed`, `refId` = SOS id).
+  - A review recomputes its target (`review_received`, `refId` = review id).
+  - `GET /me/rating` and `/users/:id/rating` refresh a drifted cache first (`recalc`), so `rating` always matches the live breakdown.
+  - `/me/rating/events` returns newest first (keyset pagination).
+- **Daily job:** first run 10 min after boot, then every 24 h. A Redis lock held ~23 h means it runs once a day across instances. It covers all onboarded, non-deleted users, one short transaction per user.
+- **`/users/:id/rating`, `/users/:id/reviews`:** same visibility as `GET /users/:id` (404 for deleted / un-onboarded, self excepted).
+- **Reviews:**
+  - `POST /sos/:id/reviews` → `201 ReviewDto`. Check order: SOS exists (404) → pair allowed (403 `REVIEW_NOT_ALLOWED`, which also covers a non-closed SOS, self, helpers who never reached `arrived`, and helper ↔ helper) → not yet reviewed (409 `ALREADY_REVIEWED`) → window (409 `REVIEW_WINDOW_CLOSED`).
+  - `stars` must be an integer 1..5 (JSON number). An empty `comment` is stored as `null`.
+  - `review_received` payload: `{ reviewId, sosId, stars, author: UserMini }`. Push url `/u/{authorId}?tab=reviews`.
+  - Each review triggers `sos:update` so `canReview` / `reviewTargets` refresh.
+- **Reports:**
+  - `POST /reports` → `201 ReportDto` (`{ id, targetType, targetId, reason, details, status, resolutionNote, createdAt, resolvedAt }`).
+  - Visibility per type:
+    - user: onboarded and not deleted (blocked users are reportable);
+    - message: the reporter can read the chat;
+    - sos: the SOS visibility rule;
+    - community: not deleted;
+    - service: `verified`, or the reporter's own submission.
+  - Reporting your own message, SOS, community or service → `400 INVALID_TARGET`.
+  - `fake_sos` on a non-SOS target → `400 VALIDATION_ERROR`.
+  - 10/day is a rolling 24 h → `429 RATE_LIMITED` with `details.retryAfterSec`.
+  - A service without a submitter is reportable with `targetUserId = null`.
+  - A partial unique index guarantees one open report per reporter + target, also under concurrency.
+- **SOS hardening:**
+  - `GET /sos/nearby`: `lat`/`lng` are now optional hints.
+  - `/map/sos`: "within 20 km of the viewer's stored location" uses the stored position whatever its age; no stored position → empty list.
+- **Demo SOS keep-alive:** runs in the demo ticker (same lock, every 60 s). When no seed account has an open SOS, it inserts one directly near the centre: rotating seed requester and type, never the two login accounts, no dispatch. It expires after `SOS_TTL_SEC` like any other.
+- **Seed:** ratings are computed from the seeded data with `computeRating` (one `recalc` ledger row each). Seed data includes 4 extra closed helps between seed users and 9 reviews.
+
 ## 6. Phase 6 — Admin (DRAFT) — all require `role=admin`
 
 `GET /admin/stats` · `GET /admin/users?q&status&cursor` · `GET /admin/users/:id` · `POST /admin/users/:id/warn {note}` · `POST /admin/users/:id/block {note, until?}` · `POST /admin/users/:id/unblock {note}` · `GET /admin/communities?q&cursor` · `DELETE /admin/communities/:id {note}` · `GET /admin/sos?status&cursor` · `GET /admin/sos/:id` · `POST /admin/sos/:id/mark-fake {note}` · `GET /admin/reports?status=open|confirmed|dismissed&cursor` · `POST /admin/reports/:id/resolve {decision:'confirm'|'dismiss', note}` · `GET /admin/fraud-flags?cursor` · `GET /admin/audit?cursor` · `GET /admin/services?status&cursor` · `POST /admin/services/:id/verify|reject {note}` · `GET /admin/services/:id/qr` · `GET /admin/visits?status=pending` · `POST /admin/visits/:id/approve|reject`

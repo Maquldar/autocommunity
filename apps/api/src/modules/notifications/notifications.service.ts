@@ -5,6 +5,7 @@ import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
 import { decodeCursor, keysetOrderBy, keysetWhere, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { PushQueue } from '../push/push.queue';
 import { RealtimeService } from '../realtime/realtime.service';
 import { pushPayloadFor } from './push-text';
@@ -25,6 +26,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly push: PushQueue,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   /**
@@ -37,7 +39,7 @@ export class NotificationsService {
       data: { id: newId(), userId, type, payload: payload as Prisma.InputJsonObject },
     });
     const dto = toNotificationDto(row);
-    void this.deliver(userId, dto).catch((err: unknown) => this.logger.warn({ err, type }, 'Notification delivery failed'));
+    this.tasks.run(`Delivery of ${type} notification`, () => this.deliver(userId, dto));
     return dto;
   }
 

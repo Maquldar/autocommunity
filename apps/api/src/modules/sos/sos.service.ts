@@ -25,6 +25,7 @@ import { LocationService } from '../location/location.service';
 import { MAP_MAX_BBOX_DEG, MAP_MAX_USERS } from '../map/map.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
+import { RatingService } from '../rating/rating.service';
 import { SosBroadcastService } from './sos-broadcast.service';
 import { SosErrors } from './sos-errors';
 import { sosTransition, type SosAction } from './sos-state';
@@ -39,6 +40,8 @@ const OPEN = Prisma.sql`('created', 'accepted', 'in_progress')`;
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? '';
+/** `/sos/nearby` hints farther than this from the stored location are ignored. */
+const SOS_HINT_MAX_M = 1000;
 
 @Injectable()
 export class SosService {
@@ -53,6 +56,7 @@ export class SosService {
     private readonly userView: UserViewService,
     private readonly location: LocationService,
     private readonly rateLimiter: RateLimiterService,
+    private readonly rating: RatingService,
   ) {}
 
   /* ------------------------------------------------------------------ create */
@@ -128,15 +132,28 @@ export class SosService {
     return this.view.toDtos(userId, rows.map((r) => r.id));
   }
 
-  /** Open SOS of others within 20 km of the point, nearest first (max 50); distances from the point. */
-  async nearby(userId: string, lat: number, lng: number): Promise<SosDto[]> {
+  /**
+   * Open SOS of others within 20 km of the viewer's stored location (< 15 min old), nearest first (max 50).
+   * `lat`/`lng` are only hints: used as the origin when within 1 km of the stored location.
+   */
+  async nearby(userId: string, hintLat?: number, hintLng?: number): Promise<SosDto[]> {
+    const loc = await this.prisma.$queryRaw<{ lat: number; lng: number; hintOk: boolean | null }[]>`
+      SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
+             ${hintLat !== undefined && hintLng !== undefined
+               ? Prisma.sql`ST_DWithin(location, ST_SetSRID(ST_MakePoint(${hintLng}::float8, ${hintLat}::float8), 4326)::geography, ${SOS_HINT_MAX_M}::float8)`
+               : Prisma.sql`NULL::boolean`} AS "hintOk"
+      FROM user_locations
+      WHERE user_id = ${userId}::uuid AND updated_at > now() - make_interval(mins => ${SOS_LIMITS.freshLocationMin}::int)`;
+    if (!loc[0]) throw Errors.conflict('LOCATION_REQUIRED', 'Share your current location to see SOS nearby');
+    const origin = loc[0].hintOk ? { lat: hintLat!, lng: hintLng! } : { lat: loc[0].lat, lng: loc[0].lng };
+    const point = Prisma.sql`ST_SetSRID(ST_MakePoint(${origin.lng}::float8, ${origin.lat}::float8), 4326)::geography`;
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT s.id FROM sos_requests s
       WHERE s.status IN ${OPEN} AND s.user_id <> ${userId}::uuid
-        AND ST_DWithin(s.location, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography, ${SOS_LIMITS.visibleRadiusM}::float8)
-      ORDER BY ST_Distance(s.location, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography)
+        AND ST_DWithin(s.location, ${point}, ${SOS_LIMITS.visibleRadiusM}::float8)
+      ORDER BY ST_Distance(s.location, ${point})
       LIMIT 50`;
-    return this.view.toDtos(userId, rows.map((r) => r.id), { lat, lng });
+    return this.view.toDtos(userId, rows.map((r) => r.id), origin);
   }
 
   async map(userId: string, bbox: Bbox): Promise<{ items: SosMapItem[] }> {
@@ -147,6 +164,10 @@ export class SosService {
       SELECT id, type, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng, status, created_at AS "createdAt"
       FROM sos_requests
       WHERE status IN ${OPEN} AND user_id <> ${userId}::uuid
+        -- Only SOS within 20 km of the viewer's stored location (no location → nothing): positions can't be
+        -- harvested city-wide by moving the bbox.
+        AND EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = ${userId}::uuid
+                      AND ST_DWithin(ul.location, sos_requests.location, ${SOS_LIMITS.visibleRadiusM}::float8))
         AND location && ST_MakeEnvelope(${bbox.minLng}::float8, ${bbox.minLat}::float8, ${bbox.maxLng}::float8, ${bbox.maxLat}::float8, 4326)::geography
         AND ST_Y(location::geometry) BETWEEN ${bbox.minLat}::float8 AND ${bbox.maxLat}::float8
         AND ST_X(location::geometry) BETWEEN ${bbox.minLng}::float8 AND ${bbox.maxLng}::float8
@@ -317,7 +338,11 @@ export class SosService {
         UPDATE sos_requests SET status = ${next.sos}::"SosStatus", closed_at = now(), updated_at = now(),
                cancel_reason = ${action === 'cancel' ? (reason ?? null) : null}
         WHERE id = ${id}::uuid`;
-      const helpers = await tx.sosResponse.findMany({ where: { sosId: id, status: { in: ['offered', 'accepted', 'arrived'] } }, select: { helperId: true } });
+      const helpers = await tx.sosResponse.findMany({ where: { sosId: id, status: { in: ['offered', 'accepted', 'arrived'] } }, select: { helperId: true, status: true } });
+      // A closed SOS confirms the help of everyone who arrived: their rating changes in this transaction.
+      if (next.sos === 'closed') {
+        for (const h of helpers.filter((x) => x.status === 'arrived')) await this.rating.recompute(tx, h.helperId, 'help_confirmed', id);
+      }
       return { status: next.sos, helperIds: helpers.map((h) => h.helperId) };
     });
     const chat = await this.sosChat(id);

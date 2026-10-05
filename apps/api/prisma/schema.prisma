@@ -513,6 +513,7 @@ model Review {
 
   @@unique([authorId, targetType, targetId, refId])
   @@index([targetType, targetId, createdAt])
+  @@index([refId])
   @@map("reviews")
 }
 
@@ -523,6 +524,10 @@ model RatingEvent {
   delta     Int
   reason    String
   refId     String?  @map("ref_id") @db.Uuid
+  /// Penalty rows only (reason "penalty"): the penalty's points (e.g. -10) and kind; `delta` is the
+  /// resulting rating change. computeRating sums these points over 365 days.
+  penaltyPoints Int?    @map("penalty_points")
+  penaltyKind   String? @map("penalty_kind")
   createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

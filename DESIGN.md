@@ -247,7 +247,7 @@ All live in `src/components/ui/`. They are typed, accept `className` (merged wit
 | `ConfirmDialog` | `tone`: default · danger; `onConfirm` may return a promise; optional `children` (extra content, e.g. a "type DELETE" field) + `confirmDisabled` | Irreversible actions only. Focus starts on **Cancel**. Stays open if `onConfirm` rejects |
 | `DropdownMenu` (+Item `destructive`, CheckboxItem, RadioItem, Label, Separator, Sub) | Radix | Overflow actions (⋯). Destructive items go last, after a separator |
 | `Popover` | Radix | Contextual explanations ("What is the trust rating?"). Not for navigation |
-| `Avatar` | `id`, `name`, `src`, `size` xs–xl, `shape` circle · square, `decorative` | Initials fallback: the first letter/digit of up to two words, coloured deterministically from `id` (FNV-1a → `avatar-1..8`). Communities use `square`. Pass `decorative` when the name is printed next to it |
+| `Avatar` | `id`, `name`, `src`, `size` xs–xl, `shape` circle · square, `decorative` | Initials fallback: the first letter/digit of up to two words, coloured deterministically from `id` (FNV-1a → `avatar-1..8`). Communities use `square` (corner radius ≈25% of the size at every size, so small ones never read as circles). Pass `decorative` when the name is printed next to it |
 | `Badge` / `CountBadge` | neutral · primary · success · warning · danger · sos · outline; sm/md | Status labels. `sos` variant only for live SOS status. `CountBadge` caps at 99+ |
 | `RatingBadge` | `rating` 0–100, `size`, `showLabel` | The only way to show trust. Colour + icon shape + optional word + sr-only "Trust rating 72 out of 100, High" |
 | `Card` (+Header/Title/Description/Content/Footer) | `variant`: default · flat · elevated · interactive; `padding` | Group related content. Don't nest cards |
@@ -280,11 +280,33 @@ Shell (`src/components/shell/`): `AppShell`, `nav-config.ts`, `ThemeToggle` (men
 - **Phones (<1024px):** sticky top bar (logo, page title, actions, bell, avatar menu), content, fixed **bottom tab bar** (`h-16` + `env(safe-area-inset-bottom)`). Main content is padded so the bar never covers it.
 - **Desktop (≥1024px, `lg`):** fixed **sidebar** (`--sidebar-width` 16rem) with the logo, SOS button, primary items, a "More" group of secondary items, and theme/language switchers at the bottom. The bottom bar is hidden.
 - **Content width:** `max-w-content` (960px). Forms use `max-w-narrow` (640px).
-- **Navigation config** (`nav-config.ts`): one array of `{ key, href, icon, labelKey, enabled, placement: 'tab' | 'secondary', emphasis?: 'sos' }`. **Disabled items do not render.** Flip `enabled: true` in the same change that ships the page. Currently enabled: `profile`, `settings`. `AccountMenu` takes its Profile/Settings links from the same config.
+- **Navigation config** (`nav-config.ts`): one array of `{ key, href, icon, labelKey, enabled, placement: 'tab' | 'secondary', emphasis?: 'sos' }`. **Disabled items do not render.** Flip `enabled: true` in the same change that ships the page. Currently enabled: `map`, `communities`, `chats`, `profile` (tabs) and `friends`, `notifications`, `settings`. `AppShell` takes `badges` (`{ chats: n }`): a `CountBadge` on the icon and an accessible name like "Chats, 3 unread" (`shell.navUnread`). `AccountMenu` takes its Profile/Settings links from the same config.
+- **Conversations (`/chats/{id}`)** are full-bleed like the map, and the phone tab bar steps aside (`hidesTabBar`): the composer owns the bottom edge (`pb-safe`). Back goes to `/chats`.
 - **Safe areas:** `viewport-fit=cover`. Use the utilities `pt-safe`, `pb-safe`, `px-safe` and the variables `--safe-top/right/bottom/left`. The header, bottom bar, sheets and toasts already respect them.
 - **Skip link:** "Skip to content" (first focusable) jumps to `#main-content` (`tabIndex=-1`).
 - **No horizontal scrolling at 320px and up.** Grids use `grid-cols-1` (minmax 0) on mobile. Long words wrap (`break-words`). Checked by e2e at 320 and 390.
 - **PWA:** `app/manifest.ts` (standalone, `start_url: /profile` until the map ships in Phase 2 — then `/map`, together with `HOME_ROUTE` in `src/lib/routes.ts`; maskable icon). Icons live in `public/icons/` and `public/favicon.ico`.
+
+## 11a. Communities & chat patterns (Phase 3)
+
+**Community header** (`features/communities/community-view.tsx`): back link · square `Avatar lg` · name as the page `h1` · a meta row of `PrivacyBadge` (Lock/Globe icon **and** the word "Private/Public", never colour alone) · member count (`UsersRound`) · city (`MapPin`) · description (`whitespace-pre-line`) · the membership control (full width on phones). Moderators get a `Settings` `IconButton` that opens the settings `Sheet` (details form per rights, members & roles, owner-only danger zone with `ConfirmDialog tone="danger"`).
+- Membership control states: **Join** (primary) · **Request to join** (primary, private) · **Request sent** (`warning` badge + ghost "Cancel request") · **Leave** (outline, confirmed) · owner: a muted note "You're the owner — transfer or delete to leave" instead of a button.
+- Private communities show a locked `EmptyState` to non-members and pending users; members see `Tabs` Chat · Members · Requests (moderators; `CountBadge` with the pending count). Member rows put role badges and a ⋯ `DropdownMenu` (promote/demote/transfer/remove; destructive last) beside the profile link, never inside it.
+
+**Chat list row**: `Avatar lg` (square for communities), title (semibold when unread), time (`tabular-nums`; today HH:mm · Yesterday · weekday · date), one-line preview ("You: …", sender prefix in group chats, *Message deleted* in italics, media as words: Photo / Location / Voice message), `CountBadge` + sr-only "N unread messages".
+
+**Chat bubble** (`features/chats/message-bubble.tsx`):
+- Own messages right, `bg-primary text-primary-foreground`; others left, `bg-card` + border. `rounded-2xl`, the last bubble of a run gets a small tail corner (`rounded-ee-md` / `rounded-es-md`). Max width `min(85%, 30rem)`; text `whitespace-pre-wrap` + `overflow-wrap:anywhere`.
+- Runs: same sender within 5 minutes. In community chats the sender name (link, `text-primary`) tops the first bubble and the avatar sits beside the last.
+- Footer: time + delivery icon for own messages — `Clock` sending · `Check` sent · `CheckCheck` read · `AlertCircle` failed — each with an sr-only word. Failed sends show "Not sent · Retry · Remove" under the bubble (`role=alert`).
+- Media: photo thumbnail sized by the upload's aspect ratio (no layout shift) opening a full-size `Dialog`; location = a token-coloured street-grid tile (`.location-tile`) with a pin, coordinates and an "Open in maps" link (OpenStreetMap); voice = round play/pause button, a native range slider for seeking, duration, over a real `<audio>`.
+- Deleted: dashed outline, muted italic "Message deleted" with `Ban` icon — the placeholder keeps its place.
+- Actions: a ⋯ `IconButton` beside deletable bubbles (own, or any in a community chat for moderators). Always in the tab order; on hover-capable screens it fades in on hover/focus. Delete goes through `ConfirmDialog tone="danger"`.
+- Day separators: a sticky centred pill (Today · Yesterday · weekday, date), days in Asia/Almaty.
+
+**History scrolling**: newest at the bottom; a top sentinel loads older pages (keyset) and the view keeps its reading position (`overflow-anchor: none` + manual anchoring); new messages keep the view pinned only if it already was at the bottom (or the message is yours); a "Jump to latest" button appears when far up. The list is `role="log"`.
+
+**Composer** (`features/chats/composer.tsx`): [Attach ⋯ (Photo, My location)] [auto-growing textarea, 16px, max ~6 lines] [Send when there is text/photo, otherwise Mic]. Enter sends, Shift+Enter breaks the line (IME composition respected); max 4000 with a counter from 80% (warning colour, danger at the limit, sr-only "n of 4000 characters used"). A chosen photo shows as a removable preview strip; the text becomes its caption. Location asks first (`ConfirmDialog`: "Everyone in this chat will see where you are"). Recording replaces the row: Cancel (trash) · a `role=status` pill with a `danger` dot and `m:ss / 3:00` · Send. A typing line ("Aidar is typing…", `aria-live=polite`) sits above the composer in group chats; direct chats show "typing…" in the header.
 
 ## 12. State patterns
 

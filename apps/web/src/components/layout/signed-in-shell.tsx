@@ -10,11 +10,13 @@ import { RequireAuth, useCurrentUser } from '@/lib/auth/guards';
 import { LocationProvider } from '@/lib/location/location-provider';
 import { registerServiceWorker } from '@/lib/push/push';
 import { RealtimeProvider } from '@/lib/realtime/realtime-provider';
+import { useUnreadChatsTotal } from '@/features/chats/queries';
 
 /** AppShell for signed-in, onboarded users. The page area shows `fallback` until the session is known. */
 export function SignedInShell({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
   const { status, me, logout } = useAuth();
   const user = status === 'authenticated' ? me.data : undefined;
+  const chatsUnread = useUnreadChatsTotal(Boolean(user?.onboardingCompleted));
 
   useEffect(() => {
     // The worker only handles Web Push; registering early lets the settings switch subscribe instantly.
@@ -24,6 +26,7 @@ export function SignedInShell({ children, fallback }: { children: ReactNode; fal
   return (
     <RealtimeProvider>
       <AppShell
+        badges={{ chats: chatsUnread }}
         notificationSlot={<LiveNotificationBell />}
         accountSlot={
           user ? (

@@ -4,6 +4,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import Redis from 'ioredis';
 import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { PushDeliveryService, type DeliveryResult } from './push-delivery.service';
 
 export const PUSH_QUEUE_NAME = 'push';
@@ -34,6 +35,7 @@ export class PushQueue implements OnModuleInit, OnApplicationShutdown {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly delivery: PushDeliveryService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   onModuleInit(): void {
@@ -45,6 +47,7 @@ export class PushQueue implements OnModuleInit, OnApplicationShutdown {
       { connection: this.connection(), concurrency: 10 },
     );
     this.worker.on('error', (err) => this.logger.warn({ err }, 'Push worker error'));
+    this.tasks.registerProducer('push worker', () => this.worker?.close());
     this.worker.on('failed', (job, err) =>
       this.logger.warn({ err, attemptsMade: job?.attemptsMade }, 'Push delivery attempt failed'),
     );

@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, UserCheck } from 'lucide-react';
+import { Bell, Check, ShieldCheck, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -13,33 +13,61 @@ import { cn } from '@/lib/cn';
 import { useFriendAction } from '@/features/friends/queries';
 import { describeNotification, displayName, type NotificationView } from './describe';
 
+type TitleSpec =
+  | { key: 'types.friendRequest' | 'types.friendAccepted'; values: { name: string } }
+  | { key: 'types.communityRequest'; values: { name: string; community: string } }
+  | { key: 'types.communityApproved'; values: { community: string } }
+  | { key: 'types.communityRole'; values: { community: string; role: string } }
+  | { key: 'types.generic'; values: Record<string, never> };
+
+function titleSpec(view: NotificationView, someone: string, someCommunity: string): TitleSpec {
+  switch (view.kind) {
+    case 'friend_request':
+      return { key: 'types.friendRequest', values: { name: displayName(view.user) ?? someone } };
+    case 'friend_accepted':
+      return { key: 'types.friendAccepted', values: { name: displayName(view.user) ?? someone } };
+    case 'community_request':
+      return { key: 'types.communityRequest', values: { name: displayName(view.user) ?? someone, community: view.communityName || someCommunity } };
+    case 'community_approved':
+      return { key: 'types.communityApproved', values: { community: view.communityName || someCommunity } };
+    case 'community_role':
+      return { key: 'types.communityRole', values: { community: view.communityName || someCommunity, role: view.role } };
+    default:
+      return { key: 'types.generic', values: {} };
+  }
+}
+
 /** Plain-text title for toasts and push-style surfaces. */
 export function useNotificationTitle(): (notification: Pick<NotificationDto, 'type' | 'payload'>) => string {
   const t = useTranslations('notifications');
   return (notification) => {
-    const view = describeNotification(notification);
-    const name = displayName(view.kind === 'generic' ? null : view.user) ?? t('someone');
-    if (view.kind === 'friend_request') return t.markup('types.friendRequest', { name, b: (c) => c });
-    if (view.kind === 'friend_accepted') return t.markup('types.friendAccepted', { name, b: (c) => c });
-    return t('types.generic');
+    const spec = titleSpec(describeNotification(notification), t('someone'), t('someCommunity'));
+    return t.markup(spec.key, { ...spec.values, b: (c) => c });
   };
 }
 
 function Title({ view }: { view: NotificationView }) {
   const t = useTranslations('notifications');
   const b = (chunks: ReactNode) => <strong className="font-semibold">{chunks}</strong>;
-  if (view.kind === 'generic') return <>{t('types.generic')}</>;
-  const name = displayName(view.user) ?? t('someone');
-  return <>{t.rich(view.kind === 'friend_request' ? 'types.friendRequest' : 'types.friendAccepted', { name, b })}</>;
+  const spec = titleSpec(view, t('someone'), t('someCommunity'));
+  return <>{t.rich(spec.key, { ...spec.values, b })}</>;
 }
 
 function Leading({ view }: { view: NotificationView }) {
-  if (view.kind !== 'generic' && view.user) {
+  if ((view.kind === 'friend_request' || view.kind === 'friend_accepted' || view.kind === 'community_request') && view.user) {
     return <Avatar id={view.user.id} name={view.user.name || view.user.nickname} src={view.user.avatarUrl} size="md" decorative />;
   }
+  const Icon =
+    view.kind === 'friend_accepted'
+      ? UserCheck
+      : view.kind === 'community_approved' || view.kind === 'community_request'
+        ? UsersRound
+        : view.kind === 'community_role'
+          ? ShieldCheck
+          : Bell;
   return (
     <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
-      {view.kind === 'friend_accepted' ? <UserCheck className="size-5" /> : <Bell className="size-5" />}
+      <Icon className="size-5" />
     </span>
   );
 }

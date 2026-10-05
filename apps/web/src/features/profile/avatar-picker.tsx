@@ -1,6 +1,6 @@
 'use client';
 
-import { LIMITS } from '@autoc/shared';
+import { LIMITS, type UploadPurpose } from '@autoc/shared';
 import { useMutation } from '@tanstack/react-query';
 import { Camera, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useErrorMessage } from '@/hooks/use-error-message';
 import { api } from '@/lib/api';
 import { ApiError } from '@/lib/api/errors';
+import { cn } from '@/lib/cn';
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
@@ -35,10 +36,14 @@ type Props = {
   onChange: (value: AvatarValue) => void;
   /** Reports whether an upload is running, so the parent can hold its submit. */
   onBusyChange?: (busy: boolean) => void;
+  /** Upload purpose (`community` for community pictures). */
+  purpose?: UploadPurpose;
+  /** Communities use square avatars. */
+  shape?: 'circle' | 'square';
 };
 
 /** Avatar with upload (immediate, to POST /uploads) and remove. Shows a local preview while uploading. */
-export function AvatarPicker({ userId, name, value, onChange, onBusyChange }: Props) {
+export function AvatarPicker({ userId, name, value, onChange, onBusyChange, purpose = 'avatar', shape = 'circle' }: Props) {
   const t = useTranslations('profile.avatar');
   const errorMessage = useErrorMessage();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +51,7 @@ export function AvatarPicker({ userId, name, value, onChange, onBusyChange }: Pr
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const upload = useMutation({ mutationFn: (file: File) => api.uploads.create(file, 'avatar') });
+  const upload = useMutation({ mutationFn: (file: File) => api.uploads.create(file, purpose) });
 
   useEffect(() => onBusyChange?.(upload.isPending), [upload.isPending, onBusyChange]);
   useEffect(() => () => {
@@ -78,9 +83,14 @@ export function AvatarPicker({ userId, name, value, onChange, onBusyChange }: Pr
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-4">
         <div className="relative">
-          <Avatar id={userId} name={name || '?'} src={shown} size="xl" decorative />
+          <Avatar id={userId} name={name || '?'} src={shown} size="xl" shape={shape} decorative />
           {upload.isPending ? (
-            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-overlay text-white">
+            <span
+              className={cn(
+                'absolute inset-0 flex items-center justify-center bg-overlay text-white',
+                shape === 'square' ? 'rounded-2xl' : 'rounded-full',
+              )}
+            >
               <Spinner size="md" label={t('uploading')} />
             </span>
           ) : null}

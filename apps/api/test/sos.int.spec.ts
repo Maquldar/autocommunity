@@ -211,7 +211,7 @@ describe('lifecycle', () => {
     expect(await t.prisma.notification.count({ where: { userId: requester.id, type: 'sos_status' } })).toBe(1);
 
     const closed = (await sos(requester).close(id).expect(200)).body as SosDto;
-    expect(closed).toMatchObject({ status: 'closed', closedAt: expect.any(String), canReview: false });
+    expect(closed).toMatchObject({ status: 'closed', closedAt: expect.any(String), canReview: true, reviewTargets: [{ id: helper.id }] });
     const statusNote = await t.prisma.notification.findFirstOrThrow({ where: { userId: helper.id, type: 'sos_status' } });
     expect(statusNote.payload).toMatchObject({ sosId: id, status: 'closed' });
     const last = (await request(t.http).get(`/api/v1/chats/${chat.id}/messages?limit=1`).set(bearer(helper.token)).expect(200)).body.items[0];
@@ -389,18 +389,20 @@ describe('lists', () => {
     await sos(me).respond(theirs).expect(200);
 
     expect(((await sos(me).active().expect(200)).body as SosDto[]).map((s) => s.id).sort()).toEqual([mine, theirs].sort());
-    const near = (await sos(me).nearby(a.lat, a.lng).expect(200)).body as SosDto[];
+    const near = (await sos(me).nearby(a.lat, a.lng).expect(200)).body as SosDto[]; // hint = stored location
     expect(near.map((s) => s.id)).toEqual([theirs]); // not mine, not >20 km
     expect(near[0]!.distanceM).toBeGreaterThan(5000);
     await request(t.http).get('/api/v1/sos/nearby?lat=x&lng=1').set(bearer(me.token)).expect(400);
 
+    // map/sos: bbox semantics, but only SOS within 20 km of my stored location (farSos is ~60 km away).
     const bbox = `${a.lng - 0.1},${a.lat - 0.1},${a.lng + 0.6},${a.lat + 0.6}`;
     const map = (await sos(me).map(bbox).expect(200)).body.items as { id: string; type: string }[];
-    expect(map.map((i) => i.id).sort()).toEqual([theirs, farSos].sort());
+    expect(map.map((i) => i.id)).toEqual([theirs]);
     expect(Object.keys(map[0]!).sort()).toEqual(['createdAt', 'id', 'lat', 'lng', 'status', 'type']);
     expect((await sos(me).map('0,0,3,3').expect(400)).body.error.code).toBe('BBOX_TOO_LARGE');
+    expect(((await sos(far).map(bbox).expect(200)).body.items as { id: string }[]).map((i) => i.id)).toEqual([]); // far's own is excluded, others > 20 km
     await sos(other).cancel(theirs).expect(200);
-    expect(((await sos(me).map(bbox).expect(200)).body.items as { id: string }[]).map((i) => i.id)).toEqual([farSos]);
+    expect((await sos(me).map(bbox).expect(200)).body.items).toEqual([]);
 
     const hist = await sos(me).history('?limit=1').expect(200);
     const hist2 = await sos(me).history(`?limit=1&cursor=${hist.body.nextCursor}`).expect(200);
@@ -464,5 +466,42 @@ describe('friendship and SosDto', () => {
     const id = ((await sos(requester).create(body(a.near(0))).expect(201)).body as SosDto).id;
     expect((await sos(friend).get(id).expect(200)).body.requester).toMatchObject({ relation: 'friend', primaryVehicle: { plate: '123ABC02' } });
     expect((await sos(stranger).get(id).expect(200)).body.requester).toMatchObject({ relation: 'none', primaryVehicle: { plate: null } });
+  });
+});
+
+describe('SOS hardening (Phase 5)', () => {
+  it('nearby uses the stored fresh location; hints only within 1 km; 409 LOCATION_REQUIRED otherwise', async () => {
+    const a = area();
+    const requester = await userAt(a.near(0));
+    const id = ((await sos(requester).create(body(a.near(0))).expect(201)).body as SosDto).id;
+    const noLoc = await userAt(null);
+    expect((await request(t.http).get('/api/v1/sos/nearby').set(bearer(noLoc.token)).expect(409)).body.error.code).toBe('LOCATION_REQUIRED');
+    const stale = await userAt(null);
+    await setLocation(t, stale.id, a.lat, a.lng, 16);
+    expect((await sos(stale).nearby(a.lat, a.lng).expect(409)).body.error.code).toBe('LOCATION_REQUIRED');
+
+    const viewer = await userAt(a.near(0.05)); // ~5.6 km away
+    const plain = (await request(t.http).get('/api/v1/sos/nearby').set(bearer(viewer.token)).expect(200)).body as SosDto[];
+    expect(plain.map((x) => x.id)).toEqual([id]);
+    const fromStored = plain[0]!.distanceM!;
+    // A hint 500 m from the stored location is used as the origin.
+    const hint = a.near(0.0545);
+    const hinted = (await sos(viewer).nearby(hint.lat, hint.lng).expect(200)).body as SosDto[];
+    expect(hinted[0]!.distanceM).toBeGreaterThan(fromStored + 400);
+    // A far hint (right next to another SOS 100 km away) is ignored.
+    const elsewhere = await userAt(a.near(0.9));
+    await sos(elsewhere).create(body(a.near(0.9))).expect(201);
+    const far = a.near(0.9);
+    const spoofed = (await sos(viewer).nearby(far.lat, far.lng).expect(200)).body as SosDto[];
+    expect(spoofed.map((x) => x.id)).toEqual([id]);
+    expect(spoofed[0]!.distanceM).toBe(fromStored);
+  });
+
+  it('map/sos is empty without a stored location', async () => {
+    const a = area();
+    const requester = await userAt(a.near(0));
+    await sos(requester).create(body(a.near(0))).expect(201);
+    const noLoc = await userAt(null);
+    expect((await sos(noLoc).map(`${a.lng - 0.5},${a.lat - 0.5},${a.lng + 0.5},${a.lat + 0.5}`).expect(200)).body.items).toEqual([]);
   });
 });

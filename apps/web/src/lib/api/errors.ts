@@ -1,4 +1,4 @@
-/** Error codes from API.md §0, §1 and §2, plus client-side NETWORK_ERROR. Unknown codes are still accepted. */
+/** Error codes from API.md §0–§3, plus client-side NETWORK_ERROR. Unknown codes are still accepted. */
 export const KNOWN_ERROR_CODES = [
   'VALIDATION_ERROR',
   'UNAUTHORIZED',
@@ -29,6 +29,11 @@ export const KNOWN_ERROR_CODES = [
   'INVALID_TARGET',
   'ALREADY_REQUESTED',
   'ALREADY_FRIENDS',
+  'COMMUNITY_NAME_TAKEN',
+  'COMMUNITY_LIMIT',
+  'MEMBERSHIP_LIMIT',
+  'ALREADY_MEMBER',
+  'OWNER_CANNOT_LEAVE',
   'NETWORK_ERROR',
 ] as const;
 

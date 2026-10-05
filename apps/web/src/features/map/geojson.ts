@@ -47,9 +47,20 @@ export function formatClusterCount(count: number): string {
   return count >= 1000 ? `${Math.floor(count / 1000)}k` : String(count);
 }
 
-export type MapFilters = { friends: boolean; brand: string | null };
-export const DEFAULT_FILTERS: MapFilters = { friends: false, brand: null };
+/** `communityIds`: members of any of these communities (only the viewer's active ones are honoured). */
+export type MapFilters = { friends: boolean; brand: string | null; communityIds: string[] };
+export const DEFAULT_FILTERS: MapFilters = { friends: false, brand: null, communityIds: [] };
 
 export function activeFilterCount(filters: MapFilters): number {
-  return (filters.friends ? 1 : 0) + (filters.brand ? 1 : 0);
+  return (filters.friends ? 1 : 0) + (filters.brand ? 1 : 0) + (filters.communityIds.length > 0 ? 1 : 0);
+}
+
+/**
+ * Drops community ids the viewer is no longer an active member of (the API answers 403 for those),
+ * keeping the result sorted so the query key is stable. `activeIds` undefined = not loaded yet.
+ */
+export function sanitizeCommunityIds(ids: readonly string[], activeIds: readonly string[] | undefined): string[] {
+  const unique = [...new Set(ids)];
+  const kept = activeIds ? unique.filter((id) => activeIds.includes(id)) : unique;
+  return kept.sort();
 }

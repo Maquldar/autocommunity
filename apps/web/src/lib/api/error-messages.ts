@@ -1,4 +1,4 @@
-import { LIMITS } from '@autoc/shared';
+import { COMMUNITY_LIMITS, LIMITS } from '@autoc/shared';
 import { getAttemptsLeft, getRetryAfterSec, isApiError } from './errors';
 
 /** Keys in the `errors` message namespace that API errors map to. */
@@ -35,7 +35,12 @@ export type ErrorMessageKey =
   | 'alreadyRequested'
   | 'alreadyFriends'
   | 'friendRequestCooldown'
-  | 'pushUnsupported';
+  | 'pushUnsupported'
+  | 'communityNameTaken'
+  | 'communityLimit'
+  | 'membershipLimit'
+  | 'alreadyMember'
+  | 'ownerCannotLeave';
 
 export type ErrorMessage = { key: ErrorMessageKey; values?: Record<string, number> };
 
@@ -69,6 +74,9 @@ const BY_CODE: Partial<Record<string, ErrorMessageKey>> = {
   FRIEND_REQUEST_COOLDOWN: 'friendRequestCooldown',
   INVALID_PUSH_ENDPOINT: 'pushUnsupported',
   PUSH_ENDPOINT_IN_USE: 'pushUnsupported',
+  COMMUNITY_NAME_TAKEN: 'communityNameTaken',
+  ALREADY_MEMBER: 'alreadyMember',
+  OWNER_CANNOT_LEAVE: 'ownerCannotLeave',
 };
 
 /** Maps any thrown value to a localized message descriptor (pure, so it is unit-testable). */
@@ -85,6 +93,10 @@ export function describeError(error: unknown): ErrorMessage {
     }
     case 'VEHICLE_LIMIT':
       return { key: 'vehicleLimit', values: { max: LIMITS.vehiclesPerUser } };
+    case 'COMMUNITY_LIMIT':
+      return { key: 'communityLimit', values: { max: COMMUNITY_LIMITS.ownedPerUser } };
+    case 'MEMBERSHIP_LIMIT':
+      return { key: 'membershipLimit', values: { max: COMMUNITY_LIMITS.membershipsPerUser } };
     case 'FILE_TOO_LARGE':
       return { key: 'fileTooLarge', values: { maxMb: Math.round(LIMITS.imageMaxBytes / (1024 * 1024)) } };
     default:

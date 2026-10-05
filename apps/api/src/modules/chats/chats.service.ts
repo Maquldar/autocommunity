@@ -8,6 +8,7 @@ import { decodeCursor, keysetOrderBy, keysetWhere, splitPage, type CursorKey } f
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { Storage } from '../../infra/storage/storage';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { PushQueue } from '../push/push.queue';
 import { RealtimeService } from '../realtime/realtime.service';
 import { UploadsService } from '../uploads/uploads.service';
@@ -53,6 +54,7 @@ export class ChatsService {
     private readonly rateLimiter: RateLimiterService,
     private readonly push: PushQueue,
     private readonly storage: Storage,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   /* ------------------------------------------------------------------ reading */
@@ -115,7 +117,7 @@ export class ChatsService {
     const dto = await this.messages.toDto(row);
     this.realtime.emitToChat(chatId, 'message:new', dto);
     if (chat.type === 'direct') {
-      void this.pushDirect(chatId, userId, dto).catch((err: unknown) => this.logger.warn({ err }, 'Direct message push failed'));
+      this.tasks.run('Direct message push', () => this.pushDirect(chatId, userId, dto));
     }
     return dto;
   }
@@ -240,6 +242,14 @@ export class ChatsService {
   }
 
   /* ------------------------------------------------------------------ internals */
+
+  /** Whether the user may read the chat (same rule as every chat route). */
+  async canAccess(userId: string, chatId: string): Promise<boolean> {
+    return this.requireMember(userId, chatId).then(
+      () => true,
+      () => false,
+    );
+  }
 
   /** 404 unless the user is a member of the chat (and, for community chats, the community is live). */
   private async requireMember(userId: string, chatId: string): Promise<{ id: string; type: ChatType; refId: string }> {

@@ -114,6 +114,9 @@ describe('dispatch', () => {
     await waitFor(async () => (await dispatchedIds(sos.id)).length === 20);
     expect((await dispatchedIds(sos.id)).sort()).toEqual(users.slice(0, 20).map((u) => u.id).sort());
     await waitFor(async () => (await dispatchedIds(sos.id)).length === 25, 5000);
+    // Notifications are written right after the dispatch rows commit: wait for them, then check none doubled.
+    const ids = users.map((u) => u.id);
+    await waitFor(async () => (await t.prisma.notification.count({ where: { userId: { in: ids }, type: 'sos_nearby' } })) === 25, 5000);
     for (const u of users) expect(await t.prisma.notification.count({ where: { userId: u.id, type: 'sos_nearby' } })).toBe(1);
   });
 

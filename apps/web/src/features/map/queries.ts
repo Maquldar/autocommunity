@@ -7,7 +7,7 @@ import type { MapFilters } from './geojson';
 export const MAP_REFRESH_MS = 30_000;
 
 export const mapUsersKey = (bbox: string | null, filters: MapFilters) =>
-  ['map', 'users', bbox, filters.friends, filters.brand] as const;
+  ['map', 'users', bbox, filters.friends, filters.brand, filters.communityIds.join(',')] as const;
 
 /**
  * Drivers in the (clamped) viewport. Refreshes every 30 s while the tab is visible — TanStack pauses
@@ -17,7 +17,15 @@ export function useMapUsers(bbox: string | null, filters: MapFilters) {
   return useQuery({
     queryKey: mapUsersKey(bbox, filters),
     queryFn: ({ signal }) =>
-      api.map.users({ bbox: bbox!, friends: filters.friends || undefined, brand: filters.brand ?? undefined }, signal),
+      api.map.users(
+        {
+          bbox: bbox!,
+          friends: filters.friends || undefined,
+          brand: filters.brand ?? undefined,
+          communityIds: filters.communityIds.length > 0 ? filters.communityIds : undefined,
+        },
+        signal,
+      ),
     enabled: bbox !== null,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
