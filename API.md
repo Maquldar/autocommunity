@@ -645,7 +645,7 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
   - 1–1000 chars, keyset ascending; deleted by the comment author, the post author or a community moderator.
   - `post_comment` notification to the post author (not self, and collapsed by a 10-min throttle per post).
 - Likes: idempotent; `post_like` notification throttled to 1 per post per hour.
-- Polls: vote once (replace allowed until …: no, votes are final), `multiple` allows several options; 409 `ALREADY_VOTED`.
+- Polls: votes are final; `multiple` allows several options in one vote; voting again → 409 `ALREADY_VOTED`.
 - Reports: targetType `post` and `comment` are now accepted.
 - Rate limits: 20 posts/day, 60 comments/hour per user.
 - Seed: about 25 realistic Russian posts (photos from generated images, 3 polls) across global and community scopes, with likes and comments.
