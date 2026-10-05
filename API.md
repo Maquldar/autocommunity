@@ -180,7 +180,7 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
   - The web app's same-origin proxy must forward `/socket.io/*` to the API (polling works through a plain HTTP rewrite).
 - **Demo live locations:** seeded users are marked by the `users.is_seed` flag (set by the seed; not a phone pattern). The tick runs once at boot and then every 60 s, one instance per tick (Redis lock). Seeded accounts someone signed in as within the last 15 min (`last_active_at`) are not moved, so a visitor's own position on the shared demo account stays put.
 
-## 3. Phase 3 — Communities & chats (DRAFT)
+## 3. Phase 3 — Communities & chats (FROZEN)
 
 ```ts
 type CommunityDto = { id; name; description; city; avatarUrl; isPrivate; memberCount; ownerId; chatId: string | null; // chatId only for active members
@@ -211,6 +211,35 @@ type MessageDto = { id; chatId; sender: UserMini; type: 'text'|'photo'|'location
 | POST | `/chats/direct` | `{ userId }` | `ChatDto` (get or create) |
 
 Map filter: `/map/users?communityIds=` only accepts communities the viewer is an active member of.
+
+### Phase 3 rules (FROZEN)
+
+- **Scope:** the chat engine serves all chat types. Phase 3 ships `community` and `direct` chats, with all four message types (text, photo, location, voice). `event` and `sos` chats reuse it later.
+- **Communities:**
+  - name 3–60 characters, unique among non-deleted communities (case-insensitive) → 409 `COMMUNITY_NAME_TAKEN`; description ≤ 1000; city from `CITIES`; avatar upload with purpose `community`.
+  - Each user can create at most 10 communities → 409 `COMMUNITY_LIMIT`. Creating one also creates its community chat with the owner as a member.
+  - DELETE is a soft delete (`deleted_at`): members lose chat access and the community disappears from lists.
+- **Joining:** a public community → `active` immediately and the user is added to the chat. A private one → `pending`; moderators get a `community_request` notification `{ communityId, communityName, user: UserMini }`. Approval → `active`, chat membership, and a `community_approved` notification to the user. Reject deletes the pending row silently.
+- **Repeats and limits:** joining again when already active or pending → 409 `ALREADY_MEMBER`. A user can belong to (or have pending requests in) at most 50 communities → 409 `MEMBERSHIP_LIMIT`.
+- **Roles:** the owner can promote members to moderator or demote them, and transfer ownership (`PATCH /communities/:id/members/:userId {role:'owner'}`), which makes the old owner a moderator. Moderators can approve or reject requests, remove members (not the owner or other moderators), delete messages in the community chat, and edit name, description and avatar. Promoting or demoting sends a `community_role` notification.
+- **Leaving:** leave or removal → leaves the chat as well; `memberCount` is kept consistent transactionally.
+- **Visibility:**
+  - Private communities appear in search with name, description and memberCount, but members and chat are visible only to active members.
+  - `GET /communities?mine=true` returns the viewer's active and pending communities.
+  - `q` searches by name prefix or substring; results are ordered by memberCount desc, then name.
+- **Chats:**
+  - Only chat members can read or write. `GET /chats` is ordered by `lastMessageAt desc`, and `unreadCount` counts messages after `lastReadAt` that aren't the viewer's own.
+  - **Direct chat:** created for any two active, onboarded users, unless the target has blocked DMs (not in scope). Its `title` and `avatarUrl` are the peer's.
+  - **Message limits:** text 1–4000 characters; photo must be an upload with purpose `message`; voice must be an upload with purpose `voice`; location must be valid coordinates.
+  - Deleted messages keep their row, with `deletedAt` set and `text`/`upload` nulled in responses.
+  - Rate limit: 30 messages/min per user → 429.
+- **Realtime:**
+  - The server automatically joins every socket to `chat:{id}` for all chats of the user on connect, and on join/leave changes. `chat:join` is still available, with an ack, for chats joined while connected.
+  - Events: `message:new` to `chat:{id}`, `message:deleted`, `chat:typing` (throttled to 1 per 3 s per user per chat, never to self), and `chat:read { chatId, userId, lastReadAt }`.
+  - Membership changes emit `chats:changed {}` to the affected user.
+- **Push and notifications:** a new message in a direct chat creates no notification row (chats have their own unread counters) but sends Web Push, unless the recipient is currently connected to the chat's room. Community chats don't push (too noisy), except mentions — out of scope.
+- **Map filter:** `communityIds` works with real memberships now.
+- **Seed:** 6 communities in Almaty (e.g. a Land Cruiser club, a Toyota club, an offroad 4x4 group, an EV owners group, women drivers Almaty, a private "Night drive" club). The demo user is a member of 2 and has a pending request to the private one. There are realistic chat histories (Russian) in the community chats and 2 direct chats with friends.
 
 **Socket.IO** namespace `/rt`, `auth: { token }`.
 Client → server: `chat:join {chatId}` (ack `{ok}`), `chat:leave {chatId}`, `chat:typing {chatId}`.
