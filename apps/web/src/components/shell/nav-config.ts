@@ -39,7 +39,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'chats', href: '/chats', icon: MessageCircle, labelKey: 'chats', enabled: false, placement: 'tab' },
   { key: 'profile', href: '/profile', icon: UserRound, labelKey: 'profile', enabled: true, placement: 'tab' },
   { key: 'feed', href: '/feed', icon: Newspaper, labelKey: 'feed', enabled: false, placement: 'secondary' },
-  { key: 'services', href: '/services', icon: Wrench, labelKey: 'services', enabled: false, placement: 'secondary' },
+  { key: 'services', href: '/services', icon: Wrench, labelKey: 'services', enabled: true, placement: 'secondary' },
   { key: 'events', href: '/events', icon: CalendarDays, labelKey: 'events', enabled: false, placement: 'secondary' },
   { key: 'notifications', href: '/notifications', icon: Bell, labelKey: 'notifications', enabled: false, placement: 'secondary' },
   { key: 'settings', href: '/settings', icon: Settings, labelKey: 'settings', enabled: true, placement: 'secondary' },

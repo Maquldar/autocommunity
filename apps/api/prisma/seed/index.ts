@@ -13,6 +13,7 @@ import { createStorage } from '../../src/infra/storage/create-storage';
 import { friendPairKey } from '../../src/modules/users/relation.service';
 import { WARN_ACTION } from '../../src/modules/users/user-view.service';
 import { createRng, type Rng } from './rng';
+import { seedServices } from './services';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
@@ -301,6 +302,7 @@ async function main(): Promise<void> {
   }
 
   const friendships = await seedFriendships(users);
+  console.log(`Seeded ${await seedServices({ prisma, storage, rng, newId, now: NOW, users })}.`);
 
   // One warning on a regular user so the admin/warnings UI has data.
   const admin = users[0]!;
