@@ -6,7 +6,7 @@ dist
 coverage
 playwright-report
 test-results
-uploads-data
+uploads-data*
 *.tsbuildinfo
 next-env.d.ts
 node-compile-cache

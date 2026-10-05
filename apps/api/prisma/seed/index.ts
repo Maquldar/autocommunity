@@ -16,6 +16,7 @@ import { WARN_ACTION } from '../../src/modules/users/user-view.service';
 import { COMMUNITIES, seedCommunities } from './communities';
 import { createRng, type Rng } from './rng';
 import { seedSos } from './sos';
+import { seedServices } from './services';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
@@ -344,6 +345,7 @@ async function main(): Promise<void> {
   }
 
   const friendships = await seedFriendships(users);
+  console.log(`Seeded ${await seedServices({ prisma, storage, rng, newId, now: NOW, users })}.`);
 
   // Communities: demo is active in the Toyota club and the offroad group, and has a pending request to the
   // private "Night Drive". Strangers next to the map centre in community mode share the Toyota club with

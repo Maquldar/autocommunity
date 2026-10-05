@@ -5,11 +5,11 @@
 | 0. Spec + architecture + API contract | ✅ done |
 | 1. Foundation, auth, profile, vehicles | ✅ done |
 | 2. Map, privacy, friends, notifications | ✅ done |
-| 3. Communities + chat | 🚧 API done, UI in progress |
+| 3. Communities + chat | ✅ done |
 | 4. SOS + direct chats | ⏳ |
 | 5. Ratings, reviews, reports | ⏳ |
 | 6. Admin, antifraud, hardening | ⏳ |
-| 7. Services catalog | 🚧 in progress (parallel branch) |
+| 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ⏳ |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
@@ -60,3 +60,33 @@
 - In one full e2e run the desktop "new driver" map test failed once (an element wasn't visible). It passed in 2 isolated reruns and in the next full run. The root cause isn't confirmed; it looks like map-load timing under parallel load.
 - Push was never sent to real FCM/Mozilla/Apple services; the sender is mocked in tests.
 - An access token that expires mid-connection doesn't drop the socket (only revocation does).
+
+## Phase 3 — Communities and chats (2026-10-05)
+
+**Built**
+- Communities: open and private, join requests, roles (owner/moderator/member), ownership transfer, soft delete, limits.
+- Chat engine: community and direct chats with text, photo, location and voice; read state; unread counts; typing indicator; deletion.
+- Live delivery via Socket.IO rooms, plus push for direct messages.
+- Web: communities hub, community page with members, requests and settings; chat list and conversation with optimistic send, voice recorder and photo/location messages; community filter on the map.
+
+**Tested:** API and web unit suites green; e2e covers a two-browser private-community journey (request → live approval → live chat both ways → typing → promotion → moderator deletion) and a DM with a photo, unread badges and read receipts.
+
+**Fixed along the way:** the intermittent map e2e failure (root cause: keyboard zoom steps lost during MapLibre easing).
+
+## Phase 7 — Service catalog (2026-10-05, built in parallel)
+
+**Built**
+- Services list and map, filters, search, sort by distance or rating, open-now in Asia/Almaty.
+- Details with hours, photos and reviews.
+- Visit verification by geo (≤150 m), daily QR code or order photo (pending admin).
+- Reviews only after a verified visit, with a 30-day cooldown and a Bayesian rating.
+- User submissions (pending moderation) with a duplicate guard.
+- Seed: about 40 fictional Almaty services.
+
+**Tested (lead, on the integrated branch with Phases 1–4)**
+- Typecheck clean; API 263/263; shared 29/29; web unit 303/303.
+- e2e 46 passed, 4 skipped by design.
+
+**Known issues**
+- Admin approval of photo visits and pending services comes in Phase 6.
+- The map tiles can't load in the build sandbox, so screenshots show a blank map background.
