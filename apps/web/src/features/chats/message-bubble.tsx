@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { LocationContent, PhotoContent, VoiceContent } from './message-content';
+import { useSystemMessageText } from './format';
 import type { TimelineMessage } from './timeline';
 
 export type MessageBubbleProps = {
@@ -54,6 +55,22 @@ export const MessageBubble = memo(function MessageBubble({
   const senderName = message.sender.name || `@${message.sender.nickname}`;
   const time = format.dateTime(new Date(message.createdAt), { hour: '2-digit', minute: '2-digit' });
   const media = !deleted && (message.type === 'photo' || message.type === 'location' || message.type === 'voice');
+  const systemText = useSystemMessageText();
+
+  if (message.type === 'system') {
+    // Lifecycle notes (SOS chat): a centred line, not a bubble from someone.
+    return (
+      <div className="flex w-full justify-center py-1.5" data-testid="system-message" data-message-id={message.id}>
+        <p className="max-w-[min(90%,28rem)] rounded-full bg-muted px-3 py-1 text-center text-sm text-muted-foreground text-balance">
+          {systemText(message.text)}
+          <span className="sr-only">, </span>
+          <time dateTime={message.createdAt} className="ms-1.5 text-xs tabular-nums">
+            {time}
+          </time>
+        </p>
+      </div>
+    );
+  }
 
   const statusIcon = !mine ? null : status === 'sending' ? (
     <Clock aria-hidden="true" className="size-3.5" />

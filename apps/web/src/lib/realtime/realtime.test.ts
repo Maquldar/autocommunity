@@ -147,6 +147,8 @@ describe('bindRealtimeHandlers', () => {
       onTyping: vi.fn(),
       onRead: vi.fn(),
       onChatsChanged: vi.fn(),
+      onSosNew: vi.fn(),
+      onSosUpdate: vi.fn(),
     };
     const unbind = bindRealtimeHandlers(socket as unknown as RealtimeSocket, handlers);
     socket.emit('notification:new', notification('n1'));
@@ -195,7 +197,7 @@ describe('createAppRealtimeHandlers', () => {
 
   it('unknown notification types toast but leave friend data alone', () => {
     const { invalidate, toast, handlers } = setup();
-    handlers.onNotification(notification('n2', 'sos_nearby'));
+    handlers.onNotification(notification('n2', 'event_new'));
     expect(toast).toHaveBeenCalled();
     expect(invalidatedKeys(invalidate)).not.toContain('["friends"]');
   });

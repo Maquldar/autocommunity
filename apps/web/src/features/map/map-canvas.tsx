@@ -1,14 +1,14 @@
 'use client';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { MapUser } from '@autoc/shared';
+import type { MapUser, SosMapItem } from '@autoc/shared';
 import type { GeoJSONSource, Map as MlMap, MapGeoJSONFeature, Marker } from 'maplibre-gl';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { APPROXIMATE_RADIUS_M, metersToPixels, type Bounds } from './bbox';
 import { CLUSTER_PROPERTIES, toFeatureCollection } from './geojson';
 import { loadMapStyle } from './map-style';
-import { ClusterMarker, DriverMarker, OwnPositionMarker } from './markers';
+import { ClusterMarker, DriverMarker, OwnPositionMarker, SosMarker } from './markers';
 
 type MapLib = typeof import('maplibre-gl');
 
@@ -32,6 +32,10 @@ export type MapCanvasProps = {
   onTilesUnavailable: (unavailable: boolean) => void;
   labels: { region: string; zoomIn: string; zoomOut: string };
   className?: string;
+  /** Open SOS (layer on), drawn above drivers as unclustered markers. */
+  sosItems?: readonly SosMapItem[];
+  selectedSosId?: string | null;
+  onSelectSos?: (id: string) => void;
 };
 
 type MarkerEntry = {
@@ -46,6 +50,7 @@ type MarkerEntry = {
 type PortalItem = Pick<MarkerEntry, 'key' | 'element' | 'cluster' | 'userId' | 'lngLat'>;
 
 const MOVE_DEBOUNCE_MS = 300;
+const EMPTY_SOS: readonly SosMapItem[] = [];
 
 function boundsOf(map: MlMap): Bounds {
   const b = map.getBounds();
@@ -58,7 +63,20 @@ function boundsOf(map: MlMap): Bounds {
  * keyboard-accessible and don't depend on the style's glyphs/sprites.
  */
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas(
-  { users, initialView, ownPosition, selectedId, onSelect, onViewChange, onTilesUnavailable, labels, className },
+  {
+    users,
+    initialView,
+    ownPosition,
+    selectedId,
+    onSelect,
+    onViewChange,
+    onTilesUnavailable,
+    labels,
+    className,
+    sosItems = EMPTY_SOS,
+    selectedSosId = null,
+    onSelectSos,
+  },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,6 +89,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [ready, setReady] = useState(false);
   const [portals, setPortals] = useState<PortalItem[]>([]);
   const [ownElement, setOwnElement] = useState<HTMLDivElement | null>(null);
+  const sosMarkersRef = useRef(new Map<string, { marker: Marker; element: HTMLDivElement }>());
+  const [sosPortals, setSosPortals] = useState<Array<{ item: SosMapItem; element: HTMLDivElement }>>([]);
 
   // Latest callbacks without re-creating the map.
   const callbacks = useRef({ onViewChange, onTilesUnavailable });
@@ -213,6 +233,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       entriesRef.current = new Map();
       ownMarkerRef.current?.marker.remove();
       ownMarkerRef.current = null;
+      for (const entry of sosMarkersRef.current.values()) entry.marker.remove();
+      sosMarkersRef.current = new Map();
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -249,6 +271,33 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       ownMarkerRef.current.marker.setLngLat([ownPosition.lng, ownPosition.lat]);
     }
   }, [ready, ownPosition]);
+
+  // SOS layer: one DOM marker per open SOS (few of them, never clustered so none hides in a cluster).
+  useEffect(() => {
+    const map = mapRef.current;
+    const lib = libRef.current;
+    if (!ready || !map || !lib) return;
+    const current = sosMarkersRef.current;
+    const next = new Map<string, { marker: Marker; element: HTMLDivElement }>();
+    const portalsNext: Array<{ item: SosMapItem; element: HTMLDivElement }> = [];
+    for (const item of sosItems) {
+      let entry = current.get(item.id);
+      if (!entry) {
+        const element = document.createElement('div');
+        element.className = 'map-marker';
+        element.style.zIndex = '5';
+        const marker = new lib.Marker({ element, anchor: 'center' }).setLngLat([item.lng, item.lat]).addTo(map);
+        entry = { marker, element };
+      } else {
+        entry.marker.setLngLat([item.lng, item.lat]);
+      }
+      next.set(item.id, entry);
+      portalsNext.push({ item, element: entry.element });
+    }
+    for (const [id, entry] of current) if (!next.has(id)) entry.marker.remove();
+    sosMarkersRef.current = next;
+    setSosPortals(portalsNext);
+  }, [ready, sosItems]);
 
   useImperativeHandle(
     ref,
@@ -299,6 +348,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         );
       })}
       {ownElement ? createPortal(<OwnPositionMarker />, ownElement) : null}
+      {sosPortals.map(({ item, element }) =>
+        createPortal(
+          <SosMarker item={item} selected={selectedSosId === item.id} onSelect={() => onSelectSos?.(item.id)} />,
+          element,
+          `sos:${item.id}`,
+        ),
+      )}
     </div>
   );
 });

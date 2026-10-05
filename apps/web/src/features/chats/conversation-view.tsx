@@ -23,6 +23,7 @@ import { communityPermissions } from '@/features/communities/membership-state';
 import { useCommunity } from '@/features/communities/queries';
 import { flattenMessages, setActiveChat } from './cache';
 import { Composer } from './composer';
+import { SosChatAvatar } from './chats-view';
 import { useDayLabel } from './format';
 import { createThrottle, readStore, typingStore } from './live-stores';
 import { MessageBubble } from './message-bubble';
@@ -172,7 +173,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
         timeline={timeline}
         me={me}
         query={messages}
-        isCommunity={isCommunity}
+        isCommunity={chat.type !== 'direct'}
         peerRead={peerRead}
         canModerate={isModerator}
         onDelete={onDelete}
@@ -214,24 +215,32 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
       ? `/u/${chat.peer.id}`
       : chat.type === 'community' && chat.refId
         ? `/communities/${chat.refId}`
-        : null;
+        : chat.type === 'sos' && chat.refId
+          ? `/sos/${chat.refId}`
+          : null;
   const subtitle = typing
     ? t('typing.direct')
     : chat.type === 'direct' && chat.peer?.nickname
       ? `@${chat.peer.nickname}`
       : chat.type === 'community'
         ? t('conversation.communityChat')
-        : null;
+        : chat.type === 'sos'
+          ? t('conversation.sosChat')
+          : null;
   const identity = (
     <>
-      <Avatar
-        id={chat.peer?.id ?? chat.refId ?? chat.id}
-        name={chat.title}
-        src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null}
-        shape={chat.type === 'direct' ? 'circle' : 'square'}
-        size="md"
-        decorative
-      />
+      {chat.type === 'sos' ? (
+        <SosChatAvatar size="md" />
+      ) : (
+        <Avatar
+          id={chat.peer?.id ?? chat.refId ?? chat.id}
+          name={chat.title}
+          src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null}
+          shape={chat.type === 'direct' ? 'circle' : 'square'}
+          size="md"
+          decorative
+        />
+      )}
       <span className="flex min-w-0 flex-col">
         <h1 className="truncate text-base font-semibold leading-6">{chat.title}</h1>
         {subtitle ? (
@@ -243,7 +252,7 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
   return (
     <header className="flex shrink-0 items-center gap-2 border-b bg-background px-2 py-2 sm:px-3">
       <IconButton asChild aria-label={tc('back')}>
-        <Link href="/chats">
+        <Link href={chat.type === 'sos' && chat.refId ? `/sos/${chat.refId}` : '/chats'}>
           <ArrowLeft className="rtl:rotate-180" />
         </Link>
       </IconButton>
@@ -251,7 +260,7 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
         <Link
           href={href}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 hover:bg-accent focus-ring"
-          aria-label={`${chat.title}. ${chat.type === 'direct' ? t('conversation.openProfile') : t('conversation.openCommunity')}`}
+          aria-label={`${chat.title}. ${chat.type === 'direct' ? t('conversation.openProfile') : chat.type === 'sos' ? t('conversation.openSos') : t('conversation.openCommunity')}`}
         >
           {identity}
         </Link>

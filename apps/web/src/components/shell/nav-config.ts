@@ -36,7 +36,7 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'map', href: '/map', icon: MapIcon, labelKey: 'map', enabled: true, placement: 'tab' },
   { key: 'communities', href: '/communities', icon: UsersRound, labelKey: 'communities', enabled: true, placement: 'tab' },
-  { key: 'sos', href: '/sos', icon: Siren, labelKey: 'sos', enabled: false, placement: 'tab', emphasis: 'sos' },
+  { key: 'sos', href: '/sos', icon: Siren, labelKey: 'sos', enabled: true, placement: 'tab', emphasis: 'sos' },
   { key: 'chats', href: '/chats', icon: MessageCircle, labelKey: 'chats', enabled: true, placement: 'tab' },
   { key: 'profile', href: '/profile', icon: UserRound, labelKey: 'profile', enabled: true, placement: 'tab' },
   { key: 'feed', href: '/feed', icon: Newspaper, labelKey: 'feed', enabled: false, placement: 'secondary' },

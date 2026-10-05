@@ -11,6 +11,7 @@ import { LocationProvider } from '@/lib/location/location-provider';
 import { registerServiceWorker } from '@/lib/push/push';
 import { RealtimeProvider } from '@/lib/realtime/realtime-provider';
 import { useUnreadChatsTotal } from '@/features/chats/queries';
+import { SosAlertHost } from '@/features/sos/alert-host';
 
 /** AppShell for signed-in, onboarded users. The page area shows `fallback` until the session is known. */
 export function SignedInShell({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
@@ -47,7 +48,12 @@ export function SignedInShell({ children, fallback }: { children: ReactNode; fal
 /** Providers that need the onboarded user. */
 function SignedInProviders({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
-  return <LocationProvider userId={me.id}>{children}</LocationProvider>;
+  return (
+    <LocationProvider userId={me.id}>
+      {children}
+      <SosAlertHost />
+    </LocationProvider>
+  );
 }
 
 /** Generic page skeleton: header block + a few rows. */

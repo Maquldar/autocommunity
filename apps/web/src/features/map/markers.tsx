@@ -1,7 +1,7 @@
 'use client';
 
-import type { MapUser } from '@autoc/shared';
-import { Heart, UsersRound } from 'lucide-react';
+import type { MapUser, SosMapItem } from '@autoc/shared';
+import { Heart, Siren, UsersRound } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/cn';
@@ -119,5 +119,39 @@ export function OwnPositionMarker() {
       <span aria-hidden="true" className="absolute -inset-3 rounded-full bg-primary/20" />
       <span aria-hidden="true" className="relative size-4 rounded-full bg-primary shadow-md ring-[3px] ring-card" />
     </span>
+  );
+}
+
+/**
+ * Open SOS on the map: an SOS-red disc with the siren, a card ring, and a pulse while nobody has accepted
+ * yet (`motion-safe`, and the global reduced-motion rule stops it too). Labelled with type and status.
+ */
+export function SosMarker({ item, selected = false, onSelect }: { item: SosMapItem; selected?: boolean; onSelect?: () => void }) {
+  const t = useTranslations('sos');
+  return (
+    <button
+      type="button"
+      aria-label={t('map.marker', { type: t(`types.${item.type}`), status: t(`status.${item.status}`) })}
+      aria-pressed={selected}
+      data-testid="sos-marker"
+      data-sos-id={item.id}
+      data-status={item.status}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+      className="group relative flex size-12 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'flex size-10 items-center justify-center rounded-full bg-sos text-sos-foreground shadow-lg ring-[3px] ring-card transition-transform duration-fast ease-standard group-hover:scale-110',
+          item.status === 'created' && 'motion-safe:animate-sos-pulse',
+          selected && 'scale-125',
+        )}
+      >
+        <Siren className="size-5" strokeWidth={2.25} />
+      </span>
+    </button>
   );
 }

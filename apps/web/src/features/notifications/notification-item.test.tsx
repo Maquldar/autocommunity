@@ -13,7 +13,7 @@ const aidar = { id: 'u1', nickname: 'aidar', name: 'Aidar K.', avatarUrl: null, 
 const base = { readAt: null, createdAt: new Date(Date.now() - 5 * 60_000).toISOString() };
 const friendRequest: NotificationDto = { id: 'n1', type: 'friend_request', payload: { requestId: 'r1', user: aidar }, ...base };
 const friendAccepted: NotificationDto = { id: 'n2', type: 'friend_accepted', payload: { user: aidar }, ...base };
-const unknown: NotificationDto = { id: 'n3', type: 'sos_nearby', payload: { foo: 1 }, ...base };
+const unknown: NotificationDto = { id: 'n3', type: 'review_received', payload: { foo: 1 }, ...base };
 
 /** Clicks a link without jsdom trying (and failing) to navigate. */
 function clickLink(link: HTMLElement) {
@@ -34,7 +34,7 @@ describe('describeNotification', () => {
     expect(describeNotification(friendAccepted)).toEqual({ kind: 'friend_accepted', user: aidar, href: '/u/u1' });
   });
   it('falls back to generic for other types, with a same-origin url only', () => {
-    expect(describeNotification(unknown)).toEqual({ kind: 'generic', type: 'sos_nearby', href: null });
+    expect(describeNotification(unknown)).toEqual({ kind: 'generic', type: 'review_received', href: null });
     expect(describeNotification({ type: 'event_new', payload: { url: '/events/1' } }).href).toBe('/events/1');
     expect(describeNotification({ type: 'event_new', payload: { url: 'https://evil.example' } }).href).toBeNull();
     expect(describeNotification({ type: 'event_new', payload: { url: '//evil.example' } }).href).toBeNull();
