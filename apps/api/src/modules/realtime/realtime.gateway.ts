@@ -86,7 +86,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     // Joined before `connect` reaches the client, so no event emitted after that can be missed.
     const [chatIds, sosIds] = await Promise.all([this.chatIdsOf(claims.sub), this.openSosIdsOf(claims.sub)]);
     await socket.join([userRoom(claims.sub), ...chatIds.map(chatRoom), ...sosIds.map(sosRoom)]);
-    // A membership revoked between the query and the join (socketsLeave ran before we joined) must not stick.
+    // A membership revoked between the query and the join must not stick (see also onConnection).
     await this.pruneRooms(socket, claims.sub);
     // A revocation published between the first check and the join would have missed this socket: check again.
     const after = await this.userState.getForAuth(claims.sub);
@@ -179,6 +179,10 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     const { userId } = socket.data as SocketData;
     this.limitEventRate(socket);
     this.registerChatHandlers(socket, userId);
+    // Rooms were joined in the auth middleware, but until `connection` the socket isn't in the namespace's
+    // socket map, so a `socketsLeave` issued by a membership revocation in that window skipped it. Any such
+    // revocation committed before this point, so one more check now closes the gap; later ones reach it.
+    this.tasks.run('Prune rooms after connect', () => this.pruneRooms(socket, userId));
     this.tasks.run('Socket limit per user', () => this.enforceSocketLimit(userId));
     this.tasks.run('Initial notification:count', async () => {
       const count = await this.prisma.notification.count({ where: { userId, readAt: null } });

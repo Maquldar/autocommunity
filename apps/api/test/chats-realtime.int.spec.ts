@@ -210,15 +210,16 @@ describe('chat realtime over polling', () => {
 });
 
 describe('socket hardening (review M4 / L3)', () => {
-  it('a removal racing the connect never leaves the socket in the chat room (10 iterations)', async () => {
+  it('a removal racing the connect never leaves the socket in the chat room (25 iterations; under the 30/min message limit)', async () => {
     const owner = await createUser(t);
     const cid = await createCommunity(t, owner.id);
     const chatId = await chatIdOf(cid);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 25; i++) {
       const m = await createUser(t);
       await request(t.http).post(`/api/v1/communities/${cid}/join`).set(bearer(m.token)).expect(200);
       const connecting = connect(m);
-      await new Promise((r) => setTimeout(r, (i % 5) * 3));
+      // Spread the removal over the whole handshake (auth middleware → connection).
+      await new Promise((r) => setTimeout(r, (i % 20) * 1.5));
       await request(t.http).delete(`/api/v1/communities/${cid}/members/${m.id}`).set(bearer(owner.token)).expect(204);
       const s = await connecting;
       await settle();
@@ -227,7 +228,7 @@ describe('socket hardening (review M4 / L3)', () => {
       expect(await leaked, `iteration ${i}`).toEqual([]);
       s.disconnect();
     }
-  });
+  }, 90_000);
 
   it('disconnects a socket that floods client events', async () => {
     const u = await createUser(t);

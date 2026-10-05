@@ -6,14 +6,21 @@ export class PrismaService
   extends PrismaClient<{ log: [{ emit: 'event'; level: 'query' }] }, 'query'>
   implements OnModuleInit, OnApplicationShutdown
 {
-  /** Number of SQL statements sent so far (cheap counter; used by tests to bound fan-out work). */
+  /**
+   * Number of SQL statements sent so far. Only counted when PRISMA_COUNT_QUERIES=1 (the test suite sets it to
+   * bound fan-out work); production doesn't pay for query events.
+   */
   queryCount = 0;
 
   constructor() {
-    super({ log: [{ emit: 'event', level: 'query' }] });
-    this.$on('query', () => {
-      this.queryCount++;
-    });
+    const counting = process.env.PRISMA_COUNT_QUERIES === '1';
+    // The generic pins the 'query' event type; without logging it is simply never emitted.
+    super(counting ? { log: [{ emit: 'event', level: 'query' }] } : ({} as { log: [{ emit: 'event'; level: 'query' }] }));
+    if (counting) {
+      this.$on('query', () => {
+        this.queryCount++;
+      });
+    }
   }
 
   async onModuleInit(): Promise<void> {

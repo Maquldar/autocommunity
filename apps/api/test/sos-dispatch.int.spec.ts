@@ -258,8 +258,12 @@ describe('bounded work (review M6 / L5)', () => {
       expect(notified).toHaveLength(recipients);
       return n;
     };
-    const few = await costFor(3);
-    const many = await costFor(18);
+    // The counter is process-wide, so unrelated background work (expiry sweep, delayed dispatch steps of
+    // other SOS) can land inside a measurement. It can only add queries, so the minimum of repeated
+    // measurements is the dispatch's own cost.
+    const cheapest = async (recipients: number) => Math.min(await costFor(recipients), await costFor(recipients));
+    const few = await cheapest(3);
+    const many = await cheapest(18);
     expect(many - few).toBeLessThanOrEqual(1);
   });
 
