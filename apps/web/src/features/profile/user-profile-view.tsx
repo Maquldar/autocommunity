@@ -13,6 +13,7 @@ import { ListItemSkeleton } from '@/components/ui/skeleton';
 import { useErrorMessage } from '@/hooks/use-error-message';
 import { hasErrorCode } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/auth/guards';
+import { FriendButton } from '@/features/friends/friend-button';
 import { HOME_ROUTE } from '@/lib/routes';
 import { ProfileHeader, ProfileHeaderSkeleton } from './profile-header';
 import { useUser, useUserVehicles } from './queries';
@@ -62,7 +63,14 @@ export function UserProfileView({ userId }: { userId: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <ProfileHeader user={user.data} />
+      <ProfileHeader
+        user={user.data}
+        actions={
+          user.data.status === 'active' ? (
+            <FriendButton user={{ id: user.data.id, name: user.data.name, relation: user.data.relation }} />
+          ) : null
+        }
+      />
       <section aria-labelledby="user-vehicles-heading" className="flex flex-col gap-3">
         <h2 id="user-vehicles-heading" className="text-xl font-semibold tracking-tight">
           {tv('title')}

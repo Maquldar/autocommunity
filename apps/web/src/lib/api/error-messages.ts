@@ -29,7 +29,13 @@ export type ErrorMessageKey =
   | 'invalidUpload'
   | 'fileTooLarge'
   | 'unsupportedFileType'
-  | 'accountBlocked';
+  | 'accountBlocked'
+  | 'bboxTooLarge'
+  | 'invalidTarget'
+  | 'alreadyRequested'
+  | 'alreadyFriends'
+  | 'friendRequestCooldown'
+  | 'pushUnsupported';
 
 export type ErrorMessage = { key: ErrorMessageKey; values?: Record<string, number> };
 
@@ -56,6 +62,13 @@ const BY_CODE: Partial<Record<string, ErrorMessageKey>> = {
   INVALID_UPLOAD: 'invalidUpload',
   UNSUPPORTED_FILE_TYPE: 'unsupportedFileType',
   ACCOUNT_BLOCKED: 'accountBlocked',
+  BBOX_TOO_LARGE: 'bboxTooLarge',
+  INVALID_TARGET: 'invalidTarget',
+  ALREADY_REQUESTED: 'alreadyRequested',
+  ALREADY_FRIENDS: 'alreadyFriends',
+  FRIEND_REQUEST_COOLDOWN: 'friendRequestCooldown',
+  INVALID_PUSH_ENDPOINT: 'pushUnsupported',
+  PUSH_ENDPOINT_IN_USE: 'pushUnsupported',
 };
 
 /** Maps any thrown value to a localized message descriptor (pure, so it is unit-testable). */

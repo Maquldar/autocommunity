@@ -26,7 +26,7 @@ describe('guardRedirect', () => {
   it('sends users who have not finished onboarding there, and finished users away from it', () => {
     expect(guardRedirect('app', { onboardingCompleted: false })).toBe('/onboarding');
     expect(guardRedirect('app', { onboardingCompleted: true })).toBeNull();
-    expect(guardRedirect('onboarding', { onboardingCompleted: true })).toBe('/profile');
+    expect(guardRedirect('onboarding', { onboardingCompleted: true })).toBe('/map');
     expect(guardRedirect('onboarding', { onboardingCompleted: false })).toBeNull();
   });
 });

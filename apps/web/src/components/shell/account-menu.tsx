@@ -17,7 +17,7 @@ import { NAV_ITEMS } from './nav-config';
 
 export type AccountMenuUser = { id: string; name: string; nickname: string | null; avatarUrl: string | null; rating: number };
 
-const MENU_KEYS = ['profile', 'settings'] as const;
+const MENU_KEYS = ['profile', 'friends', 'settings'] as const;
 
 /** Avatar-triggered menu for the top bar `accountSlot`. Links come from nav-config so disabled pages never show. */
 export function AccountMenu({ user, onLogout }: { user: AccountMenuUser; onLogout: () => void }) {

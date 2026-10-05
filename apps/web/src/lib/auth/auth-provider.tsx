@@ -4,7 +4,13 @@ import type { AuthResult, Me } from '@autoc/shared';
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, session, type LogoutReason } from '@/lib/api';
+import { disablePush } from '@/lib/push/push';
 import { LOGIN_ROUTE } from '@/lib/routes';
+
+/** Drops this browser's push subscription before signing out (best effort, bounded). */
+function unsubscribePush(): Promise<void> {
+  return Promise.race([disablePush().catch(() => undefined), new Promise<void>((resolve) => setTimeout(resolve, 3000))]);
+}
 
 export const ME_QUERY_KEY = ['me'] as const;
 
@@ -97,10 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async (redirectTo = LOGIN_ROUTE) => {
     setAfterLogoutPath(redirectTo);
+    await unsubscribePush();
     await session.logout();
   }, []);
 
   const logoutAll = useCallback(async (redirectTo = LOGIN_ROUTE) => {
+    await unsubscribePush();
     await api.auth.logoutAll();
     setAfterLogoutPath(redirectTo);
     session.clear('user');

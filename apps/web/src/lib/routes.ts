@@ -1,7 +1,5 @@
-/**
- * Where signed-in users land. Phase 2 ships the map: switch this (and manifest start_url) to '/map'.
- */
-export const HOME_ROUTE = '/profile';
+/** Where signed-in users land (also the PWA manifest start_url). */
+export const HOME_ROUTE = '/map';
 export const LOGIN_ROUTE = '/login';
 export const ONBOARDING_ROUTE = '/onboarding';
 

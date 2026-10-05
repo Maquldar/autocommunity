@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 
-type Options = { description?: ReactNode; id?: string | number; duration?: number };
+type Options = {
+  description?: ReactNode;
+  id?: string | number;
+  duration?: number;
+  /** Optional follow-up ("Open"). */
+  action?: { label: string; onClick: () => void };
+};
 type RetryOptions = Options & { retry?: { label: string; onClick: () => void } };
 
 /**

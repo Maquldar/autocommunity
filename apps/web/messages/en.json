@@ -36,7 +36,8 @@
     "services": "Services",
     "events": "Events",
     "notifications": "Notifications",
-    "settings": "Settings"
+    "settings": "Settings",
+    "friends": "Friends"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -86,7 +87,13 @@
     "invalidUpload": "That file can't be used here. Upload it again.",
     "fileTooLarge": "The file is too large (max {maxMb} MB)",
     "unsupportedFileType": "Unsupported file. Use a JPEG, PNG, WebP or HEIC photo.",
-    "accountBlocked": "This account is blocked"
+    "accountBlocked": "This account is blocked",
+    "bboxTooLarge": "This area is too large. Zoom in to see drivers.",
+    "invalidTarget": "You can't add yourself as a friend.",
+    "alreadyRequested": "A friend request is already pending.",
+    "alreadyFriends": "You're already friends.",
+    "friendRequestCooldown": "You can send this driver a request again later.",
+    "pushUnsupported": "Couldn't enable notifications on this device."
   },
   "form": {
     "required": "Required field",
@@ -382,7 +389,9 @@
       "cityNone": "Not specified",
       "bio": "About you",
       "bioPlaceholder": "Your car, driving experience, how you can help others…"
-    }
+    },
+    "friendsLink": "Friends",
+    "friendsLinkHint": "Your friends and friend requests"
   },
   "vehicles": {
     "title": "My cars",
@@ -510,6 +519,19 @@
       "confirmAction": "Delete forever",
       "typeLabel": "Type {word} to confirm",
       "done": "Your account has been deleted"
+    },
+    "push": {
+      "title": "Notifications",
+      "description": "Get notified about friend requests, even when the app is closed.",
+      "label": "Push notifications",
+      "hint": "Friend requests and other updates on this device.",
+      "enabled": "Push notifications are on",
+      "disabled": "Push notifications are off",
+      "denied": "Notifications are blocked for this site. Allow them in your browser settings, then try again.",
+      "unsupported": "This browser doesn't support push notifications.",
+      "iosInstall": "On iPhone and iPad, push notifications work only in the installed app: tap Share, then “Add to Home Screen”, and open AutoCommunity from the home screen.",
+      "notConfigured": "Push notifications aren't set up on the server yet.",
+      "failed": "Couldn't change push notifications. Try again."
     }
   },
   "legal": {
@@ -603,5 +625,163 @@
         }
       }
     }
+  },
+  "map": {
+    "metaTitle": "Map",
+    "title": "Drivers on the map",
+    "regionLabel": "Map of drivers nearby",
+    "count": "{count, plural, =0 {No drivers in view} one {# driver in view} other {# drivers in view}}",
+    "truncated": "Showing the {count} most recent. Zoom in to see everyone.",
+    "loading": "Loading drivers…",
+    "empty": "No drivers here",
+    "emptyHint": "Move the map or change the filters.",
+    "error": "Couldn't load drivers",
+    "offline": "You're offline. Drivers will update when you're back online.",
+    "zoomIn": "Zoom in to see drivers",
+    "zoomInAction": "Zoom in",
+    "tilesUnavailable": "The map background couldn't load. Drivers are still shown.",
+    "recenter": "Show my location",
+    "zoomInControl": "Zoom in",
+    "zoomOutControl": "Zoom out",
+    "marker": {
+      "driver": "{nickname}, {relation}",
+      "approximate": "approximate location",
+      "cluster": "{count, plural, one {# driver} other {# drivers}} here. Zoom in",
+      "you": "You are here"
+    },
+    "relation": {
+      "friend": "Friend",
+      "community": "Community member",
+      "public": "Driver"
+    },
+    "filters": {
+      "button": "Filters",
+      "buttonActive": "Filters, {count, plural, one {# active} other {# active}}",
+      "title": "Map filters",
+      "description": "Choose which drivers to show.",
+      "friendsOnly": "Friends only",
+      "friendsOnlyHint": "Show only drivers you've added as friends.",
+      "brand": "Car brand",
+      "anyBrand": "Any brand",
+      "reset": "Reset filters",
+      "apply": "Show drivers"
+    },
+    "privacy": {
+      "label": "Your visibility",
+      "visible": "Visible: {mode}",
+      "invisible": "Invisible",
+      "goInvisible": "Go invisible",
+      "becomeVisible": "Become visible",
+      "wentInvisible": "You're invisible. Nobody sees you on the map.",
+      "nowVisible": "You're visible again: {mode}",
+      "hint": "Change who can see you in Settings"
+    },
+    "card": {
+      "approximate": "Approximate location: the driver shares a position rounded to about 500 m.",
+      "updated": "Updated {time}",
+      "openProfile": "Open profile",
+      "noCar": "No car added",
+      "description": "Driver on the map"
+    }
+  },
+  "location": {
+    "bannerTitle": "Share your location?",
+    "bannerBody": "Drivers nearby can find you, and help reaches you faster. Your position is only shared while the app is open, and only with the people your privacy mode allows.",
+    "share": "Share my location",
+    "sharing": "Sharing your location",
+    "sharingHint": "Only while the app is open",
+    "stop": "Stop sharing",
+    "stopped": "Location sharing stopped",
+    "requesting": "Getting your location…",
+    "deniedTitle": "Location access is blocked",
+    "deniedBody": "Allow location for this site in your browser settings (tap the icon next to the address), then try again. The map works without it.",
+    "unavailableTitle": "Can't find your location",
+    "unavailableBody": "Your device couldn't determine where you are. Check that location services are on. The map works without it.",
+    "unsupported": "This browser can't share your location. The map works without it.",
+    "retry": "Try again",
+    "dismiss": "Not now"
+  },
+  "friends": {
+    "metaTitle": "Friends",
+    "title": "Friends",
+    "description": "Drivers you know. Friends see your exact location unless you are hidden.",
+    "tabsLabel": "Friend lists",
+    "tabs": {
+      "friends": "Friends",
+      "incoming": "Incoming",
+      "outgoing": "Sent"
+    },
+    "listLabel": {
+      "friends": "Your friends",
+      "incoming": "Incoming friend requests",
+      "outgoing": "Sent friend requests"
+    },
+    "search": {
+      "label": "Find drivers",
+      "placeholder": "Nickname or name",
+      "hint": "Type at least 2 characters",
+      "results": "Search results",
+      "listLabel": "Drivers found",
+      "empty": "No drivers found",
+      "emptyHint": "Check the spelling or try another name.",
+      "clear": "Clear search"
+    },
+    "empty": {
+      "friends": {
+        "title": "No friends yet",
+        "description": "Find drivers by nickname and add them as friends."
+      },
+      "incoming": {
+        "title": "No incoming requests",
+        "description": "When someone adds you, the request appears here."
+      },
+      "outgoing": {
+        "title": "No sent requests",
+        "description": "Requests you send stay here until they're answered."
+      }
+    },
+    "actions": {
+      "add": "Add friend",
+      "cancel": "Cancel request",
+      "accept": "Accept",
+      "decline": "Decline",
+      "friends": "Friends",
+      "unfriend": "Remove from friends",
+      "requestSent": "Request sent"
+    },
+    "toasts": {
+      "sent": "Friend request sent to {name}",
+      "accepted": "You and {name} are now friends",
+      "declined": "Request declined",
+      "cancelled": "Request cancelled",
+      "removed": "{name} was removed from friends"
+    },
+    "unfriendTitle": "Remove {name} from friends?",
+    "unfriendDescription": "They'll stop seeing your exact location. You can add them again later.",
+    "requestGone": "This request is no longer active",
+    "sentAgo": "Sent {time}",
+    "receivedAgo": "Received {time}"
+  },
+  "notifications": {
+    "metaTitle": "Notifications",
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "allRead": "All notifications marked as read",
+    "unread": "Unread",
+    "listLabel": "Notifications",
+    "empty": {
+      "title": "No notifications yet",
+      "description": "Friend requests and other updates will appear here."
+    },
+    "types": {
+      "friendRequest": "<b>{name}</b> wants to add you as a friend",
+      "friendAccepted": "<b>{name}</b> accepted your friend request",
+      "generic": "New notification"
+    },
+    "someone": "A driver",
+    "accepted": "Request accepted",
+    "declined": "Request declined",
+    "gone": "This request is no longer active",
+    "open": "Open"
   }
 }

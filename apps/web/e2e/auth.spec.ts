@@ -60,8 +60,9 @@ test('sign up, onboard, edit profile and cars, survive reload, log out and back 
   await page.getByRole('checkbox', { name: /I agree/ }).check();
   await page.getByRole('button', { name: 'Finish', exact: true }).click();
 
-  // --- Profile shows the saved data
-  await expect(page).toHaveURL(/\/profile$/);
+  // --- Onboarding ends on the map (home); the profile shows the saved data
+  await expect(page).toHaveURL(/\/map$/);
+  await page.goto('/profile');
   await expect(page.getByRole('heading', { level: 1, name: 'Aidana E2E' })).toBeVisible();
   await expect(page.getByText(`@${nickname}`)).toBeVisible();
   await expect(page.getByText('Almaty')).toBeVisible();
@@ -104,11 +105,12 @@ test('sign up, onboard, edit profile and cars, survive reload, log out and back 
   await page.goto('/profile');
   await expect(page).toHaveURL(/\/login\?next=/);
 
-  // --- Sign in again with the same number → straight to the profile, not onboarding
+  // --- Sign in again with the same number → straight home (the map), not onboarding
   await page.goto('/login');
   const secondCode = await requestCodeInUi(page, phone);
   await enterCode(page, secondCode);
-  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page).toHaveURL(/\/map$/);
+  await page.goto('/profile');
   await expect(page.getByRole('heading', { level: 1, name: 'Aidana E2E' })).toBeVisible();
 });
 

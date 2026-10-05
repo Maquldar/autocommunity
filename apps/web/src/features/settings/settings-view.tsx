@@ -22,6 +22,7 @@ import { notify } from '@/lib/toast';
 import { useUpdateMe, useUpdateSettings } from '@/features/profile/queries';
 import { LinkPhoneDialog } from './link-phone-dialog';
 import { PrivacyModePicker } from './privacy-mode-picker';
+import { PushRow } from './push-row';
 import { ReceiveSosRow } from './receive-sos-row';
 
 function Section({ id, title, description, children }: { id: string; title: string; description?: string; children: ReactNode }) {
@@ -64,6 +65,10 @@ export function SettingsView() {
       <Section id="settings-privacy" title={t('privacy.title')} description={t('privacy.description')}>
         <PrivacyModePicker value={me.privacyMode} onChange={(privacyMode) => save({ privacyMode })} labelledBy="settings-privacy" />
         <ReceiveSosRow checked={me.receiveSos} onCheckedChange={(receiveSos) => save({ receiveSos })} />
+      </Section>
+
+      <Section id="settings-notifications" title={t('push.title')} description={t('push.description')}>
+        <PushRow />
       </Section>
 
       <Section id="settings-appearance" title={t('appearance.title')}>
