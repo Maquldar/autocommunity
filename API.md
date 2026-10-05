@@ -333,7 +333,7 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
   - `GET /sos/:id` is allowed for the requester, any responder, and users within 20 km of the SOS (by their last location) or who were dispatched.
   - Others → 404.
   - The public share link is separate.
-  - `GET /sos/nearby` and `GET /map/sos` return open (`created|accepted|in_progress`) SOS within 20 km / the bbox, excluding SOS from users the viewer… (no blocking feature, so none excluded) and the viewer's own.
+  - `GET /sos/nearby` and `GET /map/sos` return open (`created|accepted|in_progress`) SOS within 20 km / the bbox, excluding the viewer's own.
 - **Lifecycle:**
   - `respond` (helper; rating ≥ 30, receive not required, not the requester, SOS status `created|accepted`) → response `offered`, and notify the requester `sos_response`.
     - Max 10 active offers per SOS.
