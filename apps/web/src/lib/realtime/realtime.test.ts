@@ -1,6 +1,8 @@
-import type { NotificationDto, Paginated } from '@autoc/shared';
+import type { ChatDto, MessageDto, NotificationDto, Paginated } from '@autoc/shared';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
+import { chatKeys } from '@/features/chats/cache';
+import { readStore, typingStore } from '@/features/chats/live-stores';
 import { notificationKeys } from '@/features/notifications/queries';
 import { bindRealtimeHandlers, createRealtimeConnection, realtimeUrl, type IoFactory, type RealtimeSocket } from './client';
 import { createAppRealtimeHandlers } from './handlers';
@@ -135,7 +137,17 @@ describe('createRealtimeConnection', () => {
 describe('bindRealtimeHandlers', () => {
   it('dispatches each server event and unbinds cleanly', () => {
     const socket = new FakeSocket();
-    const handlers = { onNotification: vi.fn(), onCount: vi.fn(), onFriendsChanged: vi.fn(), onRevoked: vi.fn() };
+    const handlers = {
+      onNotification: vi.fn(),
+      onCount: vi.fn(),
+      onFriendsChanged: vi.fn(),
+      onRevoked: vi.fn(),
+      onMessage: vi.fn(),
+      onMessageDeleted: vi.fn(),
+      onTyping: vi.fn(),
+      onRead: vi.fn(),
+      onChatsChanged: vi.fn(),
+    };
     const unbind = bindRealtimeHandlers(socket as unknown as RealtimeSocket, handlers);
     socket.emit('notification:new', notification('n1'));
     socket.emit('notification:count', { count: 3 });
@@ -148,7 +160,8 @@ describe('bindRealtimeHandlers', () => {
     expect(handlers.onFriendsChanged).toHaveBeenCalledTimes(1);
     expect(handlers.onRevoked).toHaveBeenCalledTimes(1);
     unbind();
-    for (const e of ['notification:new', 'notification:count', 'friends:changed', 'session:revoked']) expect(socket.count(e)).toBe(0);
+    for (const e of ['notification:new', 'notification:count', 'friends:changed', 'session:revoked', 'message:new', 'chat:typing'])
+      expect(socket.count(e)).toBe(0);
   });
 });
 
@@ -203,5 +216,78 @@ describe('createAppRealtimeHandlers', () => {
     const { logout, handlers } = setup();
     handlers.onRevoked();
     expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('community notifications refresh community data', () => {
+    const { invalidate, handlers } = setup();
+    handlers.onNotification(notification('n5', 'community_approved'));
+    expect(invalidatedKeys(invalidate)).toContain('["communities"]');
+  });
+});
+
+describe('createAppRealtimeHandlers — chats', () => {
+  const peer = { id: 'peer', nickname: 'peer', name: 'Peer', avatarUrl: null, rating: 50 };
+  const message = (id: string, chatId = 'c1'): MessageDto => ({
+    id,
+    chatId,
+    sender: peer,
+    type: 'text',
+    text: id,
+    upload: null,
+    lat: null,
+    lng: null,
+    createdAt: '2026-10-05T10:00:00Z',
+    deletedAt: null,
+  });
+  const chat = (id: string, unreadCount: number): ChatDto => ({ id, type: 'direct', refId: null, title: id, avatarUrl: null, lastMessage: null, unreadCount });
+  function setup() {
+    const queryClient = new QueryClient();
+    const handlers = createAppRealtimeHandlers({ queryClient, toast: vi.fn(), logout: vi.fn(), getMyId: () => 'me' });
+    queryClient.setQueryData(chatKeys.list, { pages: [{ items: [chat('c0', 0), chat('c1', 1)], nextCursor: null }], pageParams: [null] });
+    queryClient.setQueryData(chatKeys.messages('c1'), { pages: [{ items: [], nextCursor: null }], pageParams: [null] });
+    return { queryClient, handlers, invalidate: vi.spyOn(queryClient, 'invalidateQueries') };
+  }
+  const list = (qc: QueryClient) => qc.getQueryData<InfiniteData<Paginated<ChatDto>>>(chatKeys.list)!.pages[0]!.items;
+
+  it('message:new updates history, unread and order; typing mark ends', () => {
+    const { queryClient, handlers } = setup();
+    typingStore.add('c1', peer);
+    handlers.onMessage(message('m1'));
+    expect(list(queryClient).map((c) => [c.id, c.unreadCount])).toEqual([
+      ['c1', 2],
+      ['c0', 0],
+    ]);
+    const history = queryClient.getQueryData<InfiniteData<Paginated<MessageDto>>>(chatKeys.messages('c1'))!;
+    expect(history.pages[0]!.items.map((m) => m.id)).toEqual(['m1']);
+    expect(typingStore.get('c1')).toEqual([]);
+  });
+
+  it('message:new for an unknown chat refetches the list', () => {
+    const { handlers, invalidate } = setup();
+    handlers.onMessage(message('m1', 'other'));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: chatKeys.list });
+  });
+
+  it('message:deleted, chat:typing, chat:read and chats:changed', () => {
+    const { queryClient, handlers, invalidate } = setup();
+    handlers.onMessage(message('m1'));
+    handlers.onMessageDeleted({ chatId: 'c1', messageId: 'm1' });
+    const history = queryClient.getQueryData<InfiniteData<Paginated<MessageDto>>>(chatKeys.messages('c1'))!;
+    expect(history.pages[0]!.items[0]!.deletedAt).not.toBeNull();
+
+    handlers.onTyping({ chatId: 'c9', user: peer });
+    handlers.onTyping({ chatId: 'c9', user: { ...peer, id: 'me' } });
+    expect(typingStore.get('c9').map((u) => u.id)).toEqual(['peer']);
+    typingStore.remove('c9', 'peer');
+
+    handlers.onRead({ chatId: 'c1', userId: 'peer', lastReadAt: '2026-10-05T10:00:00Z' });
+    expect(readStore.latestPeerRead('c1', 'me')).toBe(Date.parse('2026-10-05T10:00:00Z'));
+    expect(list(queryClient).find((c) => c.id === 'c1')!.unreadCount).toBe(2);
+    handlers.onRead({ chatId: 'c1', userId: 'me', lastReadAt: '2026-10-05T10:00:00Z' });
+    expect(list(queryClient).find((c) => c.id === 'c1')!.unreadCount).toBe(0);
+
+    handlers.onChatsChanged();
+    const keys = invalidate.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey?: unknown }).queryKey));
+    expect(keys).toContain('["communities"]');
   });
 });

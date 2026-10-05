@@ -1,5 +1,14 @@
 import type {
   AuthProviders,
+  ChatDto,
+  CommunityDto,
+  CommunityMemberDto,
+  CommunityRole,
+  CreateCommunityInput,
+  MembershipStatus,
+  MessageDto,
+  SendMessageInput,
+  UpdateCommunityInput,
   AuthResult,
   FriendRequestDto,
   MapUser,
@@ -24,6 +33,8 @@ export type PageParams = { cursor?: string | null; limit?: number };
 export type MapUsersParams = { bbox: string; friends?: boolean; brand?: string; communityIds?: string[] };
 export type MapUsersResult = { items: MapUser[]; truncated: boolean };
 export type FriendRequestResult = { id: string; status: string };
+export type CommunitiesParams = PageParams & { q?: string; city?: string | null; mine?: boolean };
+export type CreateCommunityBody = Omit<CreateCommunityInput, 'description'> & { description?: string };
 export type PushSubscriptionBody = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 /** Builds `?a=1&b=2` from defined, non-empty values. */
@@ -39,7 +50,7 @@ export function queryString(params: Record<string, string | number | boolean | n
 
 const page = ({ cursor, limit }: PageParams = {}) => ({ cursor: cursor ?? undefined, limit });
 
-/** Every Phase 1 and Phase 2 endpoint from API.md §1–2, typed with the shared DTOs. */
+/** Every Phase 1–3 endpoint from API.md §1–3, typed with the shared DTOs. */
 export function createEndpoints({ request }: ApiClient) {
   return {
     auth: {
@@ -114,12 +125,57 @@ export function createEndpoints({ request }: ApiClient) {
       subscribe: (input: PushSubscriptionBody) => request<void>('/push/subscriptions', { method: 'POST', json: input }),
       unsubscribe: (endpoint: string) => request<void>('/push/subscriptions', { method: 'DELETE', json: { endpoint } }),
     },
+    communities: {
+      list: ({ q, city, mine, ...params }: CommunitiesParams = {}, signal?: AbortSignal) =>
+        request<Paginated<CommunityDto>>(
+          `/communities${queryString({ q, city, mine: mine ? 'true' : undefined, ...page(params) })}`,
+          { signal },
+        ),
+      get: (id: string) => request<CommunityDto>(`/communities/${encodeURIComponent(id)}`),
+      create: (input: CreateCommunityBody) => request<CommunityDto>('/communities', { method: 'POST', json: input }),
+      update: (id: string, input: UpdateCommunityInput) =>
+        request<CommunityDto>(`/communities/${encodeURIComponent(id)}`, { method: 'PATCH', json: input }),
+      remove: (id: string) => request<void>(`/communities/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      join: (id: string) => request<{ status: MembershipStatus }>(`/communities/${encodeURIComponent(id)}/join`, { method: 'POST' }),
+      leave: (id: string) => request<void>(`/communities/${encodeURIComponent(id)}/leave`, { method: 'POST' }),
+      members: (id: string, status: MembershipStatus, params?: PageParams) =>
+        request<Paginated<CommunityMemberDto>>(
+          `/communities/${encodeURIComponent(id)}/members${queryString({ status, ...page(params) })}`,
+        ),
+      approve: (id: string, userId: string) =>
+        request<void>(`/communities/${encodeURIComponent(id)}/requests/${encodeURIComponent(userId)}/approve`, { method: 'POST' }),
+      reject: (id: string, userId: string) =>
+        request<void>(`/communities/${encodeURIComponent(id)}/requests/${encodeURIComponent(userId)}/reject`, { method: 'POST' }),
+      setRole: (id: string, userId: string, role: CommunityRole) =>
+        request<void>(`/communities/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
+          method: 'PATCH',
+          json: { role },
+        }),
+      removeMember: (id: string, userId: string) =>
+        request<void>(`/communities/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+    },
+    chats: {
+      list: (params?: PageParams) => request<Paginated<ChatDto>>(`/chats${queryString(page(params))}`),
+      get: (id: string) => request<ChatDto>(`/chats/${encodeURIComponent(id)}`),
+      messages: (id: string, params?: PageParams) =>
+        request<Paginated<MessageDto>>(`/chats/${encodeURIComponent(id)}/messages${queryString(page(params))}`),
+      send: (id: string, input: SendMessageInput) =>
+        request<MessageDto>(`/chats/${encodeURIComponent(id)}/messages`, { method: 'POST', json: input }),
+      read: (id: string) => request<void>(`/chats/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+      deleteMessage: (id: string, messageId: string) =>
+        request<void>(`/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' }),
+      direct: (userId: string) => request<ChatDto>('/chats/direct', { method: 'POST', json: { userId } }),
+    },
     uploads: {
-      create: (file: Blob, purpose: UploadPurpose) => {
+      /** `durationSec` (voice/video) is client-measured; the API clamps it. */
+      create: (file: Blob, purpose: UploadPurpose, options: { durationSec?: number; filename?: string } = {}) => {
         const form = new FormData();
         // `purpose` goes in the query (current contract); the multipart field is kept for older API builds.
         form.append('purpose', purpose);
-        form.append('file', file);
+        // Text fields go before the file so a streaming parser has them when the file arrives.
+        if (options.durationSec !== undefined) form.append('durationSec', String(Math.round(options.durationSec * 10) / 10));
+        if (options.filename) form.append('file', file, options.filename);
+        else form.append('file', file);
         return request<UploadDto>(`/uploads?purpose=${encodeURIComponent(purpose)}`, { method: 'POST', formData: form });
       },
     },

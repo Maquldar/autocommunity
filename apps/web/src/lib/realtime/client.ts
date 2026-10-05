@@ -1,4 +1,12 @@
-import type { ClientToServerEvents, NotificationDto, ServerToClientEvents } from '@autoc/shared';
+import type {
+  ChatReadEvent,
+  ChatTypingEvent,
+  ClientToServerEvents,
+  MessageDeletedEvent,
+  MessageDto,
+  NotificationDto,
+  ServerToClientEvents,
+} from '@autoc/shared';
 import type { ManagerOptions, Socket, SocketOptions } from 'socket.io-client';
 
 /**
@@ -26,7 +34,16 @@ export type RealtimeHandlers = {
   onCount: (count: number) => void;
   onFriendsChanged: () => void;
   onRevoked: () => void;
+  /* phase 3 */
+  onMessage: (message: MessageDto) => void;
+  onMessageDeleted: (event: MessageDeletedEvent) => void;
+  onTyping: (event: ChatTypingEvent) => void;
+  onRead: (event: ChatReadEvent) => void;
+  onChatsChanged: () => void;
 };
+
+const hasChatId = (p: unknown): p is { chatId: string } =>
+  typeof p === 'object' && p !== null && typeof (p as { chatId?: unknown }).chatId === 'string';
 
 /** Subscribes the typed server events; returns an unsubscribe function. */
 export function bindRealtimeHandlers(socket: Pick<RealtimeSocket, 'on' | 'off'>, handlers: RealtimeHandlers): () => void {
@@ -36,15 +53,35 @@ export function bindRealtimeHandlers(socket: Pick<RealtimeSocket, 'on' | 'off'>,
   };
   const onFriends: ServerToClientEvents['friends:changed'] = () => handlers.onFriendsChanged();
   const onRevoked: ServerToClientEvents['session:revoked'] = () => handlers.onRevoked();
-  socket.on('notification:new', onNew);
-  socket.on('notification:count', onCount);
-  socket.on('friends:changed', onFriends);
-  socket.on('session:revoked', onRevoked);
+  // Payloads are checked minimally: a malformed event is dropped rather than corrupting the cache.
+  const onMessage: ServerToClientEvents['message:new'] = (m) => {
+    if (hasChatId(m) && typeof m.id === 'string' && m.sender) handlers.onMessage(m);
+  };
+  const onDeleted: ServerToClientEvents['message:deleted'] = (p) => {
+    if (hasChatId(p) && typeof p.messageId === 'string') handlers.onMessageDeleted(p);
+  };
+  const onTyping: ServerToClientEvents['chat:typing'] = (p) => {
+    if (hasChatId(p) && p.user && typeof p.user.id === 'string') handlers.onTyping(p);
+  };
+  const onRead: ServerToClientEvents['chat:read'] = (p) => {
+    if (hasChatId(p) && typeof p.userId === 'string' && typeof p.lastReadAt === 'string') handlers.onRead(p);
+  };
+  const onChats: ServerToClientEvents['chats:changed'] = () => handlers.onChatsChanged();
+  const bindings = [
+    ['notification:new', onNew],
+    ['notification:count', onCount],
+    ['friends:changed', onFriends],
+    ['session:revoked', onRevoked],
+    ['message:new', onMessage],
+    ['message:deleted', onDeleted],
+    ['chat:typing', onTyping],
+    ['chat:read', onRead],
+    ['chats:changed', onChats],
+  ] as const;
+  const target = socket as unknown as { on: (e: string, l: unknown) => void; off: (e: string, l: unknown) => void };
+  for (const [event, listener] of bindings) target.on(event, listener);
   return () => {
-    socket.off('notification:new', onNew);
-    socket.off('notification:count', onCount);
-    socket.off('friends:changed', onFriends);
-    socket.off('session:revoked', onRevoked);
+    for (const [event, listener] of bindings) target.off(event, listener);
   };
 }
 

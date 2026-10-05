@@ -62,6 +62,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const libRef = useRef<MapLib | null>(null);
   const entriesRef = useRef(new Map<string, MarkerEntry>());
@@ -134,6 +135,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       const diameter = 2 * metersToPixels(APPROXIMATE_RADIUS_M, map.getCenter().lat, map.getZoom());
       containerRef.current?.style.setProperty('--approx-d', `${Math.round(Math.min(220, Math.max(58, diameter)))}px`);
     };
+    // Settled zoom on the wrapper (`data-zoom`), so tests can wait for an animation to finish instead of sleeping.
+    const markZoom = (map: MlMap) => {
+      if (wrapperRef.current) wrapperRef.current.dataset.zoom = map.getZoom().toFixed(2);
+    };
     const emitView = (map: MlMap) => callbacks.current.onViewChange(boundsOf(map), map.getZoom());
 
     void (async () => {
@@ -174,6 +179,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         // Invisible layer: MapLibre only builds a source's tiles (and clusters) when a layer uses it.
         map.addLayer({ id: HIT_LAYER, type: 'circle', source: SOURCE, paint: { 'circle-radius': 1, 'circle-opacity': 0 } });
         updateApproxSize(map);
+        markZoom(map);
         setReady(true);
         emitView(map);
       };
@@ -182,6 +188,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       if (map.isStyleLoaded()) setUpSource();
       map.on('move', () => updateApproxSize(map));
       map.on('moveend', () => {
+        markZoom(map);
         if (moveTimer) clearTimeout(moveTimer);
         moveTimer = setTimeout(() => emitView(map), MOVE_DEBOUNCE_MS);
       });
@@ -272,7 +279,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   return (
     // MapLibre forces `position: relative` on its container, so positioning lives on this wrapper.
-    <div className={className} data-testid="map-canvas" data-ready={ready || undefined}>
+    <div ref={wrapperRef} className={className} data-testid="map-canvas" data-ready={ready || undefined}>
       <div ref={containerRef} className="size-full" />
       {portals.map((item) => {
         if (item.cluster) {

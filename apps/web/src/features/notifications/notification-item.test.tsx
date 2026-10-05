@@ -89,3 +89,24 @@ describe('<NotificationItem>', () => {
     expect(screen.getByText('A driver')).toBeInTheDocument();
   });
 });
+
+describe('community notifications', () => {
+  const community = { communityId: 'c1', communityName: 'Night Drive' };
+  it('community_request links to the Requests tab and names both', () => {
+    const n: NotificationDto = { id: 'n10', type: 'community_request', payload: { ...community, user: aidar }, ...base };
+    expect(describeNotification(n)).toMatchObject({ kind: 'community_request', href: '/communities/c1/requests' });
+    render(<NotificationItem notification={n} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /Aidar K\. wants to join Night Drive/ })).toHaveAttribute('href', '/communities/c1/requests');
+  });
+  it('community_approved and community_role link to the community', () => {
+    const approved: NotificationDto = { id: 'n11', type: 'community_approved', payload: community, ...base };
+    render(<NotificationItem notification={approved} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /accepted into Night Drive/ })).toHaveAttribute('href', '/communities/c1');
+    const role: NotificationDto = { id: 'n12', type: 'community_role', payload: { ...community, role: 'moderator' }, ...base };
+    render(<NotificationItem notification={role} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /now a moderator of Night Drive/ })).toHaveAttribute('href', '/communities/c1');
+  });
+  it('rejects unsafe ids', () => {
+    expect(describeNotification({ type: 'community_approved', payload: { communityId: '../x', communityName: 'A' } }).href).toBeNull();
+  });
+});

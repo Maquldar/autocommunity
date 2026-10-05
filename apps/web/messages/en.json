@@ -47,7 +47,8 @@
     "home": "AutoCommunity home",
     "notifications": "Notifications",
     "notificationsUnread": "Notifications, {count, plural, one {# unread} other {# unread}}",
-    "accountMenu": "Account menu"
+    "accountMenu": "Account menu",
+    "navUnread": "{label}, {count, plural, one {# unread} other {# unread}}"
   },
   "states": {
     "loading": "Loading…",
@@ -89,11 +90,16 @@
     "unsupportedFileType": "Unsupported file. Use a JPEG, PNG, WebP or HEIC photo.",
     "accountBlocked": "This account is blocked",
     "bboxTooLarge": "This area is too large. Zoom in to see drivers.",
-    "invalidTarget": "You can't add yourself as a friend.",
+    "invalidTarget": "You can't do this with your own account.",
     "alreadyRequested": "A friend request is already pending.",
     "alreadyFriends": "You're already friends.",
     "friendRequestCooldown": "You can send this driver a request again later.",
-    "pushUnsupported": "Couldn't enable notifications on this device."
+    "pushUnsupported": "Couldn't enable notifications on this device.",
+    "communityNameTaken": "A community with this name already exists",
+    "communityLimit": "You can own up to {max} communities",
+    "membershipLimit": "You can be in up to {max} communities (including pending requests)",
+    "alreadyMember": "You're already a member or your request is pending",
+    "ownerCannotLeave": "The owner can't leave. Transfer ownership or delete the community first."
   },
   "form": {
     "required": "Required field",
@@ -664,7 +670,11 @@
       "brand": "Car brand",
       "anyBrand": "Any brand",
       "reset": "Reset filters",
-      "apply": "Show drivers"
+      "apply": "Show drivers",
+      "communities": "Communities",
+      "communitiesHint": "Show members of the communities you choose.",
+      "noCommunities": "You're not in any community yet.",
+      "findCommunities": "Find communities"
     },
     "privacy": {
       "label": "Your visibility",
@@ -776,12 +786,288 @@
     "types": {
       "friendRequest": "<b>{name}</b> wants to add you as a friend",
       "friendAccepted": "<b>{name}</b> accepted your friend request",
-      "generic": "New notification"
+      "generic": "New notification",
+      "communityRequest": "<b>{name}</b> wants to join <b>{community}</b>",
+      "communityApproved": "You've been accepted into <b>{community}</b>",
+      "communityRole": "{role, select, owner {You're now the owner of <b>{community}</b>} moderator {You're now a moderator of <b>{community}</b>} other {You're now a regular member of <b>{community}</b>}}"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
     "declined": "Request declined",
     "gone": "This request is no longer active",
-    "open": "Open"
+    "open": "Open",
+    "someCommunity": "a community"
+  },
+  "communities": {
+    "metaTitle": "Communities",
+    "pageMetaTitle": "Community",
+    "requestsMetaTitle": "Join requests",
+    "title": "Communities",
+    "description": "Car clubs and driver groups in your city.",
+    "create": "Create",
+    "createCommunity": "Create a community",
+    "loading": "Loading communities…",
+    "members": "{count, plural, one {# member} other {# members}}",
+    "search": {
+      "label": "Find a community",
+      "placeholder": "Name, e.g. Toyota",
+      "clear": "Clear search"
+    },
+    "cityFilter": {
+      "label": "City",
+      "any": "All cities"
+    },
+    "mine": {
+      "title": "My communities",
+      "listLabel": "Your communities"
+    },
+    "discover": {
+      "title": "Discover",
+      "searchTitle": "Search results",
+      "listLabel": "Communities",
+      "empty": {
+        "title": "No communities found",
+        "description": "Try another name or city, or create your own community."
+      },
+      "emptyAll": {
+        "title": "No communities yet",
+        "description": "Start the first one for drivers in your city."
+      }
+    },
+    "privacy": {
+      "public": "Public",
+      "private": "Private"
+    },
+    "role": {
+      "owner": "Owner",
+      "moderator": "Moderator",
+      "member": "Member"
+    },
+    "status": {
+      "pending": "Request sent"
+    },
+    "actions": {
+      "join": "Join",
+      "request": "Request to join",
+      "pending": "Request sent",
+      "cancelRequest": "Cancel request",
+      "leave": "Leave",
+      "owner": "You're the owner.",
+      "settings": "Community settings"
+    },
+    "ownerHint": "To leave, transfer ownership or delete the community in settings.",
+    "leaveTitle": "Leave {name}?",
+    "leaveDescription": "You'll stop seeing the community chat. You can join again at any time.",
+    "leaveDescriptionPrivate": "You'll lose access to the chat and members. To come back, a moderator will have to approve you again.",
+    "locked": {
+      "title": "Private community",
+      "description": "Members and the chat are visible to members only. Send a request and a moderator will review it.",
+      "pendingDescription": "Your request is waiting for a moderator. You'll get a notification when it's approved."
+    },
+    "tabs": {
+      "label": "Community sections",
+      "chat": "Chat",
+      "members": "Members",
+      "requests": "Requests"
+    },
+    "chat": {
+      "title": "Community chat",
+      "loading": "Loading messages…",
+      "recent": "Latest messages",
+      "empty": "No messages yet. Say hello to the community!",
+      "open": "Open chat"
+    },
+    "membersList": {
+      "label": "Members",
+      "empty": "No members yet",
+      "you": "You",
+      "actionsFor": "Actions for {name}"
+    },
+    "requests": {
+      "label": "Join requests",
+      "empty": {
+        "title": "No requests",
+        "description": "New join requests will appear here, and you'll get a notification."
+      },
+      "approve": "Approve",
+      "reject": "Reject",
+      "requestedAgo": "Requested {time}"
+    },
+    "memberActions": {
+      "promote": "Make moderator",
+      "demote": "Remove moderator role",
+      "transfer": "Transfer ownership",
+      "remove": "Remove from community"
+    },
+    "confirm": {
+      "removeTitle": "Remove {name}?",
+      "removeDescription": "They'll lose access to the community and its chat.",
+      "transferTitle": "Make {name} the owner?",
+      "transferDescription": "You'll become a moderator. Only the new owner can change roles after this.",
+      "deleteTitle": "Delete {name}?",
+      "deleteDescription": "The community and its chat disappear for every member. This can't be undone.",
+      "deleteConfirm": "Delete community"
+    },
+    "settings": {
+      "title": "Community settings",
+      "description": "Changes are visible to everyone who opens the community.",
+      "details": "Details",
+      "save": "Save changes",
+      "membersSection": "Members and roles",
+      "membersHintOwner": "Use ⋯ next to a member to make them a moderator, transfer ownership or remove them.",
+      "membersHintModerator": "Use ⋯ next to a member to remove them. Only the owner changes roles.",
+      "danger": "Danger zone",
+      "deleteHint": "Deleting removes the community and its chat for all members."
+    },
+    "form": {
+      "avatar": "Picture",
+      "name": "Name",
+      "nameHint": "{min}–{max} characters, must be unique",
+      "description": "Description",
+      "descriptionPlaceholder": "What is this community about? Meetups, rules, who it's for.",
+      "city": "City",
+      "privacy": "Who can join",
+      "publicTitle": "Public",
+      "publicDescription": "Anyone can join right away and read the chat.",
+      "privateTitle": "Private",
+      "privateDescription": "Drivers send a request and moderators approve it. Members and the chat stay hidden from others.",
+      "moderatorNote": "Only the owner can change the city and privacy.",
+      "invalidChars": "Use letters, digits and ordinary punctuation",
+      "submit": "Create community",
+      "cancel": "Cancel"
+    },
+    "new": {
+      "metaTitle": "New community",
+      "title": "New community",
+      "description": "Bring drivers together around a car brand, a hobby or a neighbourhood. You'll be the owner."
+    },
+    "notFound": {
+      "title": "Community not found",
+      "description": "It may have been deleted.",
+      "back": "All communities"
+    },
+    "toasts": {
+      "created": "Community created",
+      "joined": "You joined {name}",
+      "requested": "Request sent. A moderator will review it.",
+      "cancelled": "Request cancelled",
+      "left": "You left {name}",
+      "saved": "Changes saved",
+      "deleted": "Community deleted",
+      "approved": "{name} is now a member",
+      "rejected": "Request rejected",
+      "promoted": "{name} is now a moderator",
+      "demoted": "{name} is now a regular member",
+      "transferred": "{name} is now the owner",
+      "removed": "{name} was removed"
+    }
+  },
+  "chats": {
+    "metaTitle": "Chats",
+    "title": "Chats",
+    "description": "Direct messages and community chats.",
+    "listLabel": "Your chats",
+    "you": "You",
+    "unread": "{count, plural, one {# unread message} other {# unread messages}}",
+    "empty": {
+      "title": "No chats yet",
+      "description": "Message a driver from their profile or the map, or join a community to chat with its members.",
+      "action": "Find communities"
+    },
+    "preview": {
+      "none": "No messages yet",
+      "deleted": "Message deleted",
+      "photo": "Photo",
+      "location": "Location",
+      "voice": "Voice message"
+    },
+    "day": {
+      "today": "Today",
+      "yesterday": "Yesterday"
+    },
+    "actions": {
+      "message": "Message"
+    },
+    "typing": {
+      "direct": "typing…",
+      "one": "{name} is typing…",
+      "two": "{a} and {b} are typing…",
+      "many": "Several people are typing…"
+    },
+    "status": {
+      "sending": "Sending",
+      "sent": "Sent",
+      "read": "Read",
+      "failed": "Not sent"
+    },
+    "message": {
+      "deleted": "Message deleted",
+      "photo": "Photo",
+      "openPhoto": "Open photo",
+      "location": "Location",
+      "openInMaps": "Open in maps",
+      "play": "Play voice message",
+      "pause": "Pause",
+      "seek": "Playback position",
+      "retry": "Retry",
+      "discard": "Remove",
+      "actions": "Message actions",
+      "delete": "Delete message"
+    },
+    "deleteConfirm": {
+      "title": "Delete this message?",
+      "description": "It will be replaced with \"Message deleted\" for everyone in this chat.",
+      "confirm": "Delete"
+    },
+    "conversation": {
+      "metaTitle": "Chat",
+      "loading": "Loading messages…",
+      "loadingOlder": "Loading earlier messages…",
+      "loadOlder": "Show earlier messages",
+      "start": "This is the beginning of the chat",
+      "historyLabel": "Messages in {title}",
+      "communityChat": "Community chat",
+      "openProfile": "Open profile",
+      "openCommunity": "Open community",
+      "scrollToLatest": "Jump to latest messages",
+      "empty": {
+        "title": "No messages yet",
+        "description": "Say hello! Your first message will appear here."
+      },
+      "notFound": {
+        "title": "Chat not available",
+        "description": "It doesn't exist or you're no longer a member.",
+        "back": "All chats"
+      }
+    },
+    "composer": {
+      "label": "Message",
+      "placeholder": "Message",
+      "caption": "Add a caption",
+      "hint": "Press Enter to send, Shift+Enter for a new line.",
+      "counter": "{count} of {max} characters used",
+      "send": "Send message",
+      "sendPhoto": "Send photo",
+      "attach": "Attach",
+      "photo": "Photo",
+      "location": "My location",
+      "photoReady": "Photo ready to send",
+      "removePhoto": "Remove photo",
+      "locating": "Getting your location…",
+      "locationError": "Couldn't get your location. Allow location access and try again.",
+      "locationConfirm": {
+        "title": "Send your current location?",
+        "description": "Everyone in this chat will see where you are right now.",
+        "confirm": "Send location"
+      },
+      "record": "Record a voice message",
+      "recording": "Recording…",
+      "micRequesting": "Waiting for microphone access…",
+      "stopAndSend": "Send voice message",
+      "cancelRecording": "Cancel recording",
+      "micDenied": "Microphone access is blocked. Allow it in your browser settings.",
+      "micUnsupported": "Voice messages aren't supported in this browser.",
+      "micFailed": "Couldn't start recording. Try again."
+    }
   }
 }

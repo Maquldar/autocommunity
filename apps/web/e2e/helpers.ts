@@ -39,7 +39,9 @@ export async function useEnglish(context: BrowserContext): Promise<void> {
  * Creates an onboarded user through the API with the page's cookie jar (page.request shares it),
  * so the app restores the session via /auth/refresh on the next navigation.
  */
-export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<{ phone: string; nickname: string }> {
+export type SignedUp = { phone: string; nickname: string; id: string; accessToken: string };
+
+export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<SignedUp> {
   const phone = randomPhone();
   const nickname = randomNickname();
   const headers = { 'x-forwarded-for': testIp(), origin: WEB_URL };
@@ -51,14 +53,37 @@ export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<{ p
 
   const verified = await page.request.post(`${API}/auth/otp/verify`, { data: { phone, code: devCode }, headers });
   expect(verified.ok(), await verified.text()).toBeTruthy();
-  const { accessToken } = (await verified.json()) as { accessToken: string };
+  const { accessToken, user } = (await verified.json()) as { accessToken: string; user: { id: string } };
   const auth = { ...headers, authorization: `Bearer ${accessToken}` };
 
   const updated = await page.request.patch(`${API}/me`, { data: { name, nickname, city: 'Almaty' }, headers: auth });
   expect(updated.ok(), await updated.text()).toBeTruthy();
   const completed = await page.request.post(`${API}/me/onboarding/complete`, { headers: auth });
   expect(completed.ok(), await completed.text()).toBeTruthy();
-  return { phone, nickname };
+  return { phone, nickname, id: user.id, accessToken };
+}
+
+/** Calls the API as a signed-up user (the access token from signUpViaApi; valid for 15 minutes). */
+export async function apiAs<T = unknown>(
+  page: Page,
+  user: Pick<SignedUp, 'accessToken'>,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  data?: unknown,
+): Promise<T> {
+  const response = await page.request.fetch(`${API}${path}`, {
+    method,
+    data,
+    headers: { authorization: `Bearer ${user.accessToken}`, origin: WEB_URL, 'x-forwarded-for': testIp() },
+  });
+  expect(response.ok(), `${method} ${path}: ${await response.text()}`).toBeTruthy();
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Waits until the page's realtime socket is connected (`<html data-realtime>`). */
+export async function waitForRealtime(page: Page): Promise<void> {
+  await expect(page.locator('html')).toHaveAttribute('data-realtime', 'connected', { timeout: 20_000 });
 }
 
 /** Types a phone number into the login form and requests a code; returns the dev code from the hint. */

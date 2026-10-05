@@ -114,7 +114,7 @@ type CitySelectProps = {
   'aria-invalid'?: boolean;
 };
 
-function CitySelect({ value, onChange, onBlur, triggerRef, id, ...aria }: CitySelectProps) {
+export function CitySelect({ value, onChange, onBlur, triggerRef, id, ...aria }: CitySelectProps) {
   const t = useTranslations('profile.fields');
   const cityName = useCityName();
   return (

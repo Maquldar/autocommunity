@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { RatingBadge } from '@/components/ui/rating-badge';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MessageButton } from '@/features/chats/message-button';
 import { FriendButton } from '@/features/friends/friend-button';
 import { useUser } from '@/features/profile/queries';
 
@@ -75,6 +76,7 @@ function DriverCardBody({ driver }: { driver: MapUser }) {
         ) : profile.isPending ? (
           <Skeleton className="h-12 w-full rounded-lg" />
         ) : null}
+        <MessageButton userId={driver.userId} size="lg" fullWidth />
         <Button asChild variant="outline" size="lg" fullWidth leadingIcon={<UserRound aria-hidden="true" />}>
           <Link href={`/u/${driver.userId}`}>{t('card.openProfile')}</Link>
         </Button>

@@ -2,7 +2,7 @@
 
 import { Inbox, Search, Send, UserRoundSearch, UsersRound, X } from 'lucide-react';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { CountBadge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { IconButton } from '@/components/ui/icon-button';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PageHeader } from '@/components/ui/page-header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useDebounced } from '@/hooks/use-debounced';
 import { FriendButton } from './friend-button';
 import { useFriendRequests, useFriendsList, useUserSearch } from './queries';
 import { UserRow, UserRowSkeleton } from './user-row';
@@ -19,15 +20,6 @@ const LIST_CLASS = 'overflow-hidden rounded-2xl border bg-card';
 const DIVIDED = '[&>li+li]:border-t';
 
 type Tab = 'friends' | 'incoming' | 'outgoing';
-
-function useDebounced<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 export function FriendsView() {
   const t = useTranslations('friends');

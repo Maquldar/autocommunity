@@ -12,7 +12,8 @@ import { cn } from '@/lib/cn';
 import { useLocationSharing } from '@/lib/location/location-provider';
 import { bboxParam, toQueryBounds, type Bounds } from './bbox';
 import { DriverCard } from './driver-card';
-import { DEFAULT_FILTERS, type MapFilters } from './geojson';
+import { useMyCommunities } from '@/features/communities/queries';
+import { DEFAULT_FILTERS, sanitizeCommunityIds, type MapFilters } from './geojson';
 import { LocationControls } from './location-controls';
 import { MapCanvas, type MapCanvasHandle } from './map-canvas';
 import { MapFiltersControl } from './map-filters';
@@ -26,7 +27,11 @@ function readFilters(): MapFilters {
     const raw = window.localStorage.getItem(FILTERS_KEY);
     if (!raw) return DEFAULT_FILTERS;
     const parsed = JSON.parse(raw) as Partial<MapFilters>;
-    return { friends: parsed.friends === true, brand: typeof parsed.brand === 'string' && parsed.brand ? parsed.brand : null };
+    return {
+      friends: parsed.friends === true,
+      brand: typeof parsed.brand === 'string' && parsed.brand ? parsed.brand : null,
+      communityIds: Array.isArray(parsed.communityIds) ? parsed.communityIds.filter((id): id is string => typeof id === 'string') : [],
+    };
   } catch {
     return DEFAULT_FILTERS;
   }
@@ -59,10 +64,22 @@ export function MapView() {
     writeFilters(next);
   }, []);
 
+  // Community filter: only the viewer's active communities (a stale id would make the API answer 403).
+  const myCommunities = useMyCommunities();
+  const activeCommunities = useMemo(
+    () => myCommunities.data?.filter((c) => c.myMembership?.status === 'active'),
+    [myCommunities.data],
+  );
+  const effectiveFilters = useMemo<MapFilters>(() => {
+    const communityIds = sanitizeCommunityIds(filters.communityIds, activeCommunities?.map((c) => c.id));
+    return { ...filters, communityIds };
+  }, [filters, activeCommunities]);
+
   const queryBounds = useMemo(() => (bounds ? toQueryBounds(bounds) : null), [bounds]);
   const tooLarge = bounds !== null && queryBounds === null;
   const bbox = queryBounds ? bboxParam(queryBounds) : null;
-  const query = useMapUsers(bbox, filters);
+  // Wait for the membership list before sending a community filter.
+  const query = useMapUsers(filters.communityIds.length > 0 && !activeCommunities && !myCommunities.isError ? null : bbox, effectiveFilters);
   // Zoomed out too far: show nothing rather than stale markers from a smaller area.
   const users = useMemo(() => (tooLarge ? [] : (query.data?.items ?? [])), [tooLarge, query.data]);
   const selected = useMemo(() => users.find((u) => u.userId === selectedId) ?? null, [users, selectedId]);
@@ -108,7 +125,7 @@ export function MapView() {
         <div className="flex w-full items-start justify-between gap-2">
           <PrivacyToggle className="pointer-events-auto min-w-0" />
           <div className="pointer-events-auto shrink-0">
-            <MapFiltersControl value={filters} onChange={setFilters} />
+            <MapFiltersControl value={effectiveFilters} onChange={setFilters} communities={activeCommunities} />
           </div>
         </div>
         <MapStatus

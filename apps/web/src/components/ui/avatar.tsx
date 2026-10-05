@@ -29,6 +29,14 @@ const avatarVariants = cva('relative inline-flex shrink-0 select-none overflow-h
     },
     shape: { circle: 'rounded-full', square: 'rounded-xl' },
   },
+  // Square (community) avatars keep a ~25% corner radius at every size, so small ones don't read as circles.
+  compoundVariants: [
+    { shape: 'square', size: 'xs', className: 'rounded-[6px]' },
+    { shape: 'square', size: 'sm', className: 'rounded-[8px]' },
+    { shape: 'square', size: 'md', className: 'rounded-[10px]' },
+    { shape: 'square', size: 'lg', className: 'rounded-[14px]' },
+    { shape: 'square', size: 'xl', className: 'rounded-2xl' },
+  ],
   defaultVariants: { size: 'md', shape: 'circle' },
 });
 

@@ -1,6 +1,6 @@
 import type { MapUser } from '@autoc/shared';
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, clusterSize, formatClusterCount, toFeatureCollection } from './geojson';
+import { activeFilterCount, clusterSize, formatClusterCount, sanitizeCommunityIds, toFeatureCollection } from './geojson';
 
 const user = (id: string, extra: Partial<MapUser> = {}): MapUser => ({
   userId: id,
@@ -49,7 +49,16 @@ describe('cluster helpers', () => {
   });
 
   it('counts active filters', () => {
-    expect(activeFilterCount({ friends: false, brand: null })).toBe(0);
-    expect(activeFilterCount({ friends: true, brand: 'Toyota' })).toBe(2);
+    expect(activeFilterCount({ friends: false, brand: null, communityIds: [] })).toBe(0);
+    expect(activeFilterCount({ friends: true, brand: 'Toyota', communityIds: [] })).toBe(2);
+    expect(activeFilterCount({ friends: false, brand: null, communityIds: ['a', 'b'] })).toBe(1);
+  });
+});
+
+describe('sanitizeCommunityIds', () => {
+  it('keeps only active communities, deduped and sorted', () => {
+    expect(sanitizeCommunityIds(['c', 'a', 'c', 'x'], ['a', 'c'])).toEqual(['a', 'c']);
+    expect(sanitizeCommunityIds(['b', 'a'], undefined)).toEqual(['a', 'b']);
+    expect(sanitizeCommunityIds([], ['a'])).toEqual([]);
   });
 });

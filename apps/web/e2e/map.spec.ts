@@ -109,6 +109,9 @@ test('demo driver sees friends on the map, opens a card, filters, goes invisible
 
 test('new driver: map loads, zoom-out hint, invisibility and location sharing', async ({ page }) => {
   test.setTimeout(90_000);
+  // MapLibre honours prefers-reduced-motion: camera moves (keyboard zoom, the hint's zoom-in) apply at once
+  // instead of easing over frames that crawl when many specs render WebGL in software at the same time.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await signUpViaApi(page, 'Map Tester');
   await page.goto('/map');
   await waitForMap(page);
@@ -130,13 +133,22 @@ test('new driver: map loads, zoom-out hint, invisibility and location sharing', 
       if (e! - w! > 2 || n! - s! > 2) bigRequests.push(url.search);
     }
   });
-  await page.getByTestId('map-canvas').locator('canvas').focus();
-  for (let i = 0; i < 6; i += 1) await page.keyboard.press('-');
-  await expect(page.getByTestId('map-zoom-hint')).toBeVisible({ timeout: 10_000 });
+  // One zoom step at a time, waiting for the settled zoom (`data-zoom`, written on moveend): MapLibre eases
+  // each step from the *current* zoom, so keys pressed while a step is still in flight were partly lost.
+  const canvas = page.getByTestId('map-canvas');
+  const zoomOf = async () => Number(await canvas.getAttribute('data-zoom'));
   const hint = page.getByTestId('map-zoom-hint');
+  for (let i = 0; i < 10 && !(await hint.isVisible()); i += 1) {
+    const before = await zoomOf();
+    // locator.press re-focuses the canvas each time (a re-render may have moved focus).
+    await canvas.locator('canvas').press('-');
+    await expect.poll(zoomOf).toBeLessThan(before - 0.5);
+  }
+  await expect(hint).toBeVisible({ timeout: 10_000 });
   for (let i = 0; i < 4 && (await hint.isVisible()); i += 1) {
+    const before = await zoomOf();
     await hint.getByRole('button', { name: 'Zoom in' }).click();
-    await page.waitForTimeout(1500);
+    await expect.poll(zoomOf).toBeGreaterThan(before + 0.5);
   }
   await expect(hint).toBeHidden();
   expect(bigRequests).toEqual([]);
