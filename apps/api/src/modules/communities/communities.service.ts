@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type Community, type CommunityMember } from '@prisma/client';
 import {
+  communityNameKey,
   COMMUNITY_LIMITS,
   type CommunitiesQuery,
   type CommunityDto,
@@ -122,11 +123,13 @@ export class CommunitiesService {
         if (owned >= COMMUNITY_LIMITS.ownedPerUser) throw Errors.conflict('COMMUNITY_LIMIT', `You can own at most ${COMMUNITY_LIMITS.ownedPerUser} communities`);
         await this.assertMembershipRoom(tx, userId);
         await this.assertNameFree(tx, input.name);
+        if (input.avatarUploadId) await assertAvatarFree(tx, input.avatarUploadId);
         const now = new Date();
         await tx.community.create({
           data: {
             id,
             name: input.name,
+            nameKey: communityNameKey(input.name),
             description: input.description,
             city: input.city ?? null,
             isPrivate: input.isPrivate,
@@ -139,8 +142,7 @@ export class CommunitiesService {
         await tx.chat.create({ data: { id: chatId, type: 'community', refId: id, members: { create: { userId } } } });
       });
     } catch (err) {
-      if (isUniqueViolation(err)) throw nameTaken();
-      throw err;
+      throw uniqueToApiError(err);
     }
     this.chats.granted(chatId, [userId]);
     return this.get(userId, id);
@@ -148,37 +150,38 @@ export class CommunitiesService {
 
   /** Owner: every field. Moderators: name, description and avatar. */
   async update(userId: string, id: string, input: UpdateCommunityInput): Promise<CommunityDto> {
-    const community = await this.requireLive(id);
-    const mine = await this.membershipOf(id, userId);
-    if (!isMod(mine)) throw Errors.forbidden('Only the owner and moderators can edit the community');
-    if (mine!.role !== 'owner' && (input.city !== undefined || input.isPrivate !== undefined)) {
-      throw Errors.forbidden('Only the owner can change the city or privacy');
-    }
     if (input.avatarUploadId) await this.uploads.requireOwn(userId, input.avatarUploadId, ['community']);
+    let previousAvatar: string | null = null;
     try {
       await this.prisma.$transaction(async (tx) => {
-        if (input.name !== undefined && input.name.toLowerCase() !== community.name.toLowerCase()) await this.assertNameFree(tx, input.name);
+        const community = await lockCommunity(tx, id);
+        const mine = await membership(tx, id, userId);
+        if (!isMod(mine)) throw Errors.forbidden('Only the owner and moderators can edit the community');
+        if (mine!.role !== 'owner' && (input.city !== undefined || input.isPrivate !== undefined)) {
+          throw Errors.forbidden('Only the owner can change the city or privacy');
+        }
+        if (input.avatarUploadId && input.avatarUploadId !== community.avatarUploadId) await assertAvatarFree(tx, input.avatarUploadId);
+        const nameKey = input.name !== undefined ? communityNameKey(input.name) : undefined;
+        if (nameKey !== undefined && nameKey !== community.nameKey) await this.assertNameFree(tx, input.name!);
         await tx.community.update({
           where: { id },
-          data: { name: input.name, description: input.description, city: input.city, isPrivate: input.isPrivate, avatarUploadId: input.avatarUploadId },
+          data: { name: input.name, nameKey, description: input.description, city: input.city, isPrivate: input.isPrivate, avatarUploadId: input.avatarUploadId },
         });
+        if (input.avatarUploadId !== undefined && input.avatarUploadId !== community.avatarUploadId) previousAvatar = community.avatarUploadId;
       });
     } catch (err) {
-      if (isUniqueViolation(err)) throw nameTaken();
-      throw err;
+      throw uniqueToApiError(err);
     }
-    const replaced = input.avatarUploadId !== undefined && input.avatarUploadId !== community.avatarUploadId;
-    if (replaced && community.avatarUploadId) await this.uploads.remove(community.avatarUploadId);
+    if (previousAvatar) await this.uploads.remove(previousAvatar);
     return this.get(userId, id);
   }
 
   /** Soft delete: hidden from lists, chat access revoked for everyone; the name becomes free again. */
   async remove(userId: string, id: string): Promise<void> {
-    const community = await this.requireLive(id);
-    if (community.ownerId !== userId) throw Errors.forbidden('Only the owner can delete the community');
     const { chatId, userIds } = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.community.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
-      if (!count) throw notFound();
+      const community = await lockCommunity(tx, id);
+      if (community.ownerId !== userId) throw Errors.forbidden('Only the owner can delete the community');
+      await tx.community.update({ where: { id }, data: { deletedAt: new Date() } });
       const chat = await tx.chat.findUnique({ where: { refId: id }, select: { id: true, members: { select: { userId: true } } } });
       if (chat) await tx.chatMember.deleteMany({ where: { chatId: chat.id } });
       return { chatId: chat?.id ?? null, userIds: chat?.members.map((m) => m.userId) ?? [] };
@@ -186,17 +189,18 @@ export class CommunitiesService {
     if (chatId) this.chats.revoked(chatId, userIds);
   }
 
-  /* ------------------------------------------------------------------ membership */
+  /* ------------------------------------------------------------------ membership
+   * Every membership change locks the community row first (then, where needed, user rows), and re-reads
+   * the actor's and target's memberships under that lock — one lock order everywhere, so concurrent
+   * transfer / leave / remove can't interleave into an ownerless community or a wrong memberCount. */
 
   async join(userId: string, id: string): Promise<{ status: MembershipStatus }> {
     let result: { status: MembershipStatus; chatId: string | null; community: Community };
     try {
       result = await this.prisma.$transaction(async (tx) => {
+        const community = await lockCommunity(tx, id);
         await lockUser(tx, userId);
-        const community = await tx.community.findFirst({ where: { id, deletedAt: null } });
-        if (!community) throw notFound();
-        const existing = await tx.communityMember.findUnique({ where: { communityId_userId: { communityId: id, userId } } });
-        if (existing) throw alreadyMember();
+        if (await membership(tx, id, userId)) throw alreadyMember();
         await this.assertMembershipRoom(tx, userId);
         if (community.isPrivate) {
           await tx.communityMember.create({ data: { communityId: id, userId, role: 'member', status: 'pending' } });
@@ -217,9 +221,9 @@ export class CommunitiesService {
 
   /** Leaving (or cancelling a pending request). The owner must transfer ownership or delete instead. */
   async leave(userId: string, id: string): Promise<void> {
-    await this.requireLive(id);
     const chatId = await this.prisma.$transaction(async (tx) => {
-      const m = await tx.communityMember.findUnique({ where: { communityId_userId: { communityId: id, userId } } });
+      await lockCommunity(tx, id);
+      const m = await membership(tx, id, userId);
       if (!m) throw Errors.notFound('You are not a member of this community');
       if (m.role === 'owner') throw Errors.badRequest('OWNER_CANNOT_LEAVE', 'Transfer ownership or delete the community first');
       return this.dropMember(tx, id, userId);
@@ -228,14 +232,13 @@ export class CommunitiesService {
   }
 
   async approve(actorId: string, id: string, targetId: string): Promise<void> {
-    const community = await this.requireModerator(actorId, id);
-    const chatId = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.communityMember.updateMany({
-        where: { communityId: id, userId: targetId, status: 'pending' },
-        data: { status: 'active', joinedAt: new Date() },
-      });
-      if (!count) throw Errors.notFound('Join request not found');
-      return this.activate(tx, id, [targetId]);
+    const { chatId, community } = await this.prisma.$transaction(async (tx) => {
+      const community = await lockCommunity(tx, id);
+      if (!isMod(await membership(tx, id, actorId))) throw Errors.forbidden('Only the owner and moderators can do this');
+      const target = await membership(tx, id, targetId);
+      if (target?.status !== 'pending') throw Errors.notFound('Join request not found');
+      await tx.communityMember.update({ where: { communityId_userId: { communityId: id, userId: targetId } }, data: { status: 'active', joinedAt: new Date() } });
+      return { chatId: await this.activate(tx, id, [targetId]), community };
     });
     this.chats.granted(chatId, [targetId]);
     await this.notifications.create(targetId, 'community_approved', { communityId: id, communityName: community.name });
@@ -243,9 +246,12 @@ export class CommunitiesService {
 
   /** Deletes the pending request without notifying the requester. */
   async reject(actorId: string, id: string, targetId: string): Promise<void> {
-    await this.requireModerator(actorId, id);
-    const { count } = await this.prisma.communityMember.deleteMany({ where: { communityId: id, userId: targetId, status: 'pending' } });
-    if (!count) throw Errors.notFound('Join request not found');
+    await this.prisma.$transaction(async (tx) => {
+      await lockCommunity(tx, id);
+      if (!isMod(await membership(tx, id, actorId))) throw Errors.forbidden('Only the owner and moderators can do this');
+      const { count } = await tx.communityMember.deleteMany({ where: { communityId: id, userId: targetId, status: 'pending' } });
+      if (!count) throw Errors.notFound('Join request not found');
+    });
   }
 
   /**
@@ -253,36 +259,35 @@ export class CommunitiesService {
    * the previous owner becomes a moderator.
    */
   async setRole(actorId: string, id: string, targetId: string, role: CommunityRole): Promise<void> {
-    const community = await this.requireLive(id);
-    if (community.ownerId !== actorId) throw Errors.forbidden('Only the owner can change roles');
-    if (targetId === actorId) throw Errors.badRequest('INVALID_TARGET', "You can't change your own role");
-    const changed = await this.prisma.$transaction(async (tx) => {
-      const target = await tx.communityMember.findUnique({ where: { communityId_userId: { communityId: id, userId: targetId } } });
+    const result = await this.prisma.$transaction(async (tx) => {
+      const community = await lockCommunity(tx, id);
+      if (community.ownerId !== actorId) throw Errors.forbidden('Only the owner can change roles');
+      if (targetId === actorId) throw Errors.badRequest('INVALID_TARGET', "You can't change your own role");
+      const target = await membership(tx, id, targetId);
       if (!target || target.status !== 'active') throw Errors.notFound('Member not found');
-      if (target.role === role) return false;
+      if (target.role === role) return null;
       if (role === 'owner') {
         await lockUser(tx, targetId);
         const owned = await tx.community.count({ where: { ownerId: targetId, deletedAt: null } });
         if (owned >= COMMUNITY_LIMITS.ownedPerUser) throw Errors.conflict('COMMUNITY_LIMIT', 'The new owner already owns the maximum number of communities');
-        const { count } = await tx.community.updateMany({ where: { id, ownerId: actorId, deletedAt: null }, data: { ownerId: targetId } });
-        if (!count) throw Errors.conflict('CONFLICT', 'Ownership changed concurrently');
+        await tx.community.update({ where: { id }, data: { ownerId: targetId } });
         await tx.communityMember.update({ where: { communityId_userId: { communityId: id, userId: actorId } }, data: { role: 'moderator' } });
       }
       await tx.communityMember.update({ where: { communityId_userId: { communityId: id, userId: targetId } }, data: { role } });
-      return true;
+      return community;
     });
-    if (!changed) return;
-    await this.notifications.create(targetId, 'community_role', { communityId: id, communityName: community.name, role });
+    if (!result) return;
+    await this.notifications.create(targetId, 'community_role', { communityId: id, communityName: result.name, role });
   }
 
   /** Moderators remove members (active or pending); only the owner can remove moderators; nobody removes the owner. */
   async removeMember(actorId: string, id: string, targetId: string): Promise<void> {
-    await this.requireLive(id);
     const chatId = await this.prisma.$transaction(async (tx) => {
-      const actor = await tx.communityMember.findUnique({ where: { communityId_userId: { communityId: id, userId: actorId } } });
+      await lockCommunity(tx, id);
+      const actor = await membership(tx, id, actorId);
       if (!isMod(actor)) throw Errors.forbidden('Only the owner and moderators can remove members');
       if (targetId === actorId) throw Errors.badRequest('INVALID_TARGET', 'Use leave to leave the community');
-      const target = await tx.communityMember.findUnique({ where: { communityId_userId: { communityId: id, userId: targetId } } });
+      const target = await membership(tx, id, targetId);
       if (!target) throw Errors.notFound('Member not found');
       if (target.role === 'owner') throw Errors.forbidden("The owner can't be removed");
       if (target.role === 'moderator' && actor!.role !== 'owner') throw Errors.forbidden('Only the owner can remove moderators');
@@ -323,7 +328,7 @@ export class CommunitiesService {
   }
 
   private async assertNameFree(tx: Tx, name: string): Promise<void> {
-    const taken = await tx.community.findFirst({ where: { deletedAt: null, name: { equals: name, mode: 'insensitive' } }, select: { id: true } });
+    const taken = await tx.community.findFirst({ where: { deletedAt: null, nameKey: communityNameKey(name) }, select: { id: true } });
     if (taken) throw nameTaken();
   }
 
@@ -343,12 +348,6 @@ export class CommunitiesService {
     const c = await this.prisma.community.findFirst({ where: { id, deletedAt: null }, include: avatarInclude });
     if (!c) throw notFound();
     return c;
-  }
-
-  private async requireModerator(actorId: string, id: string): Promise<Community> {
-    const community = await this.requireLive(id);
-    if (!isMod(await this.membershipOf(id, actorId))) throw Errors.forbidden('Only the owner and moderators can do this');
-    return community;
   }
 
   private membershipOf(communityId: string, userId: string): Promise<Membership | null> {
@@ -388,6 +387,30 @@ export class CommunitiesService {
 const avatarInclude = { avatar: { select: { key: true, thumbKey: true } } } satisfies Prisma.CommunityInclude;
 
 const alreadyMember = () => Errors.conflict('ALREADY_MEMBER', 'You are already a member or have a pending request');
+
+/** First step of every membership mutation: the community row lock (404 if missing or deleted). */
+async function lockCommunity(tx: Tx, id: string): Promise<Community> {
+  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM communities WHERE id = ${id}::uuid AND deleted_at IS NULL FOR UPDATE`;
+  if (!rows[0]) throw notFound();
+  return tx.community.findUniqueOrThrow({ where: { id } });
+}
+
+const membership = (tx: Tx, communityId: string, userId: string): Promise<Membership | null> =>
+  tx.communityMember.findUnique({ where: { communityId_userId: { communityId, userId } }, select: { role: true, status: true } });
+
+/** A community avatar upload can belong to one community only (also enforced by a unique index). */
+async function assertAvatarFree(tx: Tx, uploadId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM uploads WHERE id = ${uploadId}::uuid FOR UPDATE`;
+  if (await tx.community.count({ where: { avatarUploadId: uploadId } })) throw uploadInUse();
+}
+
+const uploadInUse = () => Errors.badRequest('INVALID_UPLOAD', 'This upload is already used elsewhere');
+
+/** Unique violations from create/update: the avatar index → INVALID_UPLOAD, the name index → NAME_TAKEN. */
+function uniqueToApiError(err: unknown): unknown {
+  if (!isUniqueViolation(err)) return err;
+  return JSON.stringify((err as Prisma.PrismaClientKnownRequestError).meta ?? {}).includes('avatar') ? uploadInUse() : nameTaken();
+}
 
 /** Serializes one user's membership changes so the per-user limits can't be raced past. */
 async function lockUser(tx: Tx, userId: string): Promise<void> {

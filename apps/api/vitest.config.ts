@@ -38,6 +38,7 @@ export default defineConfig({
             LOG_LEVEL: 'silent',
             DATABASE_URL: TEST_DATABASE_URL,
             REDIS_URL: process.env.TEST_REDIS_URL ?? 'redis://localhost:6379/15',
+            PRISMA_COUNT_QUERIES: '1',
             JWT_ACCESS_SECRET: 'test-access-secret-test-access-secret-0123456789',
             OTP_SECRET: 'test-otp-secret-test-otp-secret-0123456789abcdef',
             SMS_PROVIDER: 'console',

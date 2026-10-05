@@ -93,13 +93,36 @@ export type MessageDeletedEvent = { chatId: string; messageId: string };
 
 /* ---------- request schemas ---------- */
 
+/**
+ * Display form of a community name: NFKC (fullwidth/compatibility forms folded, composed accents), any run
+ * of whitespace → one space, trimmed, trailing punctuation removed. Confusable letters from other scripts
+ * (e.g. Cyrillic "С" vs Latin "C") are NOT folded — out of scope.
+ */
+export function normalizeCommunityName(raw: string): string {
+  return raw
+    .normalize('NFKC')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .replace(/[\p{P}\p{S}]+$/u, '')
+    .trim();
+}
+
+/** Uniqueness key among live communities. */
+export const communityNameKey = (name: string): string => normalizeCommunityName(name).toLowerCase();
+
 export const communityNameSchema = z
   .string()
-  .trim()
-  .min(COMMUNITY_LIMITS.nameMin)
-  .max(COMMUNITY_LIMITS.nameMax)
+  .max(COMMUNITY_LIMITS.nameMax * 2)
+  // Checked on the raw input: invisible characters and line breaks are rejected, not silently folded.
   .refine((v) => !INVISIBLE_RE.test(v) && !/[\t\n]/.test(v), 'Contains invalid characters')
-  .refine((v) => /[\p{L}\p{N}]/u.test(v), 'Must contain a letter or digit');
+  .transform(normalizeCommunityName)
+  .pipe(
+    z
+      .string()
+      .min(COMMUNITY_LIMITS.nameMin)
+      .max(COMMUNITY_LIMITS.nameMax)
+      .refine((v) => /[\p{L}\p{N}]/u.test(v), 'Must contain a letter or digit'),
+  );
 
 export const communityDescriptionSchema = z
   .string()

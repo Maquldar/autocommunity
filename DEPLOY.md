@@ -40,3 +40,13 @@ Every push to `main` redeploys automatically. Data is kept; the demo seed runs o
 - **Login says "too many attempts":** OTP limits are per phone and per IP. Wait an hour, or use another `+7` number.
 
 What was verified before shipping this: the exact build and start scripts were run locally with Render's environment (production mode, demo mode, Postgres file storage, no `.env` files). The full Playwright suite passed against it (24/24). Render itself was **not** tested from here (no account in the build environment), so the first real deploy is the final check. Watch the build log.
+
+## Client IP (rate limits)
+
+Rate limits key on `req.ip`, which Express derives from `X-Forwarded-For` using `TRUST_PROXY` (the number of
+proxies to trust). On the single-service Render deploy the chain is client → Render's proxy → Next
+(rewrite on loopback) → API, so `render.yaml` sets `TRUST_PROXY=2`. **Verify after the first deploy:** run
+the API with `LOG_LEVEL=debug` once and look for the `TrustProxy` log line written on the first request — `ip`
+must be your own public address, not a Render/loopback address and not whatever you put in a forged
+`X-Forwarded-For` header (`curl -H 'X-Forwarded-For: 1.2.3.4' …` must not change it). Adjust the hop count
+if Render changes its proxying.

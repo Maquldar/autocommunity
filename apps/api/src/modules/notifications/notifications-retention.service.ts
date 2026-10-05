@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } fro
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 
 /** Read notifications older than this are deleted; unread ones are kept. */
 export const NOTIFICATION_RETENTION_DAYS = 90;
@@ -24,12 +25,14 @@ export class NotificationsRetentionService implements OnApplicationBootstrap, On
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   onApplicationBootstrap(): void {
-    const run = () => void this.runIfDue().catch((err: unknown) => this.logger.warn({ err }, 'Notification retention failed'));
+    const run = () => this.tasks.run('Notification retention', () => this.runIfDue());
     this.timers.push(setTimeout(run, FIRST_RUN_DELAY_MS), setInterval(run, DAY_MS));
     for (const t of this.timers) t.unref();
+    this.tasks.registerProducer('Notification retention timer', () => this.onApplicationShutdown());
   }
 
   onApplicationShutdown(): void {

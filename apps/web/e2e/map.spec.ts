@@ -145,12 +145,17 @@ test('new driver: map loads, zoom-out hint, invisibility and location sharing', 
     await expect.poll(zoomOf).toBeLessThan(before - 0.5);
   }
   await expect(hint).toBeVisible({ timeout: 10_000 });
-  for (let i = 0; i < 4 && (await hint.isVisible()); i += 1) {
-    const before = await zoomOf();
-    await hint.getByRole('button', { name: 'Zoom in' }).click();
-    await expect.poll(zoomOf).toBeGreaterThan(before + 0.5);
-  }
-  await expect(hint).toBeHidden();
+  // The hint re-renders after each settled move, so checking it right after a zoom can still see the old
+  // state (and then click a button that is going away). Converge instead: click while it is shown, then
+  // give it a moment to disappear; retry until it does.
+  await expect(async () => {
+    if (await hint.isVisible()) {
+      const before = await zoomOf();
+      await hint.getByRole('button', { name: 'Zoom in' }).click({ timeout: 2_000 });
+      await expect.poll(zoomOf).toBeGreaterThan(before + 0.5);
+    }
+    await expect(hint).toBeHidden({ timeout: 1_500 });
+  }).toPass({ timeout: 30_000 });
   expect(bigRequests).toEqual([]);
 
   // Invisible and back (new users start in "My communities").

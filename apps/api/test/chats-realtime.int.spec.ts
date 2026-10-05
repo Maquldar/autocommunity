@@ -208,3 +208,44 @@ describe('chat realtime over polling', () => {
     expect(pushSender.sent[0]!.payload.body).toBe('offline');
   });
 });
+
+describe('socket hardening (review M4 / L3)', () => {
+  it('a removal racing the connect never leaves the socket in the chat room (25 iterations; under the 30/min message limit)', async () => {
+    const owner = await createUser(t);
+    const cid = await createCommunity(t, owner.id);
+    const chatId = await chatIdOf(cid);
+    for (let i = 0; i < 25; i++) {
+      const m = await createUser(t);
+      await request(t.http).post(`/api/v1/communities/${cid}/join`).set(bearer(m.token)).expect(200);
+      const connecting = connect(m);
+      // Spread the removal over the whole handshake (auth middleware → connection).
+      await new Promise((r) => setTimeout(r, (i % 20) * 1.5));
+      await request(t.http).delete(`/api/v1/communities/${cid}/members/${m.id}`).set(bearer(owner.token)).expect(204);
+      const s = await connecting;
+      await settle();
+      const leaked = collect(s, 'message:new', 300);
+      await send(owner, chatId, `after removal ${i}`).expect(201);
+      expect(await leaked, `iteration ${i}`).toEqual([]);
+      s.disconnect();
+    }
+  }, 90_000);
+
+  it('disconnects a socket that floods client events', async () => {
+    const u = await createUser(t);
+    const s = await connect(u);
+    const disconnected = once<string>(s, 'disconnect');
+    for (let i = 0; i < 60; i++) s.emit('chat:join', { chatId: newId() }, () => undefined);
+    expect(await disconnected).toBe('io server disconnect');
+  });
+
+  it('keeps at most 10 sockets per user, disconnecting the oldest', async () => {
+    const u = await createUser(t);
+    const first = await connect(u);
+    const firstGone = once<string>(first, 'disconnect');
+    const rest: Socket[] = [];
+    for (let i = 0; i < 10; i++) rest.push(await connect(u));
+    expect(await firstGone).toBe('io server disconnect');
+    await settle();
+    expect(rest.every((s) => s.connected)).toBe(true);
+  });
+});

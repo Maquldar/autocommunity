@@ -5,6 +5,8 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { RealtimeService } from '../src/modules/realtime/realtime.service';
 import { SosDispatchService } from '../src/modules/sos/sos-dispatch.service';
+import { SosBroadcastService } from '../src/modules/sos/sos-broadcast.service';
+import { BackgroundTasks } from '../src/infra/tasks/background-tasks';
 import { bearer, createTestApp, createUser, setLocation, waitFor, type CreateUserData, type TestApp } from './support/app';
 
 const STEP_MS = 700;
@@ -114,6 +116,9 @@ describe('dispatch', () => {
     await waitFor(async () => (await dispatchedIds(sos.id)).length === 20);
     expect((await dispatchedIds(sos.id)).sort()).toEqual(users.slice(0, 20).map((u) => u.id).sort());
     await waitFor(async () => (await dispatchedIds(sos.id)).length === 25, 5000);
+    // Notifications are written right after the dispatch rows commit: wait for them, then check none doubled.
+    const ids = users.map((u) => u.id);
+    await waitFor(async () => (await t.prisma.notification.count({ where: { userId: { in: ids }, type: 'sos_nearby' } })) === 25, 5000);
     for (const u of users) expect(await t.prisma.notification.count({ where: { userId: u.id, type: 'sos_nearby' } })).toBe(1);
   });
 
@@ -171,6 +176,108 @@ describe('expiry', () => {
     await t.prisma.$executeRaw`UPDATE sos_requests SET expires_at = now() - interval '1 minute' WHERE id = ${s3.id}::uuid`;
     expect(await t.app.get(SosDispatchService).sweepExpired()).toBeGreaterThanOrEqual(1);
     expect((await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: s3.id } })).status).toBe('expired');
+  });
+});
+
+describe('lifetime limits (review M1)', () => {
+  it('a transition on a created SOS past expiresAt expires it first and answers 409', async () => {
+    const a = area();
+    const requester = await userAt(a.km(0));
+    const helper = await userAt(a.km(1));
+    const sos = await createSos(requester, a.km(0));
+    await t.prisma.$executeRaw`UPDATE sos_requests SET expires_at = now() - interval '5 minutes' WHERE id = ${sos.id}::uuid`;
+    const res = await request(t.http).post(`/api/v1/sos/${sos.id}/respond`).set(bearer(helper.token)).expect(409);
+    expect(res.body.error.code).toBe('SOS_INVALID_STATE');
+    expect((await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: sos.id } })).status).toBe('expired');
+    expect(await t.prisma.notification.count({ where: { userId: requester.id, type: 'sos_status' } })).toBe(1);
+    expect((await request(t.http).post(`/api/v1/sos/${sos.id}/cancel`).set(bearer(requester.token)).send({}).expect(409)).body.error.code).toBe('SOS_INVALID_STATE');
+  });
+
+  it('an accepted / in-progress SOS times out 24 h after acceptance; everyone is told', async () => {
+    for (const arrive of [false, true]) {
+      const a = area();
+      const requester = await userAt(a.km(0));
+      const helper = await userAt(a.km(1));
+      const sos = await createSos(requester, a.km(0));
+      const r = (await request(t.http).post(`/api/v1/sos/${sos.id}/respond`).set(bearer(helper.token)).expect(200)).body as SosDto;
+      const accepted = (await request(t.http).post(`/api/v1/sos/${sos.id}/responses/${r.responses[0]!.id}/accept`).set(bearer(requester.token)).expect(200)).body as SosDto;
+      if (arrive) await request(t.http).post(`/api/v1/sos/${sos.id}/arrived`).set(bearer(helper.token)).expect(200);
+      const service = t.app.get(SosDispatchService);
+      await service.sweepExpired();
+      expect((await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: sos.id } })).status).toBe(arrive ? 'in_progress' : 'accepted');
+      await t.prisma.$executeRaw`UPDATE sos_requests SET accepted_at = now() - interval '25 hours' WHERE id = ${sos.id}::uuid`;
+      expect(await service.sweepExpired()).toBeGreaterThanOrEqual(1);
+      const row = await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: sos.id } });
+      expect(row.status).toBe('expired');
+      expect(row.closedAt).not.toBeNull();
+      for (const u of [requester, helper]) {
+        expect((await t.prisma.notification.findFirstOrThrow({ where: { userId: u.id, type: 'sos_status' }, orderBy: { createdAt: 'desc' } })).payload).toMatchObject({ status: 'expired', event: 'timeout' });
+      }
+      const last = await t.prisma.message.findFirstOrThrow({ where: { chatId: accepted.chatId! }, orderBy: { createdAt: 'desc' } });
+      expect(last).toMatchObject({ type: 'system', text: 'sos.timed_out' });
+      // No help is confirmed by a timeout.
+      expect(await t.prisma.ratingEvent.count({ where: { userId: helper.id, reason: 'help_confirmed' } })).toBe(0);
+    }
+  });
+});
+
+describe('bounded work (review M6 / L5)', () => {
+  const queriesOf = async (fn: () => Promise<unknown>) => {
+    const prisma = t.prisma as unknown as { queryCount: number };
+    await t.app.get(BackgroundTasks).drain();
+    const before = prisma.queryCount;
+    await fn();
+    await t.app.get(BackgroundTasks).drain();
+    return prisma.queryCount - before;
+  };
+
+  it('sos:update to 30 participants takes a bounded number of queries', async () => {
+    const a = area();
+    const requester = await userAt(a.km(0));
+    const sos = await createSos(requester, a.km(0));
+    const users = await Promise.all(Array.from({ length: 30 }, () => createUser(t)));
+    await t.prisma.sosDispatch.createMany({ data: users.map((u) => ({ sosId: sos.id, userId: u.id, distanceM: 1000, notifiedAt: new Date() })) });
+    const n = await queriesOf(() => t.app.get(SosBroadcastService).send(sos.id, 'sos:update'));
+    expect(n).toBeLessThanOrEqual(15);
+  });
+
+  it('dispatch cost does not grow with the number of notified users', async () => {
+    const costFor = async (recipients: number) => {
+      const a = area();
+      const requester = await userAt(a.km(0));
+      for (let i = 0; i < recipients; i++) await userAt(a.km(30 + i * 0.01)); // outside 20 km: not picked up automatically
+      const sos = await createSos(requester, a.km(0));
+      await sleep(STEP_MS * 3); // let the scheduled steps run (nobody in range)
+      await t.prisma.$executeRaw`
+        UPDATE user_locations SET location = ST_SetSRID(ST_MakePoint(${a.lng}::float8, ${a.lat + 0.01}::float8), 4326)::geography
+        WHERE user_id IN (SELECT id FROM users WHERE id <> ${requester.id}::uuid) AND ST_DWithin(location, ST_SetSRID(ST_MakePoint(${a.lng}::float8, ${a.lat + 30 / 111.32}::float8), 4326)::geography, 5000)`;
+      let notified: string[] = [];
+      const n = await queriesOf(async () => {
+        notified = await t.app.get(SosDispatchService).dispatch(sos.id, 0);
+      });
+      expect(notified).toHaveLength(recipients);
+      return n;
+    };
+    // The counter is process-wide, so unrelated background work (expiry sweep, delayed dispatch steps of
+    // other SOS) can land inside a measurement. It can only add queries, so the minimum of repeated
+    // measurements is the dispatch's own cost.
+    const cheapest = async (recipients: number) => Math.min(await costFor(recipients), await costFor(recipients));
+    const few = await cheapest(3);
+    const many = await cheapest(18);
+    expect(many - few).toBeLessThanOrEqual(1);
+  });
+
+  it('a retried dispatch notifies rows left unnotified, exactly once', async () => {
+    const a = area();
+    const requester = await userAt(a.km(0));
+    const sos = await createSos(requester, a.km(0));
+    await sleep(100);
+    const stranded = await createUser(t);
+    await t.prisma.sosDispatch.create({ data: { sosId: sos.id, userId: stranded.id, distanceM: 1234, notifiedAt: null } });
+    await t.app.get(SosDispatchService).dispatch(sos.id, 0);
+    await t.app.get(SosDispatchService).dispatch(sos.id, 0);
+    expect(await t.prisma.notification.count({ where: { userId: stranded.id, type: 'sos_nearby' } })).toBe(1);
+    expect((await t.prisma.sosDispatch.findUniqueOrThrow({ where: { sosId_userId: { sosId: sos.id, userId: stranded.id } } })).notifiedAt).not.toBeNull();
   });
 });
 

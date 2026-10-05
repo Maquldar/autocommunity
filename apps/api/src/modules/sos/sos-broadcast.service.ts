@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { RealtimeService, sosRoom } from '../realtime/realtime.service';
 import { SosViewService } from './sos-view.service';
 
@@ -16,6 +17,7 @@ export class SosBroadcastService {
     private readonly prisma: PrismaService,
     private readonly view: SosViewService,
     private readonly realtime: RealtimeService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   async participants(sosId: string): Promise<string[]> {
@@ -28,7 +30,7 @@ export class SosBroadcastService {
 
   /** Best effort: failures are logged, never thrown into the caller's request. */
   update(sosId: string): void {
-    void this.send(sosId, 'sos:update').catch((err: unknown) => this.logger.warn({ err, sosId }, 'sos:update failed'));
+    this.tasks.run(`sos:update ${sosId}`, () => this.send(sosId, 'sos:update'));
   }
 
   async send(sosId: string, event: 'sos:update' | 'sos:new', only?: string[]): Promise<void> {

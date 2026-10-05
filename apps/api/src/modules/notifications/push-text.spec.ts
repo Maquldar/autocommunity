@@ -58,3 +58,14 @@ describe('pushPayloadFor (sos)', () => {
     expect(pushPayloadFor('sos_status', { status: 'closed' }, 'en')).toBeNull();
   });
 });
+
+describe('pushPayloadFor (reviews)', () => {
+  it('renders review_received', () => {
+    expect(pushPayloadFor('review_received', { reviewId: 'r1', sosId: 's', stars: 5, author: user }, 'ru')).toEqual({
+      title: 'Новый отзыв',
+      body: 'Айдар (@aidar) оценил(а) вас на 5★',
+      url: `/u/${user.id}?tab=reviews`,
+      tag: 'review:r1',
+    });
+  });
+});

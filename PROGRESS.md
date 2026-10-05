@@ -6,8 +6,8 @@
 | 1. Foundation, auth, profile, vehicles | ✅ done |
 | 2. Map, privacy, friends, notifications | ✅ done |
 | 3. Communities + chat | ✅ done |
-| 4. SOS + direct chats | ⏳ |
-| 5. Ratings, reviews, reports | ⏳ |
+| 4. SOS + direct chats | 🚧 API done (direct chats shipped in Phase 3), UI in progress |
+| 5. Ratings, reviews, reports | 🚧 API done, UI pending |
 | 6. Admin, antifraud, hardening | ⏳ |
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ⏳ |
@@ -90,3 +90,26 @@
 **Known issues**
 - Admin approval of photo visits and pending services comes in Phase 6.
 - The map tiles can't load in the build sandbox, so screenshots show a blank map background.
+
+## Phase 4 + 5 — APIs (2026-10-05)
+
+**Built**
+- **SOS:** creation gates; dispatch with radius expansion 5 → 10 → 20 km via BullMQ; lifecycle state machine (exhaustively tested); up to 3 helpers; SOS group chat; contact-phone rules; a rotating share link with a public page; expiry plus a 24 h timeout for abandoned SOS.
+- **Trust rating:** the formula from SPEC A-8 (weights, caps, 180-day decay, penalties expiring after 365 days) as a pure function with a ledger, transactional recompute and a daily job. Public breakdown, private ledger.
+- **SOS reviews:** both directions, a 14-day window, `canReview` / `reviewTargets`. **Reports** on users, messages, SOS, communities and services, with target resolution and limits.
+
+**Review gate (Phases 3 + 4 backend):** 2 high, 7 medium and 6 low findings, all fixed with tests.
+- High: SOS harvesting from anywhere, now limited to a fresh, trusted stored location (> 300 km/h jumps aren't trusted for 10 min).
+- High: an ownership-transfer race that left a community owned by a non-member.
+- Medium: expired SOS still actionable, account deletion leftovers, the onboarding gate, socket-room races, upload reuse, SOS fan-out N+1, unicode-confusable community names.
+
+**Tested (lead, merged with Phase 7):** API 305/305 (3 consecutive green runs before the merge); shared 38/38; web unit 303/303; e2e 46 passed, 4 skipped by design, 2 consecutive full runs.
+
+**Fixed while verifying**
+- A process-wide query counter made a performance test flaky (background jobs). The test now takes the minimum of repeated measurements, and counting is test-only.
+- A socket that was still in the auth middleware missed `socketsLeave`, so it could stay in a chat room after removal. Rooms are now re-checked on `connection`.
+- The map e2e zoom-in loop raced the hint re-render. It now uses a converging `toPass` check.
+
+**Known issues**
+- After a removal that coincides with the user's connect, a socket can still receive a chat event for the duration of one DB query (~1–3 ms).
+- Uploads used as service photos aren't part of the exclusive-attachment check yet (the services module was built in parallel).

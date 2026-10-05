@@ -9,13 +9,20 @@ import { isUserBlocked, UserStateService } from '../../common/auth/user-state.se
 import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { chatRefSchema, CHAT_LIMITS } from '@autoc/shared';
+import { closeRedis } from '../../infra/redis/close-redis';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
 import { chatRoom, RealtimeService, sosRoom, userRoom } from './realtime.service';
 
 export const REALTIME_NAMESPACE = '/rt';
 
 export type SocketData = { userId: string };
+
+/** Client → server events per socket: burst and sustained rate per second. */
+export const EVENT_BURST = 20;
+export const EVENT_RATE = 20;
+export const MAX_SOCKETS_PER_USER = 10;
 
 /** Handshake failure surfaced to the client as `connect_error` with `message === 'UNAUTHORIZED'`. */
 function unauthorized(code: 'UNAUTHORIZED' | 'ACCOUNT_BLOCKED' = 'UNAUTHORIZED'): Error {
@@ -43,6 +50,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     private readonly realtime: RealtimeService,
     private readonly redis: RedisService,
     private readonly userView: UserViewService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   afterInit(ns: Namespace): void {
@@ -61,7 +69,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
   async onApplicationShutdown(): Promise<void> {
     const sub = this.subscriber;
     this.subscriber = null;
-    if (sub) await sub.quit().catch(() => sub.disconnect());
+    if (sub) await closeRedis(sub);
   }
 
   private async authenticate(socket: Socket): Promise<void> {
@@ -78,6 +86,8 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     // Joined before `connect` reaches the client, so no event emitted after that can be missed.
     const [chatIds, sosIds] = await Promise.all([this.chatIdsOf(claims.sub), this.openSosIdsOf(claims.sub)]);
     await socket.join([userRoom(claims.sub), ...chatIds.map(chatRoom), ...sosIds.map(sosRoom)]);
+    // A membership revoked between the query and the join must not stick (see also onConnection).
+    await this.pruneRooms(socket, claims.sub);
     // A revocation published between the first check and the join would have missed this socket: check again.
     const after = await this.userState.getForAuth(claims.sub);
     const revoked = after.revokedBeforeMs !== null && claims.issuedAtMs <= after.revokedBeforeMs;
@@ -110,21 +120,38 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     return rows.map((r) => r.id);
   }
 
+  /** Leaves every chat/sos room the user is no longer allowed in (re-check after a join). */
+  private async pruneRooms(socket: Socket, userId: string): Promise<void> {
+    const [chatIds, sosIds] = await Promise.all([this.chatIdsOf(userId), this.openSosIdsOf(userId)]);
+    const allowed = new Set([...chatIds.map(chatRoom), ...sosIds.map(sosRoom)]);
+    for (const room of [...socket.rooms]) {
+      if ((room.startsWith('chat:') || room.startsWith('sos:')) && !allowed.has(room)) await socket.leave(room);
+    }
+  }
+
   private registerChatHandlers(socket: Socket, userId: string): void {
     socket.on('chat:join', (payload: unknown, ack?: unknown) => {
       const reply = typeof ack === 'function' ? (ack as (r: { ok: boolean }) => void) : () => undefined;
       const parsed = chatRefSchema.safeParse(payload);
       if (!parsed.success) return reply({ ok: false });
-      this.chatIdsOf(userId, parsed.data.chatId)
-        .then(async (ids) => {
-          if (!ids.length) return reply({ ok: false });
-          await socket.join(chatRoom(parsed.data.chatId));
+      const room = chatRoom(parsed.data.chatId);
+      // The socket's rooms are the cache of allowed chats: membership grants join them, revocations leave them.
+      if (socket.rooms.has(room)) return reply({ ok: true });
+      this.tasks.run('chat:join', async () => {
+        try {
+          if (!(await this.chatIdsOf(userId, parsed.data.chatId)).length) return reply({ ok: false });
+          await socket.join(room);
+          // Re-check after joining: a removal that raced the check must not leave us in the room.
+          if (!(await this.chatIdsOf(userId, parsed.data.chatId)).length) {
+            await socket.leave(room);
+            return reply({ ok: false });
+          }
           reply({ ok: true });
-        })
-        .catch((err: unknown) => {
-          this.logger.warn({ err }, 'chat:join failed');
+        } catch (err) {
           reply({ ok: false });
-        });
+          throw err;
+        }
+      });
     });
     socket.on('chat:leave', (payload: unknown) => {
       const parsed = chatRefSchema.safeParse(payload);
@@ -134,7 +161,7 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
       const parsed = chatRefSchema.safeParse(payload);
       // Room membership mirrors chat membership (joined on connect / grant, left on revoke).
       if (!parsed.success || !socket.rooms.has(chatRoom(parsed.data.chatId))) return;
-      void this.relayTyping(userId, parsed.data.chatId).catch((err: unknown) => this.logger.warn({ err }, 'chat:typing failed'));
+      this.tasks.run('chat:typing', () => this.relayTyping(userId, parsed.data.chatId));
     });
   }
 
@@ -150,11 +177,46 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
   /** Sends the current unread count so the badge is right after (re)connecting. */
   private onConnection(socket: Socket): void {
     const { userId } = socket.data as SocketData;
+    this.limitEventRate(socket);
     this.registerChatHandlers(socket, userId);
-    this.prisma.notification
-      .count({ where: { userId, readAt: null } })
-      .then((count) => socket.emit('notification:count', { count }))
-      .catch((err: unknown) => this.logger.warn({ err }, 'Failed to send the unread count'));
+    // Rooms were joined in the auth middleware, but until `connection` the socket isn't in the namespace's
+    // socket map, so a `socketsLeave` issued by a membership revocation in that window skipped it. Any such
+    // revocation committed before this point, so one more check now closes the gap; later ones reach it.
+    this.tasks.run('Prune rooms after connect', () => this.pruneRooms(socket, userId));
+    this.tasks.run('Socket limit per user', () => this.enforceSocketLimit(userId));
+    this.tasks.run('Initial notification:count', async () => {
+      const count = await this.prisma.notification.count({ where: { userId, readAt: null } });
+      socket.emit('notification:count', { count });
+    });
+  }
+
+  /**
+   * Token bucket per socket for client → server events: bursts up to EVENT_BURST, refilled EVENT_RATE per
+   * second. A client that exceeds it is disconnected (flooding chat:join / chat:typing).
+   */
+  private limitEventRate(socket: Socket): void {
+    let tokens = EVENT_BURST;
+    let last = Date.now();
+    socket.use((_packet, next) => {
+      const now = Date.now();
+      tokens = Math.min(EVENT_BURST, tokens + ((now - last) / 1000) * EVENT_RATE);
+      last = now;
+      if (tokens < 1) {
+        this.logger.warn({ userId: (socket.data as SocketData).userId }, 'Socket event flood, disconnecting');
+        socket.disconnect(true);
+        return;
+      }
+      tokens -= 1;
+      next();
+    });
+  }
+
+  /** At most MAX_SOCKETS_PER_USER sockets per user across instances; the oldest ones are disconnected. */
+  private async enforceSocketLimit(userId: string): Promise<void> {
+    const sockets = await this.ns.in(userRoom(userId)).fetchSockets();
+    if (sockets.length <= MAX_SOCKETS_PER_USER) return;
+    const oldestFirst = [...sockets].sort((a, b) => a.handshake.issued - b.handshake.issued);
+    for (const s of oldestFirst.slice(0, sockets.length - MAX_SOCKETS_PER_USER)) s.disconnect(true);
   }
 
   private subscribeToRevocations(): void {

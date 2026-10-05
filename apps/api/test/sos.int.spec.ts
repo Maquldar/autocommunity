@@ -2,6 +2,7 @@ import { SOS_LIMITS, type MessageDto, type SosDto } from '@autoc/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../src/common/ids';
+import { SosDispatchService } from '../src/modules/sos/sos-dispatch.service';
 import { bearer, createTestApp, createUser, makeFriends, nextIp, setLocation, waitFor, type CreateUserData, type TestApp } from './support/app';
 import { pngImage } from './support/images';
 
@@ -37,7 +38,8 @@ const sos = (u: U) => ({
   cancel: (id: string, reason?: string) => request(t.http).post(`/api/v1/sos/${id}/cancel`).set(bearer(u.token)).send(reason ? { reason } : {}),
   share: (id: string) => request(t.http).post(`/api/v1/sos/${id}/share`).set(bearer(u.token)),
   active: () => request(t.http).get('/api/v1/sos/active').set(bearer(u.token)),
-  nearby: (lat: number, lng: number) => request(t.http).get(`/api/v1/sos/nearby?lat=${lat}&lng=${lng}`).set(bearer(u.token)),
+  nearby: (lat?: number, lng?: number) =>
+    request(t.http).get(`/api/v1/sos/nearby${lat === undefined ? '' : `?lat=${lat}&lng=${lng}`}`).set(bearer(u.token)),
   history: (q = '') => request(t.http).get(`/api/v1/sos/history${q}`).set(bearer(u.token)),
   map: (bbox: string) => request(t.http).get(`/api/v1/map/sos?bbox=${bbox}`).set(bearer(u.token)),
 });
@@ -211,7 +213,7 @@ describe('lifecycle', () => {
     expect(await t.prisma.notification.count({ where: { userId: requester.id, type: 'sos_status' } })).toBe(1);
 
     const closed = (await sos(requester).close(id).expect(200)).body as SosDto;
-    expect(closed).toMatchObject({ status: 'closed', closedAt: expect.any(String), canReview: false });
+    expect(closed).toMatchObject({ status: 'closed', closedAt: expect.any(String), canReview: true, reviewTargets: [{ id: helper.id }] });
     const statusNote = await t.prisma.notification.findFirstOrThrow({ where: { userId: helper.id, type: 'sos_status' } });
     expect(statusNote.payload).toMatchObject({ sosId: id, status: 'closed' });
     const last = (await request(t.http).get(`/api/v1/chats/${chat.id}/messages?limit=1`).set(bearer(helper.token)).expect(200)).body.items[0];
@@ -333,7 +335,10 @@ describe('contact phone exposure', () => {
     for (const sharePhone of [false, true]) {
       const { a, requester, helpers, id, responses } = await scenario(2, { sharePhone });
       const [accepted, offered] = helpers as [U, U];
-      const viewer = await userAt(a.near(0.1), { rating: 10 });
+      const viewer = await userAt(a.near(0.1), { rating: 10 }); // can open the SOS, never dispatched
+      const dispatchedOnly = await userAt(a.near(0.004)); // eligible: will be dispatched, never responds
+      await t.app.get(SosDispatchService).dispatch(id, 0); // created after the SOS: run a dispatch step again
+      expect(await t.prisma.sosDispatch.count({ where: { sosId: id, userId: dispatchedOnly.id } })).toBe(1);
       const requesterPhone = (await t.prisma.user.findUniqueOrThrow({ where: { id: requester.id } })).phone;
       const acceptedPhone = (await t.prisma.user.findUniqueOrThrow({ where: { id: accepted.id } })).phone;
       await sos(requester).accept(id, responses[0]!).expect(200);
@@ -342,7 +347,10 @@ describe('contact phone exposure', () => {
       const asOffered = (await sos(offered).get(id).expect(200)).body as SosDto;
       const asAccepted = (await sos(accepted).get(id).expect(200)).body as SosDto;
       const asRequester = (await sos(requester).get(id).expect(200)).body as SosDto;
-      expect(asViewer.contactPhone).toBe(sharePhone ? requesterPhone : null);
+      const asDispatched = (await sos(dispatchedOnly).get(id).expect(200)).body as SosDto;
+      // sharePhone reaches people asked to help (dispatched) and responders — not every viewer within 20 km.
+      expect(asViewer.contactPhone).toBeNull();
+      expect(asDispatched.contactPhone).toBe(sharePhone ? requesterPhone : null);
       expect(asOffered.contactPhone).toBe(sharePhone ? requesterPhone : null);
       expect(asAccepted.contactPhone).toBe(requesterPhone);
       expect(asRequester.contactPhone).toBeNull();
@@ -352,6 +360,7 @@ describe('contact phone exposure', () => {
       expect(asAccepted.responses[0]!.helperPhone).toBeNull();
       expect(asViewer.responses).toEqual([]);
       expect(JSON.stringify(asViewer)).not.toContain(acceptedPhone!);
+      expect(JSON.stringify(asViewer)).not.toContain(requesterPhone!);
       if (!sharePhone) expect(JSON.stringify(asOffered)).not.toContain(requesterPhone!);
 
       // After the end nobody gets a phone.
@@ -389,18 +398,20 @@ describe('lists', () => {
     await sos(me).respond(theirs).expect(200);
 
     expect(((await sos(me).active().expect(200)).body as SosDto[]).map((s) => s.id).sort()).toEqual([mine, theirs].sort());
-    const near = (await sos(me).nearby(a.lat, a.lng).expect(200)).body as SosDto[];
+    const near = (await sos(me).nearby(a.lat, a.lng).expect(200)).body as SosDto[]; // hint = stored location
     expect(near.map((s) => s.id)).toEqual([theirs]); // not mine, not >20 km
     expect(near[0]!.distanceM).toBeGreaterThan(5000);
     await request(t.http).get('/api/v1/sos/nearby?lat=x&lng=1').set(bearer(me.token)).expect(400);
 
+    // map/sos: bbox semantics, but only SOS within 20 km of my stored location (farSos is ~60 km away).
     const bbox = `${a.lng - 0.1},${a.lat - 0.1},${a.lng + 0.6},${a.lat + 0.6}`;
     const map = (await sos(me).map(bbox).expect(200)).body.items as { id: string; type: string }[];
-    expect(map.map((i) => i.id).sort()).toEqual([theirs, farSos].sort());
+    expect(map.map((i) => i.id)).toEqual([theirs]);
     expect(Object.keys(map[0]!).sort()).toEqual(['createdAt', 'id', 'lat', 'lng', 'status', 'type']);
     expect((await sos(me).map('0,0,3,3').expect(400)).body.error.code).toBe('BBOX_TOO_LARGE');
+    expect(((await sos(far).map(bbox).expect(200)).body.items as { id: string }[]).map((i) => i.id)).toEqual([]); // far's own is excluded, others > 20 km
     await sos(other).cancel(theirs).expect(200);
-    expect(((await sos(me).map(bbox).expect(200)).body.items as { id: string }[]).map((i) => i.id)).toEqual([farSos]);
+    expect((await sos(me).map(bbox).expect(200)).body.items).toEqual([]);
 
     const hist = await sos(me).history('?limit=1').expect(200);
     const hist2 = await sos(me).history(`?limit=1&cursor=${hist.body.nextCursor}`).expect(200);
@@ -464,5 +475,161 @@ describe('friendship and SosDto', () => {
     const id = ((await sos(requester).create(body(a.near(0))).expect(201)).body as SosDto).id;
     expect((await sos(friend).get(id).expect(200)).body.requester).toMatchObject({ relation: 'friend', primaryVehicle: { plate: '123ABC02' } });
     expect((await sos(stranger).get(id).expect(200)).body.requester).toMatchObject({ relation: 'none', primaryVehicle: { plate: null } });
+  });
+});
+
+describe('SOS hardening (Phase 5)', () => {
+  it('nearby uses the stored fresh location; hints only within 1 km; 409 LOCATION_REQUIRED otherwise', async () => {
+    const a = area();
+    const requester = await userAt(a.near(0));
+    const id = ((await sos(requester).create(body(a.near(0))).expect(201)).body as SosDto).id;
+    const noLoc = await userAt(null);
+    expect((await request(t.http).get('/api/v1/sos/nearby').set(bearer(noLoc.token)).expect(409)).body.error.code).toBe('LOCATION_REQUIRED');
+    const stale = await userAt(null);
+    await setLocation(t, stale.id, a.lat, a.lng, 16);
+    expect((await sos(stale).nearby(a.lat, a.lng).expect(409)).body.error.code).toBe('LOCATION_REQUIRED');
+
+    const viewer = await userAt(a.near(0.05)); // ~5.6 km away
+    const plain = (await request(t.http).get('/api/v1/sos/nearby').set(bearer(viewer.token)).expect(200)).body as SosDto[];
+    expect(plain.map((x) => x.id)).toEqual([id]);
+    const fromStored = plain[0]!.distanceM!;
+    // A hint 500 m from the stored location is used as the origin.
+    const hint = a.near(0.0545);
+    const hinted = (await sos(viewer).nearby(hint.lat, hint.lng).expect(200)).body as SosDto[];
+    expect(hinted[0]!.distanceM).toBeGreaterThan(fromStored + 400);
+    // A far hint (right next to another SOS 100 km away) is ignored.
+    const elsewhere = await userAt(a.near(0.9));
+    await sos(elsewhere).create(body(a.near(0.9))).expect(201);
+    const far = a.near(0.9);
+    const spoofed = (await sos(viewer).nearby(far.lat, far.lng).expect(200)).body as SosDto[];
+    expect(spoofed.map((x) => x.id)).toEqual([id]);
+    expect(spoofed[0]!.distanceM).toBe(fromStored);
+  });
+
+  it('map/sos is empty without a stored location', async () => {
+    const a = area();
+    const requester = await userAt(a.near(0));
+    await sos(requester).create(body(a.near(0))).expect(201);
+    const noLoc = await userAt(null);
+    expect((await sos(noLoc).map(`${a.lng - 0.5},${a.lat - 0.5},${a.lng + 0.5},${a.lat + 0.5}`).expect(200)).body.items).toEqual([]);
+  });
+});
+
+describe('location trust and SOS visibility (review H1)', () => {
+  const put = (u: U, p: { lat: number; lng: number }) => request(t.http).put('/api/v1/me/location').set(bearer(u.token)).send(p);
+  /** Pretend the previous update happened `sec` seconds ago and lift the 10 s throttle. */
+  const age = async (u: U, sec: number) => {
+    await t.prisma.$executeRaw`UPDATE user_locations SET updated_at = now() - make_interval(secs => ${sec}::float8) WHERE user_id = ${u.id}::uuid`;
+    await t.redis.del(`loc:throttle:${u.id}`);
+  };
+
+  it('marks implausible jumps (> 300 km/h) untrusted for 10 min; untrusted positions see and get nothing', async () => {
+    const a = area();
+    const requester = await userAt(a.near(0));
+    const id = ((await sos(requester).create(body(a.near(0))).expect(201)).body as SosDto).id;
+
+    const driver = await userAt(null);
+    await put(driver, a.near(0.5)).expect(204); // ~55 km away
+    await age(driver, 60);
+    await put(driver, a.near(0.6)).expect(204); // 11 km in 60 s ≈ 667 km/h → untrusted
+    const row = await t.prisma.userLocation.findUniqueOrThrow({ where: { userId: driver.id } });
+    expect(row.untrustedUntil!.getTime()).toBeGreaterThan(Date.now() + 9 * 60_000);
+
+    const teleporter = await userAt(null);
+    await put(teleporter, a.near(5)).expect(204); // far away
+    await age(teleporter, 30);
+    await put(teleporter, a.near(0.01)).expect(204); // ~550 km in 30 s: right next to the SOS, untrusted
+    expect((await sos(teleporter).nearby().expect(409)).body.error.code).toBe('LOCATION_REQUIRED');
+    await sos(teleporter).get(id).expect(404);
+    expect((await sos(teleporter).map(`${a.lng - 0.1},${a.lat - 0.1},${a.lng + 0.1},${a.lat + 0.1}`).expect(200)).body.items).toEqual([]);
+    expect(await t.app.get(SosDispatchService).dispatch(id, 2)).not.toContain(teleporter.id);
+
+    // A plausible move (5.5 km in 10 min ≈ 33 km/h) stays trusted; once the mark expires the position counts.
+    const commuter = await userAt(null);
+    await put(commuter, a.near(0.06)).expect(204);
+    await age(commuter, 600);
+    await put(commuter, a.near(0.01)).expect(204);
+    expect((await t.prisma.userLocation.findUniqueOrThrow({ where: { userId: commuter.id } })).untrustedUntil).toBeNull();
+    await sos(commuter).get(id).expect(200);
+    await t.prisma.userLocation.update({ where: { userId: teleporter.id }, data: { untrustedUntil: new Date(Date.now() - 1000) } });
+    await sos(teleporter).get(id).expect(200);
+  });
+
+  it('non-participants see only open SOS near a fresh position; participants keep access', async () => {
+    const { requester, helpers, id, responses } = await scenario(1);
+    const bystander = await userAt(null);
+    const p = await t.prisma.$queryRaw<{ lat: number; lng: number }[]>`SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM sos_requests WHERE id = ${id}::uuid`;
+    await setLocation(t, bystander.id, p[0]!.lat + 0.05, p[0]!.lng, 16); // stale
+    await sos(bystander).get(id).expect(404);
+    await setLocation(t, bystander.id, p[0]!.lat + 0.05, p[0]!.lng, 1); // fresh
+    await sos(bystander).get(id).expect(200);
+    await sos(requester).accept(id, responses[0]!).expect(200);
+    await sos(requester).close(id).expect(200);
+    await sos(bystander).get(id).expect(404); // closed: participants only
+    await sos(helpers[0]!).get(id).expect(200);
+    await sos(requester).get(id).expect(200);
+  });
+
+  it('rate limits /sos/nearby and /map/sos to 60/min per user', async () => {
+    const a = area();
+    const u = await userAt(a.near(0));
+    const now = Date.now();
+    for (const key of [`rl:sos-nearby:${u.id}`, `rl:sos-map:${u.id}`]) {
+      await t.redis.zadd(key, ...Array.from({ length: 60 }, (_, i) => [now - i, `m${i}`]).flat());
+    }
+    expect((await sos(u).nearby().expect(429)).body.error.code).toBe('RATE_LIMITED');
+    expect((await sos(u).map(`${a.lng},${a.lat},${a.lng + 0.1},${a.lat + 0.1}`).expect(429)).body.error.code).toBe('RATE_LIMITED');
+  });
+});
+
+describe('account deletion and SOS (review M2)', () => {
+  it('cancels the open SOS, withdraws live helps and anonymizes the user in every notification', async () => {
+    const s1 = await scenario(1); // the leaver is s1's accepted helper
+    const leaver = s1.helpers[0]!;
+    await t.prisma.user.update({ where: { id: leaver.id }, data: { name: 'Secret Helpername' } });
+    await sos(s1.requester).accept(s1.id, s1.responses[0]!).expect(200);
+    // The leaver's own open SOS, with someone offering help.
+    const helperOfLeaver = await userAt(s1.a.near(0.03));
+    const own = ((await sos(leaver).create(body(s1.a.near(0.02))).expect(201)).body as SosDto).id;
+    await sos(helperOfLeaver).respond(own).expect(200);
+
+    await request(t.http).delete('/api/v1/me').set(bearer(leaver.token)).send({ confirm: 'DELETE' }).expect(204);
+
+    expect(await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: own } })).toMatchObject({ status: 'cancelled', cancelReason: 'account_deleted' });
+    expect((await t.prisma.notification.findFirstOrThrow({ where: { userId: helperOfLeaver.id, type: 'sos_status' } })).payload).toMatchObject({ status: 'cancelled' });
+    expect(await t.prisma.sosRequest.findUniqueOrThrow({ where: { id: s1.id } })).toMatchObject({ status: 'created' });
+    const resp = await t.prisma.sosResponse.findFirstOrThrow({ where: { sosId: s1.id, helperId: leaver.id } });
+    expect(resp.status).toBe('withdrawn');
+    const toRequester = await t.prisma.notification.findMany({ where: { userId: s1.requester.id } });
+    // s1's requester was also dispatched to the leaver's own SOS (sos_nearby, actor under `requester`).
+    expect(toRequester.map((n) => n.type).sort()).toEqual(['sos_nearby', 'sos_response', 'sos_status']);
+    expect(JSON.stringify(await t.prisma.notification.findMany())).not.toContain('Secret Helpername');
+    for (const n of toRequester) {
+      const p = n.payload as { helper?: { name: string }; actor?: { name: string }; requester?: { name: string } };
+      expect((p.helper ?? p.actor ?? p.requester)!.name).toBe('Deleted user');
+    }
+  });
+});
+
+describe('review nits', () => {
+  it('an SOS ban also blocks responding', async () => {
+    const { a, id } = await scenario(0);
+    const banned = await userAt(a.near(0.01));
+    const until = new Date(Date.now() + 3600_000);
+    await t.prisma.user.update({ where: { id: banned.id }, data: { sosBannedUntil: until } });
+    expect((await sos(banned).respond(id).expect(403)).body.error).toMatchObject({ code: 'SOS_BANNED', details: { until: until.toISOString() } });
+  });
+
+  it('system messages cannot be deleted; the SOS chat turns read-only 24 h after the end', async () => {
+    const { requester, helpers, id, responses } = await scenario(1);
+    const chatId = ((await sos(requester).accept(id, responses[0]!).expect(200)).body as SosDto).chatId!;
+    const sys = await t.prisma.message.findFirstOrThrow({ where: { chatId, type: 'system' } });
+    expect((await request(t.http).delete(`/api/v1/chats/${chatId}/messages/${sys.id}`).set(bearer(requester.token)).expect(403)).body.error.code).toBe('FORBIDDEN');
+    await sos(requester).close(id).expect(200);
+    const say = (u: U) => request(t.http).post(`/api/v1/chats/${chatId}/messages`).set(bearer(u.token)).send({ type: 'text', text: 'спасибо' });
+    await say(helpers[0]!).expect(201); // still within 24 h of the end
+    await t.prisma.sosRequest.update({ where: { id }, data: { closedAt: new Date(Date.now() - 25 * 3600_000) } });
+    expect((await say(requester).expect(403)).body.error.code).toBe('CHAT_READ_ONLY');
+    await request(t.http).get(`/api/v1/chats/${chatId}/messages`).set(bearer(requester.token)).expect(200); // still readable
   });
 });

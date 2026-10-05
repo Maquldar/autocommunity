@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import type { Server, ServerOptions } from 'socket.io';
 import type { IncomingMessage } from 'node:http';
 import type { Env } from '../../config/env';
+import { closeRedis } from '../../infra/redis/close-redis';
 
 /** Socket.IO path; the web app's same-origin proxy forwards it to the API. */
 export const SOCKET_PATH = '/socket.io';
@@ -46,7 +47,7 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   override async dispose(): Promise<void> {
-    await Promise.all(this.clients.map((c) => c.quit().catch(() => c.disconnect())));
-    this.clients.length = 0;
+    const clients = this.clients.splice(0);
+    await Promise.all(clients.map((c) => closeRedis(c)));
   }
 }

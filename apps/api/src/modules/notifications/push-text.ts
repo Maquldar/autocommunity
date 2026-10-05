@@ -1,6 +1,6 @@
 import type { Locale, NotificationType, PushPayload, UserMini } from '@autoc/shared';
 
-type Ctx = { actor: string; community: string; role: string; sosType: string; distance: string; status: string };
+type Ctx = { actor: string; community: string; role: string; sosType: string; distance: string; status: string; stars: string };
 type Texts = { title: string; body: (c: Ctx) => string };
 
 const ROLE_NAMES: Record<Locale, Record<string, string>> = {
@@ -23,6 +23,7 @@ const SOS_STATUS_TEXT: Record<Locale, Record<string, string>> = {
     closed: 'SOS закрыт — спасибо за помощь!',
     cancelled: 'SOS отменён',
     expired: 'Никто не откликнулся, SOS истёк',
+    timeout: 'SOS закрыт автоматически: прошло 24 часа',
   },
   en: {
     withdrawn: '{actor} can no longer help',
@@ -32,6 +33,7 @@ const SOS_STATUS_TEXT: Record<Locale, Record<string, string>> = {
     closed: 'SOS closed — thanks for helping!',
     cancelled: 'SOS cancelled',
     expired: 'Nobody responded, the SOS expired',
+    timeout: 'SOS closed automatically after 24 hours',
   },
 };
 
@@ -51,6 +53,10 @@ const TEXTS: Partial<Record<NotificationType, Record<Locale, Texts>>> = {
   community_approved: {
     ru: { title: 'Заявка одобрена', body: (c) => `Вас приняли в «${c.community}»` },
     en: { title: 'Request approved', body: (c) => `You've been accepted to “${c.community}”` },
+  },
+  review_received: {
+    ru: { title: 'Новый отзыв', body: (c) => `${c.actor} оценил(а) вас на ${c.stars}★` },
+    en: { title: 'New review', body: (c) => `${c.actor} rated you ${c.stars}★` },
   },
   sos_nearby: {
     ru: { title: '🆘 SOS рядом', body: (c) => `${c.sosType} · ${c.distance} от вас — ${c.actor}` },
@@ -86,7 +92,7 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
   const l = asLocale(locale);
   const texts = TEXTS[type]?.[l];
   if (!texts) return null;
-  const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor) as UserMini | undefined;
+  const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor ?? payload.author) as UserMini | undefined;
   const sosId = typeof payload.sosId === 'string' ? payload.sosId : null;
   const meters = typeof payload.distanceM === 'number' ? payload.distanceM : null;
   const communityId = typeof payload.communityId === 'string' ? payload.communityId : null;
@@ -96,6 +102,7 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
     role: ROLE_NAMES[l][String(payload.role)] ?? String(payload.role ?? ''),
     sosType: SOS_TYPE_NAMES[l][String(payload.type)] ?? SOS_TYPE_NAMES[l].other!,
     distance: meters === null ? '' : meters < 1000 ? `${Math.round(meters / 10) * 10} ${l === 'ru' ? 'м' : 'm'}` : `${(meters / 1000).toFixed(1)} ${l === 'ru' ? 'км' : 'km'}`,
+    stars: String(payload.stars ?? ''),
     status: SOS_STATUS_TEXT[l][String(payload.event ?? payload.status)] ?? String(payload.status ?? ''),
   };
   const make = (url: string, tag: string): PushPayload => ({ title: texts.title, body: texts.body(ctx), url, tag });
@@ -110,6 +117,8 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
       return communityId ? make(`/communities/${communityId}`, `community_approved:${communityId}`) : null;
     case 'community_role':
       return communityId ? make(`/communities/${communityId}`, `community_role:${communityId}`) : null;
+    case 'review_received':
+      return user ? make(`/u/${user.id}?tab=reviews`, `review:${String(payload.reviewId)}`) : null;
     case 'sos_nearby':
     case 'sos_response':
     case 'sos_accepted':

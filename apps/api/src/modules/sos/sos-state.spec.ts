@@ -2,7 +2,7 @@ import { SOS_RESPONSE_STATUSES, SOS_STATUSES, type SosResponseStatus, type SosSt
 import { describe, expect, it } from 'vitest';
 import { sosTransition, type SosAction } from './sos-state';
 
-const ACTIONS: SosAction[] = ['respond', 'withdraw', 'accept', 'decline', 'arrived', 'close', 'cancel', 'expire'];
+const ACTIONS: SosAction[] = ['respond', 'withdraw', 'accept', 'decline', 'arrived', 'close', 'cancel', 'expire', 'timeout'];
 const RESPONSES: (SosResponseStatus | null)[] = [null, ...SOS_RESPONSE_STATUSES];
 const OPEN: SosStatus[] = ['created', 'accepted', 'in_progress'];
 
@@ -29,6 +29,8 @@ function expected(sos: SosStatus, response: SosResponseStatus | null, active: nu
       return open ? { sos: 'cancelled', response } : null;
     case 'expire':
       return sos === 'created' ? { sos: 'expired', response } : null;
+    case 'timeout':
+      return sos === 'accepted' || sos === 'in_progress' ? { sos: 'expired', response } : null;
   }
 }
 
@@ -50,7 +52,7 @@ describe('sosTransition (exhaustive)', () => {
         }
       }
     }
-    expect(checked).toBe(6 * 6 * 8 * 5);
+    expect(checked).toBe(6 * 6 * 9 * 5);
   });
 
   it('spot checks the key paths', () => {
@@ -63,5 +65,7 @@ describe('sosTransition (exhaustive)', () => {
     expect(sosTransition({ sos: 'created', response: 'declined', activeHelpers: 0 }, 'respond')).toEqual({ ok: false, code: 'SOS_INVALID_STATE' });
     expect(sosTransition({ sos: 'in_progress', response: null, activeHelpers: 1 }, 'respond')).toEqual({ ok: false, code: 'SOS_INVALID_STATE' });
     expect(sosTransition({ sos: 'accepted', response: null, activeHelpers: 1 }, 'expire')).toEqual({ ok: false, code: 'SOS_INVALID_STATE' });
+    expect(sosTransition({ sos: 'in_progress', response: null, activeHelpers: 1 }, 'timeout')).toEqual({ ok: true, sos: 'expired', response: null });
+    expect(sosTransition({ sos: 'created', response: null, activeHelpers: 0 }, 'timeout')).toEqual({ ok: false, code: 'SOS_INVALID_STATE' });
   });
 });
