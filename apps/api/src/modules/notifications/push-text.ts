@@ -1,11 +1,38 @@
 import type { Locale, NotificationType, PushPayload, UserMini } from '@autoc/shared';
 
-type Ctx = { actor: string; community: string; role: string };
+type Ctx = { actor: string; community: string; role: string; sosType: string; distance: string; status: string };
 type Texts = { title: string; body: (c: Ctx) => string };
 
 const ROLE_NAMES: Record<Locale, Record<string, string>> = {
   ru: { owner: 'владелец', moderator: 'модератор', member: 'участник' },
   en: { owner: 'the owner', moderator: 'a moderator', member: 'a member' },
+};
+
+const SOS_TYPE_NAMES: Record<Locale, Record<string, string>> = {
+  ru: { flat_tire: 'Пробито колесо', battery: 'Сел аккумулятор', fuel: 'Закончилось топливо', stuck: 'Застрял(а)', breakdown: 'Поломка', accident: 'ДТП', tow: 'Нужен эвакуатор', other: 'Нужна помощь' },
+  en: { flat_tire: 'Flat tire', battery: 'Dead battery', fuel: 'Out of fuel', stuck: 'Stuck', breakdown: 'Breakdown', accident: 'Accident', tow: 'Tow needed', other: 'Needs help' },
+};
+
+/** Status-change texts for `sos_status`, by the event the recipient is told about. */
+const SOS_STATUS_TEXT: Record<Locale, Record<string, string>> = {
+  ru: {
+    withdrawn: '{actor} больше не может помочь',
+    declined: 'Ваше предложение помощи отклонено',
+    arrived: '{actor} на месте',
+    in_progress: 'Помощь на месте',
+    closed: 'SOS закрыт — спасибо за помощь!',
+    cancelled: 'SOS отменён',
+    expired: 'Никто не откликнулся, SOS истёк',
+  },
+  en: {
+    withdrawn: '{actor} can no longer help',
+    declined: 'Your offer to help was declined',
+    arrived: '{actor} has arrived',
+    in_progress: 'Help has arrived',
+    closed: 'SOS closed — thanks for helping!',
+    cancelled: 'SOS cancelled',
+    expired: 'Nobody responded, the SOS expired',
+  },
 };
 
 const TEXTS: Partial<Record<NotificationType, Record<Locale, Texts>>> = {
@@ -25,6 +52,22 @@ const TEXTS: Partial<Record<NotificationType, Record<Locale, Texts>>> = {
     ru: { title: 'Заявка одобрена', body: (c) => `Вас приняли в «${c.community}»` },
     en: { title: 'Request approved', body: (c) => `You've been accepted to “${c.community}”` },
   },
+  sos_nearby: {
+    ru: { title: '🆘 SOS рядом', body: (c) => `${c.sosType} · ${c.distance} от вас — ${c.actor}` },
+    en: { title: '🆘 SOS nearby', body: (c) => `${c.sosType} · ${c.distance} away — ${c.actor}` },
+  },
+  sos_response: {
+    ru: { title: 'Предложение помощи', body: (c) => `${c.actor} готов(а) помочь` },
+    en: { title: 'Offer to help', body: (c) => `${c.actor} offers to help` },
+  },
+  sos_accepted: {
+    ru: { title: 'Вас ждут', body: (c) => `${c.actor} принял(а) вашу помощь` },
+    en: { title: "You're helping", body: (c) => `${c.actor} accepted your help` },
+  },
+  sos_status: {
+    ru: { title: 'SOS', body: (c) => c.status.replace('{actor}', c.actor) },
+    en: { title: 'SOS', body: (c) => c.status.replace('{actor}', c.actor) },
+  },
   community_role: {
     ru: { title: 'Новая роль', body: (c) => `Теперь вы — ${c.role} сообщества «${c.community}»` },
     en: { title: 'New role', body: (c) => `You are now ${c.role} of “${c.community}”` },
@@ -43,12 +86,17 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
   const l = asLocale(locale);
   const texts = TEXTS[type]?.[l];
   if (!texts) return null;
-  const user = payload.user as UserMini | undefined;
+  const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor) as UserMini | undefined;
+  const sosId = typeof payload.sosId === 'string' ? payload.sosId : null;
+  const meters = typeof payload.distanceM === 'number' ? payload.distanceM : null;
   const communityId = typeof payload.communityId === 'string' ? payload.communityId : null;
   const ctx: Ctx = {
     actor: actorLabel(user),
     community: typeof payload.communityName === 'string' ? payload.communityName : '',
     role: ROLE_NAMES[l][String(payload.role)] ?? String(payload.role ?? ''),
+    sosType: SOS_TYPE_NAMES[l][String(payload.type)] ?? SOS_TYPE_NAMES[l].other!,
+    distance: meters === null ? '' : meters < 1000 ? `${Math.round(meters / 10) * 10} ${l === 'ru' ? 'м' : 'm'}` : `${(meters / 1000).toFixed(1)} ${l === 'ru' ? 'км' : 'km'}`,
+    status: SOS_STATUS_TEXT[l][String(payload.event ?? payload.status)] ?? String(payload.status ?? ''),
   };
   const make = (url: string, tag: string): PushPayload => ({ title: texts.title, body: texts.body(ctx), url, tag });
   switch (type) {
@@ -62,6 +110,11 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
       return communityId ? make(`/communities/${communityId}`, `community_approved:${communityId}`) : null;
     case 'community_role':
       return communityId ? make(`/communities/${communityId}`, `community_role:${communityId}`) : null;
+    case 'sos_nearby':
+    case 'sos_response':
+    case 'sos_accepted':
+    case 'sos_status':
+      return sosId ? make(`/sos/${sosId}`, `sos:${sosId}`) : null;
     default:
       return null;
   }

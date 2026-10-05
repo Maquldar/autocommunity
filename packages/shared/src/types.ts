@@ -1,5 +1,6 @@
 import type { ChatReadEvent, ChatTypingEvent, MessageDeletedEvent, MessageDto } from './communities';
 import type { Locale, PrivacyMode, UserRole } from './constants';
+import type { SosDto } from './sos';
 
 export type Paginated<T> = { items: T[]; nextCursor: string | null };
 
@@ -125,6 +126,9 @@ export type ServerToClientEvents = {
   'chat:read': (p: ChatReadEvent) => void;
   /** The user's chat list or community memberships changed (joined, left, removed, approved, deleted). */
   'chats:changed': (p: Record<string, never>) => void;
+  /* phase 4 — payloads are rendered for the receiving user (responses, phones, role) */
+  'sos:new': (s: SosDto) => void;
+  'sos:update': (s: SosDto) => void;
 };
 
 export type ClientToServerEvents = {

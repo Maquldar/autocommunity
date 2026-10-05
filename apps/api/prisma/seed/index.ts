@@ -15,6 +15,7 @@ import { friendPairKey } from '../../src/modules/users/relation.service';
 import { WARN_ACTION } from '../../src/modules/users/user-view.service';
 import { COMMUNITIES, seedCommunities } from './communities';
 import { createRng, type Rng } from './rng';
+import { seedSos } from './sos';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
@@ -361,6 +362,16 @@ async function main(): Promise<void> {
     demoPending: night,
   });
 
+  // SOS: open one from a stranger near the centre, a closed one the demo user helped with, an expired one.
+  const sosSeed = await seedSos(prisma, storage, newId, {
+    now: NOW,
+    centre: DEFAULT_MAP_CENTER,
+    openRequester: others[9]!,
+    demo: users[1]!,
+    closedRequester: others[10]!,
+    expiredRequester: others[11]!,
+  });
+
   // One warning on a regular user so the admin/warnings UI has data.
   const admin = users[0]!;
   const warned = users[10]!;
@@ -385,6 +396,7 @@ async function main(): Promise<void> {
     `Seeded ${communities.communities} communities, ${communities.directChats} direct chats, ${communities.messages} messages ` +
       '(demo: member of Toyota Club KZ and Offroad 4x4 Алматы, pending in Night Drive).',
   );
+  console.log(`Seeded ${sosSeed.sos} SOS: open (flat tire, ~1 km from the centre), closed (demo helped), expired.`);
   console.log('Sign in: admin +77000000001, demo +77000000002 (dev OTP code is returned by /auth/otp/request).');
   console.log(
     `Demo map: ${DEMO_NEIGHBOURHOOD.length} users around ${DEFAULT_MAP_CENTER.lat},${DEFAULT_MAP_CENTER.lng} ` +

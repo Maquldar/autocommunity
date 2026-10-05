@@ -11,7 +11,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { chatRefSchema, CHAT_LIMITS } from '@autoc/shared';
 import { RedisService } from '../../infra/redis/redis.service';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
-import { chatRoom, RealtimeService, userRoom } from './realtime.service';
+import { chatRoom, RealtimeService, sosRoom, userRoom } from './realtime.service';
 
 export const REALTIME_NAMESPACE = '/rt';
 
@@ -76,8 +76,8 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
     if (isUserBlocked(state)) throw unauthorized('ACCOUNT_BLOCKED');
     (socket.data as SocketData).userId = claims.sub;
     // Joined before `connect` reaches the client, so no event emitted after that can be missed.
-    const chatIds = await this.chatIdsOf(claims.sub);
-    await socket.join([userRoom(claims.sub), ...chatIds.map(chatRoom)]);
+    const [chatIds, sosIds] = await Promise.all([this.chatIdsOf(claims.sub), this.openSosIdsOf(claims.sub)]);
+    await socket.join([userRoom(claims.sub), ...chatIds.map(chatRoom), ...sosIds.map(sosRoom)]);
     // A revocation published between the first check and the join would have missed this socket: check again.
     const after = await this.userState.getForAuth(claims.sub);
     const revoked = after.revokedBeforeMs !== null && claims.issuedAtMs <= after.revokedBeforeMs;
@@ -96,6 +96,17 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnApplicationS
       WHERE cm.user_id = ${userId}::uuid
         AND (c.type <> 'community' OR com.deleted_at IS NULL)
         ${onlyChatId ? Prisma.sql`AND c.id = ${onlyChatId}::uuid` : Prisma.empty}`;
+    return rows.map((r) => r.id);
+  }
+
+  /** Open SOS the user requested, responded to or was dispatched for. */
+  private async openSosIdsOf(userId: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT s.id FROM sos_requests s
+      WHERE s.status IN ('created', 'accepted', 'in_progress') AND (
+        s.user_id = ${userId}::uuid
+        OR EXISTS (SELECT 1 FROM sos_responses r WHERE r.sos_id = s.id AND r.helper_id = ${userId}::uuid)
+        OR EXISTS (SELECT 1 FROM sos_dispatches d WHERE d.sos_id = s.id AND d.user_id = ${userId}::uuid))`;
     return rows.map((r) => r.id);
   }
 

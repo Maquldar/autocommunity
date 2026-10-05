@@ -35,6 +35,15 @@ export class LocationService {
     return true;
   }
 
+  /** Writes the position now, bypassing the throttle (e.g. the requester's position when creating an SOS). */
+  async storeNow(userId: string, input: { lat: number; lng: number }): Promise<void> {
+    await this.redis.set(throttleKey(userId), '1', 'PX', LOCATION_MIN_INTERVAL_MS);
+    await this.prisma.$executeRaw`
+      INSERT INTO user_locations (user_id, location, source, updated_at)
+      VALUES (${userId}::uuid, ST_SetSRID(ST_MakePoint(${input.lng}::float8, ${input.lat}::float8), 4326)::geography, 'client', now())
+      ON CONFLICT (user_id) DO UPDATE SET location = EXCLUDED.location, accuracy_m = NULL, source = 'client', updated_at = EXCLUDED.updated_at`;
+  }
+
   async remove(userId: string): Promise<void> {
     await this.prisma.userLocation.deleteMany({ where: { userId } });
     // The next PUT (e.g. sharing turned back on) is written immediately.

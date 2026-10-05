@@ -39,3 +39,22 @@ describe('pushPayloadFor (communities)', () => {
     expect(pushPayloadFor('community_role', { ...c, role: 'owner' }, 'en')?.body).toBe('You are now the owner of “Land Cruiser Club”');
   });
 });
+
+describe('pushPayloadFor (sos)', () => {
+  const sosId = '0192f0c0-0000-7000-8000-0000000000aa';
+
+  it('renders nearby / response / accepted / status texts', () => {
+    expect(pushPayloadFor('sos_nearby', { sosId, type: 'flat_tire', distanceM: 1234, requester: user }, 'ru')).toEqual({
+      title: '🆘 SOS рядом',
+      body: 'Пробито колесо · 1.2 км от вас — Айдар (@aidar)',
+      url: `/sos/${sosId}`,
+      tag: `sos:${sosId}`,
+    });
+    expect(pushPayloadFor('sos_nearby', { sosId, type: 'battery', distanceM: 340, requester: user }, 'en')?.body).toBe('Dead battery · 340 m away — Айдар (@aidar)');
+    expect(pushPayloadFor('sos_response', { sosId, responseId: 'r', helper: user }, 'en')?.body).toBe('Айдар (@aidar) offers to help');
+    expect(pushPayloadFor('sos_accepted', { sosId, requester: user }, 'ru')?.body).toBe('Айдар (@aidar) принял(а) вашу помощь');
+    expect(pushPayloadFor('sos_status', { sosId, status: 'accepted', event: 'withdrawn', actor: user }, 'ru')?.body).toBe('Айдар (@aidar) больше не может помочь');
+    expect(pushPayloadFor('sos_status', { sosId, status: 'expired' }, 'en')?.body).toBe('Nobody responded, the SOS expired');
+    expect(pushPayloadFor('sos_status', { status: 'closed' }, 'en')).toBeNull();
+  });
+});

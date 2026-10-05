@@ -363,6 +363,57 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 - **Seed:** 1 open SOS near central Almaty from a seed user (flat_tire, with a photo), 1 closed SOS where the demo user helped, and 1 expired.
 - **Realtime:** sockets auto-join `sos:{id}` for SOS where the user is requester/responder/dispatched; `chat:{id}` for SOS chats as usual.
 
+### Phase 4 clarifications (added during implementation)
+
+- **Shared:** `packages/shared/src/sos.ts`: `SosDto`, `SosResponseDto` (with `helperPhone`), `SosMapItem`, `PublicSosDto`, `SosType`, `SosStatus`, `SOS_OPEN_STATUSES`, `SOS_LIMITS`, `createSosSchema`, `cancelSosSchema`, `sosNearbyQuerySchema`. `ServerToClientEvents` has `sos:new` / `sos:update`.
+- **Status codes:** `POST /sos` → `201 SosDto`. Every lifecycle `POST` (`respond`, `withdraw`, `accept`, `decline`, `arrived`, `close`, `cancel`) → `200 SosDto` rendered for the caller. `share` → `200 { url }`.
+- **Errors beyond the frozen list:**
+  - `409 SOS_HELPER_LIMIT`: accepting a 4th helper.
+  - `409 SOS_HELPER_BUSY`: the helper already has an accepted/arrived response in another *open* SOS.
+  - `409 SOS_OFFER_LIMIT`: an 11th live offer.
+  - `403 RATING_TOO_LOW` on respond (rating < 30).
+  - `400 INVALID_TARGET`: responding to your own SOS.
+  - `403 FORBIDDEN`: a requester-only action by someone who can see the SOS.
+  - `404`: the SOS isn't visible to the caller (every route), or the response id doesn't belong to it.
+  - Photos that aren't the caller's `sos` uploads → `400 INVALID_UPLOAD`.
+  - `SOS_RATE_LIMIT` carries `details.retryAfterSec` and a `Retry-After` header.
+- **Gate order on create:** phone → rating → ban → 24 h rate → already open. A partial unique index also guarantees one open SOS per user under concurrent creates.
+- **Lifecycle details:**
+  - A withdrawn helper may offer again; a declined one may not (`409 SOS_INVALID_STATE`). An `arrived` helper can't withdraw.
+  - `accept` is also allowed while `in_progress` (the SOS stays `in_progress`).
+  - `arrived` by the requester marks **every** accepted response arrived. By a helper, only their own.
+  - If a withdraw would revert the SOS to `created` after `expiresAt`, it becomes `expired` instead.
+- **`closedAt`** is set when the SOS ends in any way (closed, cancelled, expired); the share link's grace hour counts from it.
+- **`sos_status` notification payload:** `{ sosId, status, event?, actor? }`. `event` ∈ `withdrawn` (to the requester), `declined` (to the helper), `arrived` (to the requester), `in_progress` (to helpers, when the requester marks arrival). Close/cancel go to helpers with a live response; expire goes to the requester. `accept` sends `sos_accepted` instead.
+- **Payloads:** `sos_response`: `{ sosId, responseId, helper: UserMini }`. `sos_accepted`: `{ sosId, requester: UserMini }`. All four SOS notifications are pushed (ru/en) with `url` `/sos/{id}` and `tag` `sos:{id}`.
+- **Phones:**
+  - `contactPhone` and `helperPhone` are only filled while the SOS is open.
+  - `contactPhone` is always `null` for the requester themself.
+- **Distances:**
+  - `responses[].distanceM` is the helper's distance to the SOS, rounded to 100 m; `null` for helpers in `hidden` mode.
+  - `distanceM` is rounded to 10 m. For `/sos/nearby` it is measured from the query point, which is limited to 50 SOS.
+- **Lists:**
+  - `GET /map/sos` uses the same 2° × 2° bbox limit (`BBOX_TOO_LARGE`) and returns at most 500 items, newest first.
+  - `GET /sos/active` = open SOS where the user is the requester or has an `offered|accepted|arrived` response.
+- **Realtime:**
+  - `sos:update` and `sos:new` payloads are viewer-specific, so they're sent to each participant's `user:{id}` room (requester, all responders, dispatched users), not as one emit to `sos:{id}`.
+  - Sockets still auto-join `sos:{id}` for open SOS on connect and when they become participants.
+- **SOS chat:**
+  - Type `sos`, `refId` = SOS id. `title` is `SOS · <requester name>`, `avatarUrl` is `null`.
+  - A helper who withdraws after being accepted is removed from the chat.
+  - System messages: `type: 'system'`, `text` is a key for the client to localize: `sos.chat_created`, `sos.helper_accepted:<nickname>`, `sos.helper_arrived:<nickname>`, `sos.helper_withdrew:<nickname>`, `sos.closed`, `sos.cancelled`. `sender` is the user whose action caused the message.
+- **Share link:**
+  - Each `POST /share` rotates the token (the old link stops working). Allowed only while open (`409 SOS_INVALID_STATE` after).
+  - The public response adds `helperNicknames: string[]` (`helperNickname` = the first, or `null`).
+  - `requesterName` is the first word of the requester's name.
+  - Unknown/expired token → `404`; more than 60 requests/min per IP → `429 RATE_LIMITED`.
+- **Jobs:**
+  - BullMQ queue `sos`: `sos.dispatch` steps at 0, +`SOS_EXPAND_DELAY_MS`, +2×`SOS_EXPAND_DELAY_MS` (default 5 min), and `sos.expire` at `expiresAt`. `expiresAt` = createdAt + `SOS_TTL_SEC` (default 7200).
+  - Both env variables exist only to shorten test runs.
+  - A once-a-minute sweep (Redis lock) expires overdue `created` SOS in case a delayed job was lost.
+  - Dispatch is idempotent (`sos_dispatches` primary key + `ON CONFLICT`). Each step picks up to 20 *new* users.
+- **Seed:** the open seeded SOS has a real 2 h expiry, so on a long-running dev/demo instance it expires 2 h after seeding (re-run the seed to get it back).
+
 ## 5. Phase 5 — Ratings, reviews, reports (DRAFT)
 
 | Method | Path | Body | Notes |

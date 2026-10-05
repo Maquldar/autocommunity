@@ -17,6 +17,7 @@ import { messagePushPayload } from './message-push';
 import { MessageViewService, type MessageRow } from './message-view.service';
 
 type ChatListRow = {
+  sosRequesterName: string | null;
   id: string;
   type: ChatType;
   refId: string;
@@ -189,6 +190,55 @@ export class ChatsService {
     this.realtime.emitToUsers(userIds, 'chats:changed', {});
   }
 
+  /* ------------------------------------------------------------------ group chats owned by other features (SOS) */
+
+  /**
+   * Gets or creates the group chat of `type`/`refId` and adds the users (idempotent). Sockets of new members
+   * join the room. Returns the chat id and whether it was created now.
+   */
+  async ensureGroupChat(type: 'sos' | 'event', refId: string, userIds: string[]): Promise<{ chatId: string; created: boolean }> {
+    let created = false;
+    let chat = await this.prisma.chat.findUnique({ where: { refId }, select: { id: true } });
+    if (!chat) {
+      try {
+        chat = await this.prisma.chat.create({ data: { id: newId(), type, refId }, select: { id: true } });
+        created = true;
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        chat = await this.prisma.chat.findUniqueOrThrow({ where: { refId }, select: { id: true } });
+      }
+    }
+    const existing = new Set((await this.prisma.chatMember.findMany({ where: { chatId: chat.id }, select: { userId: true } })).map((m) => m.userId));
+    const added = userIds.filter((u) => !existing.has(u));
+    if (added.length) {
+      await this.prisma.chatMember.createMany({ data: added.map((userId) => ({ chatId: chat.id, userId })), skipDuplicates: true });
+      this.granted(chat.id, added);
+    }
+    return { chatId: chat.id, created };
+  }
+
+  async removeFromChat(chatId: string, userIds: string[]): Promise<void> {
+    if (!userIds.length) return;
+    await this.prisma.chatMember.deleteMany({ where: { chatId, userId: { in: userIds } } });
+    this.revoked(chatId, userIds);
+  }
+
+  /**
+   * A `system` message: `text` is a machine key (e.g. `sos.helper_accepted:nickname`) the client localizes;
+   * `senderId` is the user whose action caused it. Unread for everyone else, like any message.
+   */
+  async postSystemMessage(chatId: string, senderId: string, text: string): Promise<MessageDto> {
+    const createdAt = new Date();
+    const row = await this.prisma.$transaction(async (tx) => {
+      const m = await tx.message.create({ data: { id: newId(), chatId, senderId, type: 'system', text, createdAt } });
+      await tx.chat.update({ where: { id: chatId }, data: { lastMessageAt: createdAt } });
+      return m;
+    });
+    const dto = await this.messages.toDto(row);
+    this.realtime.emitToChat(chatId, 'message:new', dto);
+    return dto;
+  }
+
   /* ------------------------------------------------------------------ internals */
 
   /** 404 unless the user is a member of the chat (and, for community chats, the community is live). */
@@ -226,13 +276,15 @@ export class ChatsService {
                WHERE um.chat_id = c.id AND um.created_at > cm.last_read_at AND um.sender_id <> ${me} AND um.deleted_at IS NULL
              ) AS "unreadCount",
              com.name AS "communityName", cu.key AS "communityAvatarKey", cu.thumb_key AS "communityAvatarThumbKey",
-             peer.user_id AS "peerId",
+             peer.user_id AS "peerId", sru.name AS "sosRequesterName",
              lm.id AS "lmId", lm.sender_id AS "lmSenderId", lm.type AS "lmType", lm.text AS "lmText", lm.upload_id AS "lmUploadId",
              lm.lat AS "lmLat", lm.lng AS "lmLng", lm.created_at AS "lmCreatedAt", lm.deleted_at AS "lmDeletedAt"
       FROM chat_members cm
       JOIN chats c ON c.id = cm.chat_id
       LEFT JOIN communities com ON com.id = CASE WHEN c.type = 'community' THEN c.ref_id::uuid END
       LEFT JOIN uploads cu ON cu.id = com.avatar_upload_id
+      LEFT JOIN sos_requests sr ON sr.id = CASE WHEN c.type = 'sos' THEN c.ref_id::uuid END
+      LEFT JOIN users sru ON sru.id = sr.user_id
       LEFT JOIN LATERAL (
         SELECT o.user_id FROM chat_members o WHERE c.type = 'direct' AND o.chat_id = c.id AND o.user_id <> ${me} LIMIT 1
       ) peer ON true
@@ -281,6 +333,7 @@ export class ChatsService {
       if (r.type === 'direct') {
         return { ...base, title: peer ? peer.name || peer.nickname : '', avatarUrl: peer?.avatarUrl ?? null, ...(peer ? { peer } : {}) };
       }
+      if (r.type === 'sos') return { ...base, title: r.sosRequesterName ? `SOS · ${r.sosRequesterName}` : 'SOS', avatarUrl: null };
       const key = r.communityAvatarThumbKey ?? r.communityAvatarKey;
       return { ...base, title: r.communityName ?? '', avatarUrl: key ? this.storage.publicUrl(key) : null };
     });

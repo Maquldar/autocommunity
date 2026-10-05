@@ -4,6 +4,7 @@ import type { Namespace } from 'socket.io';
 
 export const userRoom = (userId: string) => `user:${userId}`;
 export const chatRoom = (chatId: string) => `chat:${chatId}`;
+export const sosRoom = (sosId: string) => `sos:${sosId}`;
 
 type Args<E extends keyof ServerToClientEvents> = Parameters<ServerToClientEvents[E]>;
 
@@ -46,6 +47,11 @@ export class RealtimeService {
   /** Removes every connected socket of these users from the chat room (membership revoked). */
   leaveChat(userIds: string[], chatId: string): void {
     if (this.ns && userIds.length) this.ns.in(userIds.map(userRoom)).socketsLeave(chatRoom(chatId));
+  }
+
+  /** Puts every connected socket of these users into an arbitrary room (e.g. `sos:{id}`). */
+  joinRoom(userIds: string[], room: string): void {
+    if (this.ns && userIds.length) this.ns.in(userIds.map(userRoom)).socketsJoin(room);
   }
 
   /** Whether any socket of the user (on any instance) is in the chat room right now. */

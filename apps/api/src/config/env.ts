@@ -87,6 +87,11 @@ export const envSchema = z
       .default('mailto:support@autocommunity.app'),
     /** Moves seeded users along small loops every 60 s so the demo map stays populated. Defaults to DEMO_MODE. */
     DEMO_LIVE_LOCATIONS: bool.optional(),
+
+    /** SOS dispatch radius expansion step (5 → 10 km after one step, → 20 km after two). Tests shorten it. */
+    SOS_EXPAND_DELAY_MS: z.coerce.number().int().min(100).default(5 * 60 * 1000),
+    /** SOS lifetime without acceptance (expiresAt = createdAt + this). Tests shorten it. */
+    SOS_TTL_SEC: z.coerce.number().int().min(1).default(2 * 3600),
   })
   .superRefine((env, ctx) => {
     const need = (keys: (keyof typeof env)[], when: string) => {

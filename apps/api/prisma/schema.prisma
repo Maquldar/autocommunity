@@ -309,8 +309,10 @@ model SosRequest {
   cancelReason   String?                              @map("cancel_reason")
   createdAt      DateTime                             @default(now()) @map("created_at")
   acceptedAt     DateTime?                            @map("accepted_at")
+  /// When the SOS ended: closed, cancelled or expired.
   closedAt       DateTime?                            @map("closed_at")
   expiresAt      DateTime                             @map("expires_at")
+  updatedAt      DateTime                             @default(now()) @updatedAt @map("updated_at")
 
   user      User          @relation(fields: [userId], references: [id])
   responses SosResponse[]
@@ -344,6 +346,7 @@ model SosDispatch {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@id([sosId, userId])
+  @@index([userId])
   @@map("sos_dispatches")
 }
 
