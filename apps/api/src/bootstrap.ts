@@ -10,6 +10,7 @@ import { CSRF_HEADER } from './common/http/auth-cookies';
 import { LocalStorage } from './infra/storage/local-storage';
 import { PostgresStorage } from './infra/storage/postgres-storage';
 import { Storage } from './infra/storage/storage';
+import { RedisIoAdapter } from './modules/realtime/redis-io.adapter';
 
 export const API_PREFIX = 'api/v1';
 export const JSON_BODY_LIMIT = '100kb';
@@ -65,6 +66,8 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   });
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalFilters(new AllExceptionsFilter());
+  // Socket.IO (/rt) on the same HTTP server, outside the /api/v1 prefix (path /socket.io).
+  app.useWebSocketAdapter(new RedisIoAdapter(app, env));
   app.enableShutdownHooks();
 
   const storage = app.get(Storage);

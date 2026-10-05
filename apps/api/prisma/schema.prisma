@@ -57,6 +57,8 @@ model User {
   locale           String      @default("ru")
   onboardedAt      DateTime?   @map("onboarded_at")
   lastActiveAt     DateTime?   @map("last_active_at")
+  /// Created by the demo seed; only these users are moved by DEMO_LIVE_LOCATIONS.
+  isSeed           Boolean     @default(false) @map("is_seed")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
@@ -785,6 +787,18 @@ model PollVote {
   @@id([optionId, userId])
   @@index([pollId, userId])
   @@map("poll_votes")
+}
+
+/* ------------------------------------------------------------------ app settings */
+
+/// Small server-managed key/value settings (e.g. auto-generated VAPID keys).
+model AppSetting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }
 
 /* ------------------------------------------------------------------ file storage (STORAGE_DRIVER=postgres) */

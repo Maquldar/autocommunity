@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import type { AuthResult, UserRole } from '@autoc/shared';
+import type { AuthResult, PrivacyMode, UserRole } from '@autoc/shared';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
@@ -22,10 +22,17 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-/** Boots the real app; `envOverrides` replace variables from the test environment (vitest.config.ts). */
-export async function createTestApp(envOverrides: Record<string, string> = {}): Promise<TestApp> {
+export type ProviderOverride = { provide: unknown; useValue: unknown };
+
+/**
+ * Boots the real app; `envOverrides` replace variables from the test environment (vitest.config.ts) and
+ * `overrides` replace providers at the boundary (e.g. the Web Push sender).
+ */
+export async function createTestApp(envOverrides: Record<string, string> = {}, overrides: ProviderOverride[] = []): Promise<TestApp> {
   const env = parseEnvOrThrow({ ...process.env, ...envOverrides });
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(ENV).useValue(env).compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] }).overrideProvider(ENV).useValue(env);
+  for (const o of overrides) builder = builder.overrideProvider(o.provide).useValue(o.useValue);
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ ...APP_OPTIONS, logger: false });
   configureApp(app, env);
   await app.init();
@@ -80,11 +87,22 @@ export async function loginWithOtp(t: TestApp, phone = nextPhone()): Promise<Log
   return { ...(res.body as AuthResult), refreshToken: cookies.ac_rt!, csrfToken: cookies.ac_csrf!, phone };
 }
 
+export type CreateUserData = {
+  nickname?: string | null;
+  name?: string;
+  role?: UserRole;
+  onboarded?: boolean;
+  phone?: string;
+  privacyMode?: PrivacyMode;
+  status?: 'active' | 'blocked' | 'deleted';
+  blockedUntil?: Date | null;
+  isSeed?: boolean;
+  locale?: 'ru' | 'en';
+  lastActiveAt?: Date | null;
+};
+
 /** Creates an onboarded user directly in the DB and returns a valid access token for it. */
-export async function createUser(
-  t: TestApp,
-  data: { nickname?: string | null; name?: string; role?: UserRole; onboarded?: boolean; phone?: string } = {},
-): Promise<{ id: string; token: string }> {
+export async function createUser(t: TestApp, data: CreateUserData = {}): Promise<{ id: string; token: string }> {
   const id = newId();
   const nickname = data.nickname === undefined ? `user_${id.slice(-8)}` : data.nickname;
   await t.prisma.user.create({
@@ -96,6 +114,12 @@ export async function createUser(
       phone: data.phone ?? nextPhone(),
       phoneVerifiedAt: new Date(),
       onboardedAt: data.onboarded === false ? null : new Date(),
+      privacyMode: data.privacyMode,
+      status: data.status,
+      blockedUntil: data.blockedUntil,
+      isSeed: data.isSeed,
+      locale: data.locale,
+      lastActiveAt: data.lastActiveAt,
     },
   });
   const token = await t.app.get(AccessTokenService).sign(id, data.role ?? 'user');
@@ -106,4 +130,51 @@ export async function makeFriends(t: TestApp, a: string, b: string, status: 'pen
   await t.prisma.friendship.create({
     data: { id: newId(), requesterId: a, addresseeId: b, pairKey: friendPairKey(a, b), status, acceptedAt: status === 'accepted' ? new Date() : null },
   });
+}
+
+/** Stores a position directly (bypassing the 10 s throttle), `minutesAgo` old. */
+export async function setLocation(t: TestApp, userId: string, lat: number, lng: number, minutesAgo = 0): Promise<void> {
+  await t.prisma.$executeRaw`
+    INSERT INTO user_locations (user_id, location, updated_at)
+    VALUES (${userId}::uuid, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography,
+            now() - make_interval(secs => ${minutesAgo * 60}::float8))
+    ON CONFLICT (user_id) DO UPDATE SET location = EXCLUDED.location, updated_at = EXCLUDED.updated_at`;
+}
+
+export async function getLocation(t: TestApp, userId: string): Promise<{ lat: number; lng: number; updatedAt: Date } | null> {
+  const rows = await t.prisma.$queryRaw<{ lat: number; lng: number; updatedAt: Date }[]>`
+    SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng, updated_at AS "updatedAt"
+    FROM user_locations WHERE user_id = ${userId}::uuid`;
+  return rows[0] ?? null;
+}
+
+/** A community owned by `ownerId` with the given members (status active unless stated). */
+export async function createCommunity(
+  t: TestApp,
+  ownerId: string,
+  members: { userId: string; status?: 'active' | 'pending' }[] = [],
+  opts: { deleted?: boolean } = {},
+): Promise<string> {
+  const id = newId();
+  await t.prisma.community.create({
+    data: { id, name: `Community ${id.slice(-6)}`, ownerId, deletedAt: opts.deleted ? new Date() : null },
+  });
+  await t.prisma.communityMember.createMany({
+    data: [
+      { communityId: id, userId: ownerId, role: 'owner', status: 'active', joinedAt: new Date() },
+      ...members.map((m) => ({ communityId: id, userId: m.userId, role: 'member' as const, status: m.status ?? 'active' })),
+    ],
+  });
+  return id;
+}
+
+/** Polls until `check` returns a truthy value (or throws after `timeoutMs`). */
+export async function waitFor<T>(check: () => Promise<T> | T, timeoutMs = 5_000, intervalMs = 25): Promise<NonNullable<T>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await check();
+    if (value) return value as NonNullable<T>;
+    if (Date.now() > deadline) throw new Error('waitFor: condition not met in time');
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
 }

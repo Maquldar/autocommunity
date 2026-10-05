@@ -5,11 +5,13 @@
  *   pnpm --filter @autoc/api db:seed
  */
 import { PrismaClient, type PrivacyMode } from '@prisma/client';
-import { CAR_BRANDS, RATING } from '@autoc/shared';
+import { CAR_BRANDS, DEFAULT_MAP_CENTER, RATING } from '@autoc/shared';
 import sharp from 'sharp';
 import { loadDotEnv, parseEnvOrThrow } from '../../src/config/env';
 import { v7 } from 'uuid';
 import { createStorage } from '../../src/infra/storage/create-storage';
+import { DEMO_SKIP_ACTIVE_MINUTES } from '../../src/modules/demo/demo-live-locations.service';
+import { ALMATY_BOUNDS } from '../../src/modules/demo/demo-path';
 import { friendPairKey } from '../../src/modules/users/relation.service';
 import { WARN_ACTION } from '../../src/modules/users/user-view.service';
 import { createRng, type Rng } from './rng';
@@ -116,7 +118,7 @@ const PLATE_LETTERS = 'ABCDEHKMOPTXYZ';
 const AVATAR_COLORS = ['#2f6fde', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
 
 /** Almaty city bounds (roughly between the airport, Sayakhat and the foothills). */
-const ALMATY = { minLat: 43.19, maxLat: 43.32, minLng: 76.82, maxLng: 77.0 };
+const ALMATY = ALMATY_BOUNDS;
 
 /* ------------------------------------------------------------------ generators */
 
@@ -237,6 +239,44 @@ function buildUsers(): SeedUser[] {
   return users;
 }
 
+/**
+ * The demo account's surroundings, placed around the map's default centre so every visibility branch shows
+ * up on its first screen. Users are addressed by their index in `users.slice(2)`, matching seedFriendships:
+ * 0–5 accepted friends, 6–7 requests to demo, 8 a request from demo, 9+ strangers.
+ * The demo account belongs to no community (communities arrive in Phase 3).
+ */
+const DEMO_NEIGHBOURHOOD: { index: number; mode: PrivacyMode; dLat: number; dLng: number; minutesAgo: number }[] = [
+  // friends: exact positions (relation "friend"), except the hidden one
+  { index: 0, mode: 'friends', dLat: 0.004, dLng: 0.006, minutesAgo: 1 },
+  { index: 1, mode: 'community', dLat: -0.006, dLng: 0.003, minutesAgo: 2 },
+  { index: 2, mode: 'everyone', dLat: 0.009, dLng: -0.008, minutesAgo: 3 },
+  { index: 3, mode: 'friends', dLat: -0.012, dLng: -0.01, minutesAgo: 4 },
+  { index: 4, mode: 'community', dLat: 0.015, dLng: 0.014, minutesAgo: 5 },
+  { index: 5, mode: 'hidden', dLat: 0.002, dLng: -0.004, minutesAgo: 1 },
+  // pending requests: only "everyone" shows, approximately
+  { index: 6, mode: 'everyone', dLat: -0.003, dLng: 0.017, minutesAgo: 2 },
+  { index: 7, mode: 'friends', dLat: 0.007, dLng: 0.012, minutesAgo: 3 },
+  { index: 8, mode: 'community', dLat: -0.009, dLng: -0.015, minutesAgo: 2 },
+  // strangers in "everyone" mode: approximate (snapped to the ~500 m grid)
+  { index: 9, mode: 'everyone', dLat: 0.018, dLng: -0.02, minutesAgo: 1 },
+  { index: 10, mode: 'everyone', dLat: -0.017, dLng: 0.022, minutesAgo: 4 },
+  { index: 11, mode: 'everyone', dLat: 0.011, dLng: 0.027, minutesAgo: 6 },
+  { index: 12, mode: 'everyone', dLat: -0.021, dLng: -0.026, minutesAgo: 2 },
+  // strangers who share only with friends/communities: invisible to demo
+  { index: 13, mode: 'community', dLat: 0.005, dLng: -0.018, minutesAgo: 3 },
+  { index: 14, mode: 'friends', dLat: -0.014, dLng: 0.008, minutesAgo: 2 },
+];
+
+function arrangeDemoNeighbourhood(users: SeedUser[]): void {
+  const others = users.slice(2);
+  for (const n of DEMO_NEIGHBOURHOOD) {
+    const u = others[n.index]!;
+    u.privacyMode = n.mode;
+    u.city = 'Almaty';
+    u.location = { lat: DEFAULT_MAP_CENTER.lat + n.dLat, lng: DEFAULT_MAP_CENTER.lng + n.dLng, minutesAgo: n.minutesAgo };
+  }
+}
+
 async function wipe(): Promise<void> {
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
@@ -252,6 +292,7 @@ async function main(): Promise<void> {
     return;
   }
   const users = buildUsers();
+  arrangeDemoNeighbourhood(users);
   await wipe();
 
   for (const [index, u] of users.entries()) {
@@ -323,6 +364,10 @@ async function main(): Promise<void> {
       `${users.filter((u) => u.location).length} locations, ${friendships.accepted} friendships, ${friendships.pending} pending requests.`,
   );
   console.log('Sign in: admin +77000000001, demo +77000000002 (dev OTP code is returned by /auth/otp/request).');
+  console.log(
+    `Demo map: ${DEMO_NEIGHBOURHOOD.length} users around ${DEFAULT_MAP_CENTER.lat},${DEFAULT_MAP_CENTER.lng} ` +
+      '(friends exact, "everyone" strangers approximate, hidden/friends-only/community-only strangers invisible).',
+  );
 }
 
 function baseUser(u: SeedUser) {
@@ -340,7 +385,11 @@ function baseUser(u: SeedUser) {
     role: u.role,
     locale: 'ru',
     onboardedAt: new Date(u.createdAt.getTime() + 5 * 60_000),
-    lastActiveAt: u.location ? new Date(NOW - u.location.minutesAgo * 60_000) : new Date(NOW - rng.int(1, 72) * 3_600_000),
+    // Older than the live-locations "signed in" window, so DEMO_LIVE_LOCATIONS moves them from the first tick.
+    lastActiveAt: u.location
+      ? new Date(NOW - (DEMO_SKIP_ACTIVE_MINUTES + u.location.minutesAgo) * 60_000)
+      : new Date(NOW - rng.int(1, 72) * 3_600_000),
+    isSeed: true,
     createdAt: u.createdAt,
   };
 }

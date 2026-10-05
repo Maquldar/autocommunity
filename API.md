@@ -152,7 +152,33 @@ Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users
   - Server → client: `notification:new NotificationDto`, `notification:count { count }`, `friends:changed {}`, `session:revoked {}`.
   - When a session is revoked (logout-all, block, refresh-token reuse), that user's sockets get `session:revoked` and are disconnected (subscribe to the existing Redis channel `auth:session-revoked`).
   - Through the same-origin proxy (demo deploy), Socket.IO must work over HTTP long-polling. The WebSocket upgrade is optional.
-- **Demo live locations:** when `DEMO_LIVE_LOCATIONS=true` (default on with `DEMO_MODE`), every 60 s the API refreshes `updated_at` of seeded users who have a location, and moves each one up to ~50 m along a deterministic path. This keeps the demo map populated. It never touches real users: seeded users are marked by `phone LIKE '+770000%'` or a seed flag.
+- **Demo live locations:** when `DEMO_LIVE_LOCATIONS=true` (default on with `DEMO_MODE`), every 60 s the API refreshes `updated_at` of seeded users who have a location, and moves each one up to ~50 m along a deterministic path. This keeps the demo map populated. It never touches real users: seeded users are marked by the `users.is_seed` flag.
+
+### Phase 2 clarifications (added during implementation)
+
+- **Map:**
+  - Grid: cells are 0.0045° of latitude (~500 m) high and 0.0045°/cos(lat) of longitude wide (~500 m) in each latitude row; approximate users are returned at their cell's centre (stable while they stay in the cell).
+  - For approximate (`public`) users the bbox test uses the *returned* point, not the exact one, so moving the bbox edge can't reveal the exact position. Their point may therefore lie up to half a cell outside the bbox, and a user just outside the bbox may appear.
+  - Ties in `updated_at` are ordered by `userId` desc. A temporarily blocked user whose `blockedUntil` has passed counts as active.
+  - `vehicle` is the primary vehicle (`null` if none). Bbox: `minLng < maxLng`, `minLat < maxLat` (no antimeridian wrap), else `VALIDATION_ERROR`.
+- **Friends:**
+  - `POST /friends/requests` → `201 { id, status: 'pending' }` for a new request; `200 { id, status: 'accepted' }` when it accepted the target's pending request (`id` is that request's id).
+  - The caller must have completed onboarding → else `400 ONBOARDING_INCOMPLETE` (details `{ missing }`). Rate limit: 50 requests/h per user → `429 RATE_LIMITED`.
+  - `DELETE /friends/:userId` when not friends → `404`.
+  - `GET /friends` is ordered by acceptance time, newest first; `GET /friends/requests` by request time, newest first; each item's `user.relation` is `request_in` / `request_out`.
+- **Notifications:** `POST /notifications/:id/read` → `404` unless the notification is the caller's; reading twice is a no-op `204`.
+- **Web Push:**
+  - `endpoint` must be an `https` URL of a browser push service (`*.googleapis.com`, `*.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`), else `400 INVALID_PUSH_ENDPOINT` (the server POSTs to it, so arbitrary URLs would be SSRF).
+  - Subscribing an endpoint already registered by another account moves it to the caller (same browser, new account). At most 10 subscriptions per user (oldest dropped). `DELETE` is idempotent and only removes the caller's own subscription.
+  - Push `url` is a web path: `/u/{userId}` (the other user) for `friend_request` and `friend_accepted`; `tag` is `friend_request:{userId}` / `friend_accepted:{userId}`.
+  - `GET /push/vapid-public-key` requires auth (like every Phase 2 route); `key` is `null` only if the key pair can't be loaded.
+  - Delivery runs on a BullMQ queue (one job per subscription, 5 attempts with exponential backoff on 429/5xx/network errors; other 4xx are dropped). Push failures never fail the HTTP request.
+- **Socket.IO:**
+  - On connect the server sends `notification:count`; it is sent again after every new notification, read and read-all.
+  - `friends:changed {}` goes to both users whenever a request between them is created, accepted (also auto-accepted), declined or cancelled, and on unfriend.
+  - `connect_error` always has `message: 'UNAUTHORIZED'`; `err.data.code` is `UNAUTHORIZED` or `ACCOUNT_BLOCKED`. Sockets whose `Origin` header isn't in `WEB_ORIGIN` are refused. Expiry of the access token after the handshake doesn't disconnect the socket; revocation does.
+  - The web app's same-origin proxy must forward `/socket.io/*` to the API (polling works through a plain HTTP rewrite).
+- **Demo live locations:** seeded users are marked by the `users.is_seed` flag (set by the seed; not a phone pattern). The tick runs once at boot and then every 60 s, one instance per tick (Redis lock). Seeded accounts someone signed in as within the last 15 min (`last_active_at`) are not moved, so a visitor's own position on the shared demo account stays put.
 
 ## 3. Phase 3 — Communities & chats (DRAFT)
 
