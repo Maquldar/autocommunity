@@ -109,3 +109,16 @@ export type NotificationDto = {
 };
 
 export type FriendRequestDto = { id: string; user: UserPublic; createdAt: string };
+
+/* realtime (Socket.IO namespace /rt) */
+
+export type ServerToClientEvents = {
+  'notification:new': (n: NotificationDto) => void;
+  'notification:count': (p: { count: number }) => void;
+  'friends:changed': (p: Record<string, never>) => void;
+  'session:revoked': (p: Record<string, never>) => void;
+};
+
+export type ClientToServerEvents = Record<string, never>;
+
+export type PushPayload = { title: string; body: string; url: string; tag: string };
