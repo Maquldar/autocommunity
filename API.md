@@ -237,10 +237,34 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 
 `GET /admin/stats` · `GET /admin/users?q&status&cursor` · `GET /admin/users/:id` · `POST /admin/users/:id/warn {note}` · `POST /admin/users/:id/block {note, until?}` · `POST /admin/users/:id/unblock {note}` · `GET /admin/communities?q&cursor` · `DELETE /admin/communities/:id {note}` · `GET /admin/sos?status&cursor` · `GET /admin/sos/:id` · `POST /admin/sos/:id/mark-fake {note}` · `GET /admin/reports?status=open|confirmed|dismissed&cursor` · `POST /admin/reports/:id/resolve {decision:'confirm'|'dismiss', note}` · `GET /admin/fraud-flags?cursor` · `GET /admin/audit?cursor` · `GET /admin/services?status&cursor` · `POST /admin/services/:id/verify|reject {note}` · `GET /admin/services/:id/qr` · `GET /admin/visits?status=pending` · `POST /admin/visits/:id/approve|reject`
 
-## 7. Phase 7 — Services (DRAFT)
+## 7. Phase 7 — Services (FROZEN, built in parallel with Phase 2)
 
-`ServiceCategory = 'repair'|'tires'|'wash'|'parts'|'tow'`
-`GET /services?category&q&lat&lng&sort=distance|rating&cursor` · `GET /map/services?bbox&category` · `GET /services/:id` · `POST /services` (submit → `pending`) · `GET /services/:id/reviews` · `POST /services/:id/visits` `{method:'geo',lat,lng}|{method:'qr',code}|{method:'photo',uploadId}` (geo ≤ 150 m & qr → verified; photo → pending admin) · `POST /services/:id/reviews {stars, comment, visitId}` (verified visit, one review per visit, max 1 per service per 30 days)
+```ts
+type ServiceCategory = 'repair' | 'tires' | 'wash' | 'parts' | 'tow'
+type ServiceHours = Record<'mon'|'tue'|'wed'|'thu'|'fri'|'sat'|'sun', string | null> // "09:00-19:00", "00:00-24:00" = 24h, null = closed
+type ServiceDto = { id; name; category: ServiceCategory; description; address; phone: string | null; hours: ServiceHours;
+  photos: UploadDto[]; lat; lng; rating: number; reviewCount: number; visitCount: number;
+  status: 'pending'|'verified'|'rejected'; distanceM: number | null; openNow: boolean | null; // Asia/Almaty time
+  myVisit: { id; method; status: 'pending'|'verified'|'rejected'; createdAt; reviewed: boolean } | null }  // latest visit of the viewer
+type ServiceListItem = Omit<ServiceDto, 'description'|'hours'|'photos'|'myVisit'> & { photoUrl: string | null }
+type ServiceReviewDto = { id; author: UserMini; stars: 1..5; comment: string | null; visitMethod: 'geo'|'qr'|'photo'; createdAt }
+type VisitDto = { id; serviceId; method: 'geo'|'qr'|'photo'; status: 'pending'|'verified'|'rejected'; distanceM: number | null; createdAt }
+```
+
+| Method | Path | Body / query | Notes |
+|---|---|---|---|
+| GET | `/services` | `category?`, `q?` (name/address, ≥2 chars), `lat?`+`lng?`, `sort=distance\|rating` (distance requires lat/lng), cursor | page of `ServiceListItem`, only `verified` |
+| GET | `/map/services` | `bbox` (≤ 2°×2°), `category?` | `{ items: { id, name, category, lat, lng, rating }[], truncated }` max 500, verified only |
+| GET | `/services/:id` | `lat?`, `lng?` | `ServiceDto`. Pending/rejected visible only to the submitter (and admins) |
+| POST | `/services` | `{ name 2..80, category, description ≤1000, address 5..200, phone? (E.164), hours, lat, lng, photoUploadIds ≤6 (purpose service) }` | → `ServiceDto` with `status:'pending'`. 5 submissions/day per user. Duplicate guard: same category within 30 m and similar name → 409 `SERVICE_DUPLICATE` |
+| GET | `/services/:id/reviews` | cursor | page of `ServiceReviewDto` (newest first) |
+| POST | `/services/:id/visits` | `{ method:'geo', lat, lng }` \| `{ method:'qr', code }` \| `{ method:'photo', uploadId }` (purpose order) | → `VisitDto`. geo: verified if ≤150 m from the service, else 422 `TOO_FAR` (details `{distanceM}`). qr: code = HMAC of the service's `qr_secret` + current day (valid today and yesterday); wrong → 422 `INVALID_QR`. photo → `pending` (admin review in Phase 6). Limit 1 verified/pending visit per service per user per 24 h → 409 `VISIT_EXISTS` |
+| POST | `/services/:id/reviews` | `{ visitId, stars 1..5, comment? ≤1000 }` | the visit must be the caller's and `verified`, unused → else 403 `VISIT_REQUIRED`. 1 review per visit; max 1 review per service per user per 30 days → 409 `REVIEW_COOLDOWN` |
+| GET | `/services/:id/qr` | — | admin only: `{ code, validFor: 'today' }` (for printing at the service; rendered as a QR image client-side). Admin UI comes in Phase 6 |
+
+**Service rating:** `rating` = Bayesian average of stars (prior: 3.5 with weight 5) shown to 1 decimal; `reviewCount` / `visitCount` count verified items only. Recomputed transactionally on each review or visit. The sort by rating uses `rating desc, reviewCount desc`.
+
+**Seed:** about 40 verified services across Almaty, all categories, with plausible fictional names (not real businesses), addresses, hours, phones in `+7 727 …` format, a few reviews from seed users, and 2 `pending` submissions.
 
 ## 8. Phase 8 — Events & feed (DRAFT)
 
