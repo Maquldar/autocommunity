@@ -525,9 +525,56 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 - **Demo SOS keep-alive:** runs in the demo ticker (same lock, every 60 s). When no seed account has an open SOS, it inserts one directly near the centre: rotating seed requester and type, never the two login accounts, no dispatch. It expires after `SOS_TTL_SEC` like any other.
 - **Seed:** ratings are computed from the seeded data with `computeRating` (one `recalc` ledger row each). Seed data includes 4 extra closed helps between seed users and 9 reviews.
 
-## 6. Phase 6 — Admin (DRAFT) — all require `role=admin`
+## 6. Phase 6 — Admin, antifraud, hardening (FROZEN) — all `/admin/*` require `role=admin`
 
 `GET /admin/stats` · `GET /admin/users?q&status&cursor` · `GET /admin/users/:id` · `POST /admin/users/:id/warn {note}` · `POST /admin/users/:id/block {note, until?}` · `POST /admin/users/:id/unblock {note}` · `GET /admin/communities?q&cursor` · `DELETE /admin/communities/:id {note}` · `GET /admin/sos?status&cursor` · `GET /admin/sos/:id` · `POST /admin/sos/:id/mark-fake {note}` · `GET /admin/reports?status=open|confirmed|dismissed&cursor` · `POST /admin/reports/:id/resolve {decision:'confirm'|'dismiss', note}` · `GET /admin/fraud-flags?cursor` · `GET /admin/audit?cursor` · `GET /admin/services?status&cursor` · `POST /admin/services/:id/verify|reject {note}` · `GET /admin/services/:id/qr` · `GET /admin/visits?status=pending` · `POST /admin/visits/:id/approve|reject`
+
+
+### Phase 6 rules (FROZEN)
+
+**Common:**
+- Every mutating admin action writes an `admin_actions` row (`action`, `targetType`, `targetId`, `targetUserId`, `note` required, 3–500 chars).
+- Admins can't act on themselves or on other admins (403 `INVALID_TARGET`).
+- Lists use keyset pagination; every list endpoint supports `q` where meaningful.
+- Admin endpoints are rate-limited to 300/min per admin.
+
+**Endpoints:**
+- `GET /admin/stats`: `{ users: {total, active7d, new7d, blocked}, sos: {open, last7d, closed7d, medianFirstResponseSec7d, fakeRate30d}, reports: {open}, services: {pending}, visits: {pending}, communities: {total} }`. These cover the MVP success metrics in PLAN §8 that the data supports.
+- Users:
+  - `GET /admin/users?q&status&cursor`: q matches nickname, name, or phone digits.
+  - `GET /admin/users/:id` → `{ user: Me-like incl. phone and status, blockedUntil, sosBannedUntil, counts: {sosCreated, helps, reportsAgainst, reportsFiled, warnings}, recentRatingEvents, recentAdminActions, fraudFlags }`.
+- Warn and block:
+  - `warn {note}` → `admin_warning` notification to the user (the note is shown to them).
+  - `block {note, until?}` → status blocked (temporary if `until`); revokes all sessions and disconnects sockets; open SOS cancelled.
+  - `unblock {note}`.
+  - `sos-ban {note, until}` / `sos-unban {note}` → set or clear `sosBannedUntil`.
+- Communities: `GET /admin/communities?q&cursor` (incl. deleted flag); `DELETE /admin/communities/:id {note}` → soft delete with the same side effects as an owner delete.
+- SOS:
+  - `GET /admin/sos?status&cursor` and `GET /admin/sos/:id` (full detail incl. responses, dispatch count, chat id, reports).
+  - `POST /admin/sos/:id/mark-fake {note}` → `isFake=true`; the SOS is cancelled if open; a `fake_sos` penalty (−50) on the requester via the rating ledger (refId = sosId); the requester is notified.
+- Reports:
+  - `GET /admin/reports?status=open|confirmed|dismissed&targetType&cursor`, with target preview: content snippet or deleted marker, target user mini.
+  - `POST /admin/reports/:id/resolve {decision:'confirm'|'dismiss', note, removeContent?: boolean}`.
+  - `confirm` → `report_confirmed` penalty (−10) on `targetUserId`, plus content removal when `removeContent` (message soft-delete, community soft-delete, service reject; SOS → treated like mark-fake when reason=fake_sos).
+  - The reporter gets a `report_resolved` notification `{ reportId, decision }`.
+  - Other open reports with the same target are resolved with the same decision.
+- `GET /admin/fraud-flags?cursor` and `GET /admin/audit?cursor&adminId&targetUserId`.
+- Services (from Phase 7):
+  - `GET /admin/services?status&cursor`; `POST /admin/services/:id/verify|reject {note}` → `service_status` notification to the submitter.
+  - `GET /admin/visits?status=pending&cursor` (photo visits, with the photo) and `POST /admin/visits/:id/approve|reject {note}` → `visit_status` notification; approval enables review.
+  - `GET /services/:id/qr` (admin) already exists.
+
+**Antifraud v1** (automatic; every trigger writes a `fraud_flags` row `{kind, details}` and is visible in admin):
+- `sos_cancel_streak`: more than 2 SOS cancelled within 30 min of creation, or marked fake, in 7 days → automatic SOS ban for 72 h, with a notification (SPEC A-9).
+- `duplicate_sos_photo`: an SOS photo whose `contentHash` matches a photo from a *different* user's SOS in the last 30 days → flag only.
+- `report_burst`: ≥ 3 distinct reporters with open reports against the same user within 24 h → flag, plus an automatic temporary block for 24 h if the user's rating < 30.
+- `location_teleport`: ≥ 3 implausible location jumps in 1 h → flag (uses the Phase 5 untrusted-location detection).
+- `new_account_sos`: an SOS created by an account < 24 h old → flag only (allowed, as SPEC permits).
+- `otp_abuse`: more than 3 OTP lockouts for the same phone in 24 h → flag (no user yet: `userId` null allowed, `details.phoneMasked`).
+
+**Load and security testing** (F-34, A-13):
+- `load/` contains k6 scripts for `/map/users`, `/sos/nearby`, `GET /chats` and message sending with seeded users. Run results go in `load/RESULTS.md`: p50/p95/p99, error rate and the hardware used, at 50 and 200 virtual users against a local production build.
+- `SECURITY.md` holds an OWASP ASVS L1-style checklist with the status of each item and links to tests, plus a summary of the review findings fixed in Phases 1–5.
 
 ## 7. Phase 7 — Services (FROZEN, built in parallel with Phase 2)
 
@@ -558,7 +605,49 @@ type VisitDto = { id; serviceId; method: 'geo'|'qr'|'photo'; status: 'pending'|'
 
 **Seed:** about 40 verified services across Almaty, all categories, with plausible fictional names (not real businesses), addresses, hours, phones in `+7 727 …` format, a few reviews from seed users, and 2 `pending` submissions.
 
-## 8. Phase 8 — Events & feed (DRAFT)
+## 8. Phase 8 — Events & feed (FROZEN)
 
 Events: `GET /events?communityId&scope=upcoming|past&cursor` · `POST /communities/:id/events {title, description, place, lat, lng, startsAt, endsAt?, route?: [lng,lat][]}` (mods) · `GET|PATCH|DELETE /events/:id` · `POST /events/:id/rsvp {status:'going'|'interested'|'none'}` · `GET /events/:id/participants?cursor` · `GET /map/events?bbox`
 Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploadIds?, communityId?, poll?: {question, options (2–6), multiple}}` · `DELETE /posts/:id` · `POST|DELETE /posts/:id/like` · `GET|POST /posts/:id/comments` · `DELETE /comments/:id` · `POST /posts/:id/poll/vote {optionIds}`
+
+### Phase 8 rules (FROZEN)
+
+**Events** (F-40):
+- Created by community owners and moderators: `title` 3–100, `description` ≤ 2000, `place` 2–200, lat/lng, `startsAt` in the future (≤ 1 year), `endsAt` > startsAt (optional), `route` an optional array of 2–200 `[lng,lat]` points.
+- PATCH and DELETE by the creator or community moderators; delete is a hard delete that notifies participants.
+- Visibility: events of public communities are visible to all users. Events of private communities are visible only to active members, else 404.
+- `EventDto = { id, community: {id,name,avatarUrl,isPrivate}, createdBy: UserMini, title, description, place, lat, lng, startsAt, endsAt, route, goingCount, interestedCount, myRsvp: 'going'|'interested'|null, chatId: string|null (only when myRsvp='going'), distanceM }`.
+- RSVP:
+  - `going` joins the event chat (type `event`, created lazily on the first `going`); changing away from `going` leaves it.
+  - RSVP is allowed only if the viewer can see the event and it hasn't ended.
+  - Max 500 going → 409 `EVENT_FULL`.
+- Lists:
+  - `GET /events?scope=upcoming|past&communityId&cursor`: upcoming ordered by startsAt asc, past desc.
+  - `GET /communities/:id/events`.
+  - `GET /map/events?bbox`: upcoming within 7 days.
+- Notifications:
+  - `event_new` to active community members (in-app; push only to members who RSVPed to any event of that community in the past 90 days, to avoid spam);
+  - `event_reminder` 2 h before start to going participants (BullMQ delayed job, rescheduled on PATCH of startsAt);
+  - an update/cancel notification to participants (`event_new` with `payload.change`).
+- Seed: 4 upcoming events (a Toyota club meetup, an offroad trip with a route, an EV charging meetup, a private night drive) and 1 past.
+
+**Feed** (F-41, A-11):
+- Posts are global, or scoped to a community (members only, for private ones).
+- `text` ≤ 3000; media ≤ 6 uploads (images purpose `post`, or a single `video` purpose upload); a poll needs `question` 3–200 and 2–6 options of 1–80 chars, with `multiple` bool.
+- At least one of text/media/poll is required.
+- `PostDto = { id, author: UserMini, community: {id,name}|null, text, media: UploadDto[], poll: { question, multiple, options: [{id,text,voteCount}], myVotes: string[], totalVoters } | null, likeCount, commentCount, likedByMe, createdAt }`.
+- Feed `GET /feed?scope=all|communities|friends&communityId&authorId&cursor`, newest first:
+  - `all` = global posts + posts of public communities + posts of the viewer's communities;
+  - `communities` = only the viewer's communities;
+  - `friends` = authors who are friends.
+- Deletion: the author, or a community moderator for community posts; soft delete.
+- Comments:
+  - 1–1000 chars, keyset ascending; deleted by the comment author, the post author or a community moderator.
+  - `post_comment` notification to the post author (not self, and collapsed by a 10-min throttle per post).
+- Likes: idempotent; `post_like` notification throttled to 1 per post per hour.
+- Polls: vote once (replace allowed until …: no, votes are final), `multiple` allows several options; 409 `ALREADY_VOTED`.
+- Reports: targetType `post` and `comment` are now accepted.
+- Rate limits: 20 posts/day, 60 comments/hour per user.
+- Seed: about 25 realistic Russian posts (photos from generated images, 3 polls) across global and community scopes, with likes and comments.
+
+**Push for all event types** (F-43): every notification type has localized push text and a URL.
