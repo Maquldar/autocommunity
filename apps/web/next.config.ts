@@ -1,7 +1,13 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
-import createNextIntlPlugin from 'next-intl/plugin';
 
-const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+/**
+ * next-intl reads its request config through the `next-intl/config` alias. We set the alias ourselves
+ * instead of using `next-intl/plugin`: since next-intl 4.5 the plugin eagerly loads @swc/core (for its
+ * message extractor, which we don't use), and @swc/core's self-extracting Windows addon is blocked by
+ * common Windows security policies — `next dev` then fails with ERR_SWC_NATIVE_LOAD.
+ */
+const I18N_REQUEST_CONFIG = './src/i18n/request.ts';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -99,6 +105,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
+  turbopack: {
+    resolveAlias: { 'next-intl/config': I18N_REQUEST_CONFIG },
+  },
+  webpack(config: { context: string; resolve?: { alias?: Record<string, string> } }) {
+    config.resolve ??= {};
+    config.resolve.alias = { ...config.resolve.alias, 'next-intl/config': path.resolve(config.context, I18N_REQUEST_CONFIG) };
+    return config;
+  },
   async rewrites() {
     if (!proxyTarget) return [];
     return [
@@ -108,4 +122,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withNextIntl(nextConfig);
+export default nextConfig;
