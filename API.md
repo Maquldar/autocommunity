@@ -85,7 +85,7 @@ Rules
 - Refresh rotation is strict: two concurrent `/auth/refresh` calls with the same cookie count as reuse and end the session. The web client must serialize refreshes (single in-flight promise, shared across tabs, e.g. Web Locks).
 - Phase 1 error codes beyond §0: `OTP_INVALID` (400, details `{ attemptsLeft }`), `OTP_EXPIRED` (400, no active code / burned / used), `SESSION_EXPIRED` (401, refresh cookie missing/invalid/reused), `CSRF_FAILED` (403), `PROVIDER_DISABLED` (404), `INVALID_ID_TOKEN` (401), `SMS_UNAVAILABLE` (503), `NICKNAME_TAKEN` / `PHONE_IN_USE` / `PHONE_ALREADY_VERIFIED` / `VEHICLE_LIMIT` (409), `PHONE_NOT_SUPPORTED` (400), `ORIGIN_NOT_ALLOWED` (403), `INVALID_JSON` (400), `PAYLOAD_TOO_LARGE` (413, JSON body), `ONBOARDING_INCOMPLETE` (400, details `{ missing: ('name'|'nickname')[] }`), `INVALID_UPLOAD` (400, upload not yours / wrong purpose), `FILE_TOO_LARGE` (413), `UNSUPPORTED_FILE_TYPE` (415). `429` responses also carry a `Retry-After` header.
 
-## 2. Phase 2 — Location, map, friends, notifications (FROZEN at Phase 2 start)
+## 2. Phase 2 — Location, map, friends, notifications (FROZEN)
 
 | Method | Path | Body / query | Response |
 |---|---|---|---|
@@ -117,6 +117,42 @@ type NotificationType = 'friend_request' | 'friend_accepted' | 'community_reques
   | 'event_new' | 'event_reminder' | 'post_comment' | 'post_like' | 'service_status' | 'visit_status' | 'report_resolved'
 ```
 Privacy enforcement: see ARCHITECTURE §5. Self is never included in `/map/users`.
+
+### Phase 2 rules and additions (FROZEN)
+
+- **Visibility** (`/map/users`), evaluated in SQL: the target is `active`, onboarded, has a location updated < 15 min ago, isn't the viewer, and:
+  - `hidden` → never;
+  - `friends` → the viewer is an accepted friend;
+  - `community` → the viewer is an accepted friend or shares ≥ 1 *active* community membership;
+  - `everyone` → any authenticated viewer. Friends and co-members get exact coordinates; everyone else gets coordinates snapped to the centre of a ~500 m grid cell, with `approximate: true`.
+  - `relation` = `friend` > `community` > `public`, the strongest that applies.
+- **Filters** (combined with AND):
+  - `friends=true` → friends only;
+  - `communityIds` → members of those communities; only communities where the viewer is an active member are honoured, others → 403 `FORBIDDEN`;
+  - `brand` → primary vehicle brand, case-insensitive.
+- **Map limits:** ordered by `updated_at desc`, at most 500; `truncated: true` when more exist. The bbox may cover at most 2° × 2°, otherwise 400 `BBOX_TOO_LARGE`.
+- `PUT /me/location`: a 2nd update within 10 s → `204` without writing. Positions are stored even in `hidden` mode (needed for SOS dispatch in Phase 4) but are never returned to others.
+- `DELETE /me/location` removes the stored position.
+- `PATCH /me/settings {privacyMode:'hidden'}` is the "go invisible" action; the client exposes it as a one-tap toggle on the map.
+- **Friends:**
+  - can't befriend self → 400 `INVALID_TARGET`;
+  - can't befriend a blocked, deleted or un-onboarded user → 404;
+  - a duplicate request → 409 `ALREADY_REQUESTED`; already friends → 409 `ALREADY_FRIENDS`;
+  - only the addressee may accept or decline, only the requester may cancel → otherwise 404.
+- **Notifications** created in Phase 2:
+  - `friend_request` `{ requestId, user: UserMini }` to the addressee;
+  - `friend_accepted` `{ user: UserMini }` to the requester.
+  - Each is also pushed via Socket.IO (`notification:new`) and Web Push.
+- **Web Push:**
+  - VAPID keys come from env `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`. If they're unset, the API generates a key pair once and stores it in the `app_settings` table, so free hosts work without manual setup.
+  - Push payload: `{ title, body, url, tag }`, localized with the recipient's `locale`.
+  - Subscriptions answering 404/410 are deleted.
+- **Socket.IO** namespace `/rt`, path `/socket.io`; client `auth: { token }` = access token, rejected with `connect_error` `UNAUTHORIZED`.
+  - The server joins each socket to the room `user:{id}`.
+  - Server → client: `notification:new NotificationDto`, `notification:count { count }`, `friends:changed {}`, `session:revoked {}`.
+  - When a session is revoked (logout-all, block, refresh-token reuse), that user's sockets get `session:revoked` and are disconnected (subscribe to the existing Redis channel `auth:session-revoked`).
+  - Through the same-origin proxy (demo deploy), Socket.IO must work over HTTP long-polling. The WebSocket upgrade is optional.
+- **Demo live locations:** when `DEMO_LIVE_LOCATIONS=true` (default on with `DEMO_MODE`), every 60 s the API refreshes `updated_at` of seeded users who have a location, and moves each one up to ~50 m along a deterministic path. This keeps the demo map populated. It never touches real users: seeded users are marked by `phone LIKE '+770000%'` or a seed flag.
 
 ## 3. Phase 3 — Communities & chats (DRAFT)
 
