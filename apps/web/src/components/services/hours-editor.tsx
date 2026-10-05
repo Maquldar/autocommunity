@@ -43,14 +43,14 @@ function DayRow({ day, value, onChange, error }: { day: Weekday; value: string |
         <Check checked={e.open && e.allDay} disabled={!e.open} onChange={(allDay) => set({ allDay })} label={t('submit.allDay')} />
       </div>
       {e.open && !e.allDay ? (
-        <div className="flex flex-wrap items-center gap-2 sm:ps-32">
+        <div className="flex items-center gap-2 sm:ps-32">
           <Input
             type="time"
             aria-label={`${dayName}: ${t('submit.from')}`}
             value={e.from}
             onChange={(ev) => set({ from: ev.target.value })}
             aria-invalid={error ? true : undefined}
-            className="w-32"
+            className="min-w-0 flex-1 px-2.5 tabular-nums sm:w-40 sm:flex-none [&::-webkit-calendar-picker-indicator]:ms-1"
           />
           <span aria-hidden="true">–</span>
           <Input
@@ -59,7 +59,7 @@ function DayRow({ day, value, onChange, error }: { day: Weekday; value: string |
             value={e.to}
             onChange={(ev) => set({ to: ev.target.value })}
             aria-invalid={error ? true : undefined}
-            className="w-32"
+            className="min-w-0 flex-1 px-2.5 tabular-nums sm:w-40 sm:flex-none [&::-webkit-calendar-picker-indicator]:ms-1"
           />
         </div>
       ) : (

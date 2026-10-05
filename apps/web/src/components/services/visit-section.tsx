@@ -3,7 +3,7 @@
 import type { ServiceDto, VisitMethod } from '@autoc/shared';
 import { BadgeCheck, CircleX, Hourglass, MapPinCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useId, useReducer, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -21,6 +21,16 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
   const [flow, dispatch] = useReducer(visitFlowReducer, initialVisitFlow);
   const offer = visitOffer(service.myVisit, now);
   const deepLinked = useRef(false);
+  const sectionId = useId();
+  const prevStage = useRef(offer.stage);
+
+  // After a visit is confirmed the trigger button is replaced; move focus to the new section heading.
+  useEffect(() => {
+    if (flow.step === 'done' && prevStage.current !== offer.stage) {
+      document.getElementById(sectionId)?.querySelector<HTMLElement>('h2')?.focus();
+    }
+    prevStage.current = offer.stage;
+  }, [flow.step, offer.stage, sectionId]);
 
   // Scanning the printed QR with the phone camera opens /services/{id}?code=… → straight to the QR check.
   useEffect(() => {
@@ -50,7 +60,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
       body = (
         <>
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold tracking-tight">{t('promptTitle')}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold tracking-tight focus:outline-none">{t('promptTitle')}</h2>
             <p className="text-[0.9375rem] text-muted-foreground">{t('promptDescription')}</p>
           </div>
           {visitButton(t('cta'))}
@@ -61,7 +71,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
       body = (
         <>
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">{t('title')}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold tracking-tight focus:outline-none">{t('title')}</h2>
             <Badge variant="warning" className="self-start">
               <Hourglass aria-hidden="true" />
               {t('pendingTitle')}
@@ -76,7 +86,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
       body = (
         <>
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">{t('title')}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold tracking-tight focus:outline-none">{t('title')}</h2>
             <Badge variant="danger" className="self-start">
               <CircleX aria-hidden="true" />
               {t('rejectedTitle')}
@@ -91,7 +101,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
       body = (
         <>
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">{t('verifiedTitle')}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold tracking-tight focus:outline-none">{t('verifiedTitle')}</h2>
             {methodBadge ? <div>{methodBadge}</div> : null}
           </div>
           <ReviewForm serviceId={service.id} serviceName={service.name} visitId={service.myVisit!.id} />
@@ -102,7 +112,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
       body = (
         <>
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">{t('reviewedTitle')}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold tracking-tight focus:outline-none">{t('reviewedTitle')}</h2>
             <p className="text-[0.9375rem] text-muted-foreground">{t('reviewedDescription')}</p>
           </div>
           {offer.canVisit ? visitButton(t('again')) : null}
@@ -112,7 +122,7 @@ export function VisitSection({ service, now, initialCode }: { service: ServiceDt
   }
 
   return (
-    <Card className="flex flex-col gap-4" data-testid="visit-section">
+    <Card id={sectionId} className="flex flex-col gap-4" data-testid="visit-section">
       {body}
       <VisitSheet
         serviceId={service.id}

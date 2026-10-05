@@ -48,6 +48,8 @@ export function VisitSheet({ serviceId, serviceName, state, dispatch, onDone }: 
       <SheetContent
         onInteractOutside={(e) => working && e.preventDefault()}
         onEscapeKeyDown={(e) => working && e.preventDefault()}
+        // After a successful visit the "I visited" trigger is gone; the section moves focus itself.
+        onCloseAutoFocus={(e) => state.step === 'done' && e.preventDefault()}
       >
         <SheetHeader>
           <SheetTitle>{t('sheetTitle')}</SheetTitle>
@@ -132,7 +134,7 @@ function GeoStep({ state, dispatch, submit }: StepProps) {
   const check = () =>
     run(async () => {
       setPhase('locating');
-      const at = await getCurrentPosition();
+      const at = await getCurrentPosition({ maximumAgeMs: 0 });
       setPhase('checking');
       await submit({ method: 'geo', lat: at.lat, lng: at.lng });
     });

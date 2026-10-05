@@ -39,7 +39,10 @@ export async function useEnglish(context: BrowserContext): Promise<void> {
  * Creates an onboarded user through the API with the page's cookie jar (page.request shares it),
  * so the app restores the session via /auth/refresh on the next navigation.
  */
-export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<{ phone: string; nickname: string }> {
+export async function signUpViaApi(
+  page: Page,
+  name = 'E2E Driver',
+): Promise<{ phone: string; nickname: string; accessToken: string }> {
   const phone = randomPhone();
   const nickname = randomNickname();
   const headers = { 'x-forwarded-for': testIp(), origin: WEB_URL };
@@ -58,7 +61,7 @@ export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<{ p
   expect(updated.ok(), await updated.text()).toBeTruthy();
   const completed = await page.request.post(`${API}/me/onboarding/complete`, { headers: auth });
   expect(completed.ok(), await completed.text()).toBeTruthy();
-  return { phone, nickname };
+  return { phone, nickname, accessToken };
 }
 
 /** Types a phone number into the login form and requests a code; returns the dev code from the hint. */

@@ -23,14 +23,17 @@ const subscribe = (l: () => void) => {
 };
 const SERVER: Snapshot = { status: 'idle', coords: null };
 
-/** One-shot current position. Resolves with coordinates or rejects with GeoError. */
-export function getCurrentPosition(timeoutMs = 15_000): Promise<Coords> {
+/**
+ * One-shot current position. Resolves with coordinates or rejects with GeoError. `maximumAgeMs: 0` forces a
+ * fresh fix (the visit check must not reuse a position taken before the driver walked to the service).
+ */
+export function getCurrentPosition({ timeoutMs = 15_000, maximumAgeMs = 30_000 }: { timeoutMs?: number; maximumAgeMs?: number } = {}): Promise<Coords> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.reject(new GeoError('unavailable'));
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
       (err) => reject(new GeoError(err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable')),
-      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30_000 },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: maximumAgeMs },
     );
   });
 }

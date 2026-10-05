@@ -124,7 +124,10 @@ export function LocationPicker({
           className={cn('relative h-72 w-full overflow-hidden rounded-xl border bg-muted sm:h-80', invalid && 'border-danger')}
           aria-describedby={describedBy}
         >
-          <div ref={containerRef} className="absolute inset-0 z-map" aria-label={t('mapLabel')} role="region" />
+          {/* MapLibre forces `position: relative` on its container, so the positioning lives on this wrapper. */}
+          <div className="absolute inset-0 z-map dark:[&_.maplibregl-ctrl-group]:bg-card! dark:[&_.maplibregl-ctrl-group_button+button]:border-border! dark:[&_.maplibregl-ctrl-icon]:invert">
+            <div ref={containerRef} className="size-full" aria-label={t('mapLabel')} role="region" />
+          </div>
           <Crosshair aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 z-raised size-5 -translate-x-1/2 -translate-y-1/2 text-foreground/60" />
         </div>
       )}

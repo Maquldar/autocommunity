@@ -149,6 +149,8 @@ export function ServicesMap({ category }: { category: ServiceCategory | undefine
   const [failed, setFailed] = useState(false);
   const [bbox, setBbox] = useState<Bbox | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Pins + clusters drawn after the last render pass (exposed for e2e as data-rendered). */
+  const [rendered, setRendered] = useState(0);
   const position = usePosition({ auto: true });
 
   const data = useQuery({
@@ -201,6 +203,10 @@ export function ServicesMap({ category }: { category: ServiceCategory | undefine
       syncBbox();
     });
     map.on('moveend', syncBbox);
+    map.on('idle', () => {
+      if (!map.getLayer(LAYERS.points)) return;
+      setRendered(map.queryRenderedFeatures({ layers: [LAYERS.points, LAYERS.clusters] }).length);
+    });
     map.on('click', LAYERS.points, (e) => {
       const id = e.features?.[0]?.properties?.id;
       if (typeof id === 'string') setSelected(id);
@@ -276,7 +282,16 @@ export function ServicesMap({ category }: { category: ServiceCategory | undefine
   return (
     <section aria-label={t('map.label')} className="flex flex-col gap-2">
       <div className="relative isolate h-[60dvh] min-h-80 w-full overflow-hidden rounded-2xl border bg-muted lg:h-[36rem]">
-        <div ref={containerRef} className="absolute inset-0 z-map" />
+        {/* MapLibre forces `position: relative` on its container, so the positioning lives on this wrapper. */}
+        <div
+          className="absolute inset-0 z-map dark:[&_.maplibregl-ctrl-group]:bg-card! dark:[&_.maplibregl-ctrl-group_button+button]:border-border! dark:[&_.maplibregl-ctrl-icon]:invert"
+          data-testid="services-map"
+          data-ready={ready ? 'true' : 'false'}
+          data-count={data.data ? count : undefined}
+          data-rendered={rendered}
+        >
+          <div ref={containerRef} className="size-full" />
+        </div>
         <div className="pointer-events-none absolute inset-x-2 top-2 z-raised flex flex-col items-start gap-2">
           {data.isFetching || !ready ? (
             <span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1.5 text-sm shadow-md">
