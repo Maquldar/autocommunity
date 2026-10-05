@@ -284,7 +284,7 @@ Server → client: `message:new MessageDto`, `message:deleted {chatId, messageId
   - `chats:changed {}` goes to the affected user(s) on: community create, join (public), approve, leave, removal, community delete (all former chat members), and direct-chat creation (both users).
   - Direct-message push: `{ title: sender name, body: text preview (≤ 120 chars) or a localized media label, url: '/chats/{chatId}', tag: 'chat:{chatId}' }`, skipped when any socket of the recipient is in the chat room (with auto-join that means: connected).
 
-## 4. Phase 4 — SOS (DRAFT)
+## 4. Phase 4 — SOS (FROZEN)
 
 ```ts
 type SosType = 'flat_tire'|'battery'|'fuel'|'stuck'|'breakdown'|'accident'|'tow'|'other'
@@ -315,6 +315,53 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 | GET | `/public/sos/:token` | public | `{ type, status, lat, lng, requesterName, helperNickname, updatedAt }` |
 
 `contactPhone`: requester's phone visible to viewers only if `sharePhone`; otherwise only to accepted helpers. Accepted helper's phone visible to requester.
+
+### Phase 4 rules (FROZEN)
+
+- **Create** (`POST /sos`):
+  - Requires `phoneVerified`, rating ≥ 20 (`RATING.sosCreateMin`), not `sosBannedUntil > now`, ≤ 3 SOS per rolling 24 h, and no other SOS of the user in `created|accepted|in_progress`.
+  - Errors: 403 `PHONE_NOT_VERIFIED` | `RATING_TOO_LOW` | `SOS_BANNED` (details `{until}`); 429 `SOS_RATE_LIMIT`; 409 `SOS_ALREADY_OPEN`.
+  - Photos must be the caller's uploads with purpose `sos` (≤ 4).
+  - On creation the requester's location is also upserted (source client).
+  - `expiresAt` = createdAt + 2 h.
+- **Dispatch** (BullMQ job `sos.dispatch`, immediately, then delayed re-runs at +5 min with radius 10 km and +10 min with 20 km, only while the status is still `created`):
+  - Candidates are `active` onboarded users with `receive_sos = true` and rating ≥ 30, excluding the requester, with a location < 15 min old, `ST_DWithin(location, sos.location, radius)`. **This includes `hidden`-mode users** (their position is used, never revealed).
+  - Ordered by distance, top 20 not already in `sos_dispatches`.
+  - Each candidate gets a `sos_nearby` notification `{ sosId, type, distanceM, requester: UserMini }`, a Web Push (title localized, url `/sos/{id}`, tag `sos:{id}`) and a socket `sos:new SosDto` (viewer = recipient).
+  - `radiusM` on the SOS is updated to the current radius.
+- **Visibility:**
+  - `GET /sos/:id` is allowed for the requester, any responder, and users within 20 km of the SOS (by their last location) or who were dispatched.
+  - Others → 404.
+  - The public share link is separate.
+  - `GET /sos/nearby` and `GET /map/sos` return open (`created|accepted|in_progress`) SOS within 20 km / the bbox, excluding SOS from users the viewer… (no blocking feature, so none excluded) and the viewer's own.
+- **Lifecycle:**
+  - `respond` (helper; rating ≥ 30, receive not required, not the requester, SOS status `created|accepted`) → response `offered`, and notify the requester `sos_response`.
+    - Max 10 active offers per SOS.
+    - A helper may have at most 1 response in `accepted|arrived` across all SOS.
+  - `withdraw`: helper, status `offered|accepted` → `withdrawn`. If no accepted helper remains, the SOS goes back to `created` (dispatch does not restart).
+  - `accept` (requester; response `offered`) → response `accepted`.
+    - The SOS becomes `accepted` (first time sets `acceptedAt`).
+    - Other offers stay `offered` (several helpers can be accepted, max 3).
+    - Creates or extends the SOS group chat (type `sos`, refId = sosId) with requester + accepted helpers, and posts system messages.
+    - Notifies the helper `sos_accepted`.
+  - `decline` (requester; `offered`) → `declined`.
+  - `arrived` (accepted helper or requester) → that response `arrived` and the SOS `in_progress`.
+  - `close` (requester; `accepted|in_progress`) → `closed`, `closedAt`.
+  - `cancel` (requester; `created|accepted|in_progress`) → `cancelled`.
+  - Job `sos.expire` at `expiresAt`: if still `created` → `expired`.
+  - Every transition emits `sos:update` to room `sos:{id}` (requester, responders and dispatched users) and a `sos_status` notification to the counterpart(s).
+  - Invalid transitions → 409 `SOS_INVALID_STATE`.
+- **Contact:**
+  - `contactPhone` = the requester's phone when `sharePhone` is true (any viewer allowed to see the SOS), or when the viewer is an accepted helper.
+  - The requester sees `contactPhone` of each accepted helper inside `responses[].helperPhone` (field added to `SosResponseDto`: `helperPhone: string | null`).
+  - Never exposed otherwise.
+- **Share link:**
+  - `POST /sos/:id/share` (requester) returns `{ url: "<WEB_ORIGIN>/s/<token>" }`, a 32-byte random base64url token, stored hashed.
+  - `GET /public/sos/:token` (public, rate-limited 60/min/IP) returns the type, status, exact lat/lng, the requester's first name, accepted helper nicknames and `updatedAt`, while the SOS is open or until 1 h after it ended; then 404.
+- **`canReview`:** false in Phase 4 (reviews are Phase 5) — always return false.
+- **Distances:** `distanceM` is from the viewer's last location (null if none).
+- **Seed:** 1 open SOS near central Almaty from a seed user (flat_tire, with a photo), 1 closed SOS where the demo user helped, and 1 expired.
+- **Realtime:** sockets auto-join `sos:{id}` for SOS where the user is requester/responder/dispatched; `chat:{id}` for SOS chats as usual.
 
 ## 5. Phase 5 — Ratings, reviews, reports (DRAFT)
 
