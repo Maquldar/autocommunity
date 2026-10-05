@@ -5,13 +5,15 @@
  *   pnpm --filter @autoc/api db:seed
  */
 import { PrismaClient, type PrivacyMode } from '@prisma/client';
-import { CAR_BRANDS, RATING } from '@autoc/shared';
+import { CAR_BRANDS, DEFAULT_MAP_CENTER, RATING } from '@autoc/shared';
 import sharp from 'sharp';
 import { loadDotEnv, parseEnvOrThrow } from '../../src/config/env';
 import { v7 } from 'uuid';
 import { createStorage } from '../../src/infra/storage/create-storage';
+import { ALMATY_BOUNDS } from '../../src/modules/demo/demo-path';
 import { friendPairKey } from '../../src/modules/users/relation.service';
 import { WARN_ACTION } from '../../src/modules/users/user-view.service';
+import { COMMUNITIES, seedCommunities } from './communities';
 import { createRng, type Rng } from './rng';
 import { seedServices } from './services';
 
@@ -117,7 +119,7 @@ const PLATE_LETTERS = 'ABCDEHKMOPTXYZ';
 const AVATAR_COLORS = ['#2f6fde', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
 
 /** Almaty city bounds (roughly between the airport, Sayakhat and the foothills). */
-const ALMATY = { minLat: 43.19, maxLat: 43.32, minLng: 76.82, maxLng: 77.0 };
+const ALMATY = ALMATY_BOUNDS;
 
 /* ------------------------------------------------------------------ generators */
 
@@ -238,6 +240,45 @@ function buildUsers(): SeedUser[] {
   return users;
 }
 
+/**
+ * The demo account's surroundings, placed around the map's default centre so every visibility branch shows
+ * up on its first screen. Users are addressed by their index in `users.slice(2)`, matching seedFriendships:
+ * 0–5 accepted friends, 6–7 requests to demo, 8 a request from demo, 9+ strangers.
+ * Communities are seeded afterwards (see communities.ts); index 13 and 8 share the Toyota club with demo.
+ */
+const DEMO_NEIGHBOURHOOD: { index: number; mode: PrivacyMode; dLat: number; dLng: number; minutesAgo: number }[] = [
+  // friends: exact positions (relation "friend"), except the hidden one
+  { index: 0, mode: 'friends', dLat: 0.004, dLng: 0.006, minutesAgo: 1 },
+  { index: 1, mode: 'community', dLat: -0.006, dLng: 0.003, minutesAgo: 2 },
+  { index: 2, mode: 'everyone', dLat: 0.009, dLng: -0.008, minutesAgo: 3 },
+  { index: 3, mode: 'friends', dLat: -0.012, dLng: -0.01, minutesAgo: 4 },
+  { index: 4, mode: 'community', dLat: 0.015, dLng: 0.014, minutesAgo: 5 },
+  { index: 5, mode: 'hidden', dLat: 0.002, dLng: -0.004, minutesAgo: 1 },
+  // pending requests: only "everyone" shows, approximately
+  { index: 6, mode: 'everyone', dLat: -0.003, dLng: 0.017, minutesAgo: 2 },
+  { index: 7, mode: 'friends', dLat: 0.007, dLng: 0.012, minutesAgo: 3 },
+  { index: 8, mode: 'community', dLat: -0.009, dLng: -0.015, minutesAgo: 2 },
+  // strangers in "everyone" mode: approximate (snapped to the ~500 m grid)
+  { index: 9, mode: 'everyone', dLat: 0.018, dLng: -0.02, minutesAgo: 1 },
+  { index: 10, mode: 'everyone', dLat: -0.017, dLng: 0.022, minutesAgo: 4 },
+  { index: 11, mode: 'everyone', dLat: 0.011, dLng: 0.027, minutesAgo: 6 },
+  { index: 12, mode: 'everyone', dLat: -0.021, dLng: -0.026, minutesAgo: 2 },
+  // stranger in community mode who shares the (public) Toyota club with demo: approximate, relation "community"
+  { index: 13, mode: 'community', dLat: 0.005, dLng: -0.018, minutesAgo: 3 },
+  // stranger who shares only with friends: invisible to demo
+  { index: 14, mode: 'friends', dLat: -0.014, dLng: 0.008, minutesAgo: 2 },
+];
+
+function arrangeDemoNeighbourhood(users: SeedUser[]): void {
+  const others = users.slice(2);
+  for (const n of DEMO_NEIGHBOURHOOD) {
+    const u = others[n.index]!;
+    u.privacyMode = n.mode;
+    u.city = 'Almaty';
+    u.location = { lat: DEFAULT_MAP_CENTER.lat + n.dLat, lng: DEFAULT_MAP_CENTER.lng + n.dLng, minutesAgo: n.minutesAgo };
+  }
+}
+
 async function wipe(): Promise<void> {
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
@@ -253,6 +294,7 @@ async function main(): Promise<void> {
     return;
   }
   const users = buildUsers();
+  arrangeDemoNeighbourhood(users);
   await wipe();
 
   for (const [index, u] of users.entries()) {
@@ -295,14 +337,31 @@ async function main(): Promise<void> {
     }
     if (u.location) {
       await prisma.$executeRaw`
-        INSERT INTO user_locations (user_id, location, accuracy_m, updated_at)
+        INSERT INTO user_locations (user_id, location, accuracy_m, source, updated_at)
         VALUES (${u.id}::uuid, ST_SetSRID(ST_MakePoint(${u.location.lng}::float8, ${u.location.lat}::float8), 4326)::geography,
-                ${rng.int(5, 40)}::float8, now() - make_interval(mins => ${u.location.minutesAgo}::int))`;
+                ${rng.int(5, 40)}::float8, 'seed', now() - make_interval(mins => ${u.location.minutesAgo}::int))`;
     }
   }
 
   const friendships = await seedFriendships(users);
   console.log(`Seeded ${await seedServices({ prisma, storage, rng, newId, now: NOW, users })}.`);
+
+  // Communities: demo is active in the Toyota club and the offroad group, and has a pending request to the
+  // private "Night Drive". Strangers next to the map centre in community mode share the Toyota club with
+  // demo, so they appear on demo's map approximately (public community → relation "community", snapped).
+  const others = users.slice(2);
+  const toyota = COMMUNITIES.findIndex((c) => c.name.startsWith('Toyota'));
+  const offroad = COMMUNITIES.findIndex((c) => c.name.startsWith('Offroad'));
+  const night = COMMUNITIES.findIndex((c) => c.isPrivate);
+  const communities = await seedCommunities(prisma, rng, newId, {
+    now: NOW,
+    demo: users[1]!,
+    friends: others.slice(0, 6),
+    pool: others.filter((u) => u.city === 'Almaty'),
+    coMembers: [others[13]!, others[8]!],
+    demoActive: [toyota, offroad],
+    demoPending: night,
+  });
 
   // One warning on a regular user so the admin/warnings UI has data.
   const admin = users[0]!;
@@ -324,7 +383,15 @@ async function main(): Promise<void> {
     `Seeded ${users.length} users (${users.filter((u) => u.withAvatar).length} with avatars), ${vehicles} vehicles, ` +
       `${users.filter((u) => u.location).length} locations, ${friendships.accepted} friendships, ${friendships.pending} pending requests.`,
   );
+  console.log(
+    `Seeded ${communities.communities} communities, ${communities.directChats} direct chats, ${communities.messages} messages ` +
+      '(demo: member of Toyota Club KZ and Offroad 4x4 Алматы, pending in Night Drive).',
+  );
   console.log('Sign in: admin +77000000001, demo +77000000002 (dev OTP code is returned by /auth/otp/request).');
+  console.log(
+    `Demo map: ${DEMO_NEIGHBOURHOOD.length} users around ${DEFAULT_MAP_CENTER.lat},${DEFAULT_MAP_CENTER.lng} ` +
+      '(friends exact; "everyone" strangers and Toyota-club co-members approximate; hidden and friends-only strangers invisible).',
+  );
 }
 
 function baseUser(u: SeedUser) {
@@ -343,6 +410,7 @@ function baseUser(u: SeedUser) {
     locale: 'ru',
     onboardedAt: new Date(u.createdAt.getTime() + 5 * 60_000),
     lastActiveAt: u.location ? new Date(NOW - u.location.minutesAgo * 60_000) : new Date(NOW - rng.int(1, 72) * 3_600_000),
+    isSeed: true,
     createdAt: u.createdAt,
   };
 }

@@ -86,3 +86,13 @@ describe('vehicles', () => {
     await request(t.http).delete(`/api/v1/me/vehicles/${v.id}`).set(bearer(other.token)).expect(404);
   });
 });
+
+describe('vehicle body validation', () => {
+  it('requires a numeric year in JSON bodies (no string coercion)', async () => {
+    const u = await createUser(t);
+    const res = await request(t.http).post('/api/v1/me/vehicles').set(bearer(u.token)).send({ brand: 'Toyota', model: 'Camry', year: '2019' }).expect(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    const ok = await request(t.http).post('/api/v1/me/vehicles').set(bearer(u.token)).send({ brand: 'Toyota', model: 'Camry', year: 2019 }).expect(201);
+    await request(t.http).patch(`/api/v1/me/vehicles/${ok.body.id}`).set(bearer(u.token)).send({ year: '2020' }).expect(400);
+  });
+});

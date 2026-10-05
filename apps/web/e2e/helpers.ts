@@ -88,3 +88,30 @@ export async function enterCode(page: Page, code: string): Promise<void> {
 export async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
+
+/** Signs in through the login form (code from the dev hint) and waits for the home route. */
+export async function signInInUi(page: Page, phone: string): Promise<void> {
+  await page.goto('/login');
+  const code = await requestCodeInUi(page, phone);
+  await enterCode(page, code);
+  await expect(page).toHaveURL(/\/map$/, { timeout: 20_000 });
+}
+
+/** Counts navigator.geolocation.watchPosition calls (window.__geoWatchCalls), installed before any page script. */
+export async function trackGeolocation(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __geoWatchCalls: number };
+    w.__geoWatchCalls = 0;
+    const geo = navigator.geolocation;
+    if (!geo) return;
+    const original = geo.watchPosition.bind(geo);
+    geo.watchPosition = (...args: Parameters<Geolocation['watchPosition']>) => {
+      w.__geoWatchCalls += 1;
+      return original(...args);
+    };
+  });
+}
+
+export async function geolocationWatchCalls(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __geoWatchCalls: number }).__geoWatchCalls);
+}

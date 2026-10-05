@@ -36,7 +36,7 @@ const apiOrigin = sameOriginApi ? "'self'" : (originOf(process.env.NEXT_PUBLIC_A
 const apiWsOrigin = sameOriginApi ? null : apiOrigin.replace(/^http/, 'ws');
 const mapStyleOrigin = originOf(process.env.NEXT_PUBLIC_MAP_STYLE_URL);
 
-const tileHosts = ['https://*.tile.openstreetmap.org', 'https://tiles.openfreemap.org'];
+const tileHosts = ['https://tile.openstreetmap.org', 'https://*.tile.openstreetmap.org', 'https://tiles.openfreemap.org'];
 // Google Identity Services and Sign in with Apple JS. Only used when GET /auth/providers enables them.
 const googleSignIn = 'https://accounts.google.com';
 const appleSignIn = ['https://appleid.cdn-apple.com', 'https://appleid.apple.com'];
@@ -113,11 +113,17 @@ const nextConfig: NextConfig = {
     config.resolve.alias = { ...config.resolve.alias, 'next-intl/config': path.resolve(config.context, I18N_REQUEST_CONFIG) };
     return config;
   },
+  // Next would 308 `/socket.io/` to `/socket.io`; only needed when proxying the API.
+  skipTrailingSlashRedirect: Boolean(proxyTarget),
   async rewrites() {
     if (!proxyTarget) return [];
     return [
       { source: '/api/v1/:path*', destination: `${proxyTarget}/api/v1/:path*` },
       { source: '/media/:path*', destination: `${proxyTarget}/media/:path*` },
+      // Socket.IO over HTTP long-polling (WebSocket upgrades aren't proxied by rewrites). Its endpoint is
+      // `/socket.io/` with a trailing slash, hence skipTrailingSlashRedirect below.
+      { source: '/socket.io/', destination: `${proxyTarget}/socket.io/` },
+      { source: '/socket.io/:path+', destination: `${proxyTarget}/socket.io/:path+` },
     ];
   },
 };

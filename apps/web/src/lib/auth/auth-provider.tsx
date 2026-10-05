@@ -2,9 +2,15 @@
 
 import type { AuthResult, Me } from '@autoc/shared';
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, session, type LogoutReason } from '@/lib/api';
+import { disablePush } from '@/lib/push/push';
 import { LOGIN_ROUTE } from '@/lib/routes';
+
+/** Drops this browser's push subscription before signing out (best effort, bounded). */
+function unsubscribePush(): Promise<void> {
+  return Promise.race([disablePush().catch(() => undefined), new Promise<void>((resolve) => setTimeout(resolve, 3000))]);
+}
 
 export const ME_QUERY_KEY = ['me'] as const;
 
@@ -28,6 +34,8 @@ type AuthContextValue = {
   logoutAll: (redirectTo?: string) => Promise<void>;
   /** Local cleanup after DELETE /me (the server already cleared the cookies). */
   forgetSession: (redirectTo?: string) => void;
+  /** Call before an action that ends the session on purpose, so any sign-out it triggers goes to `redirectTo`. */
+  expectSessionEnd: (redirectTo: string | null) => void;
   /** Leave the blocked / error screens. */
   retryBootstrap: () => void;
   dismissBlocked: () => void;
@@ -90,24 +98,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(ME_QUERY_KEY, result.user);
       session.setAccessToken(result.accessToken);
       setLogoutReason(null);
+      intendedExit.current = null;
       setStatus('authenticated');
     },
     [queryClient],
   );
 
+  // Set while the user ends the session on purpose (account deletion): the server revokes the session over
+  // the socket before the HTTP response arrives, and that sign-out must land where the user was going.
+  const intendedExit = useRef<string | null>(null);
+  const exitPath = (fallback: string) => intendedExit.current ?? fallback;
+
+  const expectSessionEnd = useCallback((redirectTo: string | null) => {
+    intendedExit.current = redirectTo;
+  }, []);
+
   const logout = useCallback(async (redirectTo = LOGIN_ROUTE) => {
-    setAfterLogoutPath(redirectTo);
+    setAfterLogoutPath(exitPath(redirectTo));
+    await unsubscribePush();
     await session.logout();
   }, []);
 
   const logoutAll = useCallback(async (redirectTo = LOGIN_ROUTE) => {
+    await unsubscribePush();
     await api.auth.logoutAll();
-    setAfterLogoutPath(redirectTo);
+    setAfterLogoutPath(exitPath(redirectTo));
     session.clear('user');
   }, []);
 
   const forgetSession = useCallback((redirectTo = LOGIN_ROUTE) => {
-    setAfterLogoutPath(redirectTo);
+    setAfterLogoutPath(exitPath(redirectTo));
     session.clear('user');
   }, []);
 
@@ -119,8 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const dismissBlocked = useCallback(() => setStatus('anonymous'), []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, logoutReason, afterLogoutPath, me, completeSignIn, logout, logoutAll, forgetSession, retryBootstrap, dismissBlocked }),
-    [status, logoutReason, afterLogoutPath, me, completeSignIn, logout, logoutAll, forgetSession, retryBootstrap, dismissBlocked],
+    () => ({ status, logoutReason, afterLogoutPath, me, completeSignIn, logout, logoutAll, forgetSession, expectSessionEnd, retryBootstrap, dismissBlocked }),
+    [status, logoutReason, afterLogoutPath, me, completeSignIn, logout, logoutAll, forgetSession, expectSessionEnd, retryBootstrap, dismissBlocked],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

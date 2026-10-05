@@ -26,6 +26,9 @@ export type AppShellProps = {
   navItems?: readonly NavItem[];
 };
 
+/** Pages that fill the whole content area edge to edge (no gutters, no page scroll): the map. */
+export const FULL_BLEED_ROUTES: readonly string[] = ['/map'];
+
 /**
  * Signed-in app frame: mobile top bar + bottom tab bar, desktop (≥1024px) sidebar.
  * Handles safe areas, the skip link and the offline banner.
@@ -36,9 +39,10 @@ export function AppShell({ children, title, actions, notificationSlot, accountSl
   const tabs = getNavItems('tab', navItems);
   const secondary = getNavItems('secondary', navItems);
   const hasTabs = tabs.length > 0;
+  const fullBleed = FULL_BLEED_ROUTES.includes(pathname);
 
   return (
-    <div className="min-h-dvh">
+    <div className={fullBleed ? 'h-dvh overflow-hidden' : 'min-h-dvh'}>
       <a
         href="#main-content"
         className={cn(
@@ -51,7 +55,7 @@ export function AppShell({ children, title, actions, notificationSlot, accountSl
 
       <Sidebar tabs={tabs} secondary={secondary} pathname={pathname} />
 
-      <div className="flex min-h-dvh flex-col lg:ps-[var(--sidebar-width)]">
+      <div className={cn('flex flex-col lg:ps-[var(--sidebar-width)]', fullBleed ? 'h-dvh' : 'min-h-dvh')}>
         <header className="sticky top-0 z-header border-b bg-background/85 pt-safe backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
           <OfflineBanner />
           <div className="mx-auto flex h-[var(--header-height)] w-full max-w-content items-center gap-2 px-safe">
@@ -73,10 +77,15 @@ export function AppShell({ children, title, actions, notificationSlot, accountSl
           id="main-content"
           tabIndex={-1}
           className={cn(
-            'mx-auto flex w-full max-w-content flex-1 flex-col pt-4 outline-none lg:pb-12',
-            'ps-[max(1rem,var(--safe-left))] pe-[max(1rem,var(--safe-right))]',
-            'sm:ps-[max(1.5rem,var(--safe-left))] sm:pe-[max(1.5rem,var(--safe-right))]',
-            hasTabs ? 'pb-[calc(var(--nav-height)+var(--safe-bottom)+1.5rem)]' : 'pb-[calc(var(--safe-bottom)+1.5rem)]',
+            fullBleed
+              ? // The page positions itself inside and keeps clear of the bottom tab bar on phones.
+                'relative flex min-h-0 w-full flex-1 flex-col outline-none'
+              : cn(
+                  'mx-auto flex w-full max-w-content flex-1 flex-col pt-4 outline-none lg:pb-12',
+                  'ps-[max(1rem,var(--safe-left))] pe-[max(1rem,var(--safe-right))]',
+                  'sm:ps-[max(1.5rem,var(--safe-left))] sm:pe-[max(1.5rem,var(--safe-right))]',
+                  hasTabs ? 'pb-[calc(var(--nav-height)+var(--safe-bottom)+1.5rem)]' : 'pb-[calc(var(--safe-bottom)+1.5rem)]',
+                ),
           )}
         >
           {children}

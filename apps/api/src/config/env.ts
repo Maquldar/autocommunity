@@ -75,6 +75,18 @@ export const envSchema = z
     S3_ACCESS_KEY_ID: optionalString,
     S3_SECRET_ACCESS_KEY: optionalString,
     S3_FORCE_PATH_STYLE: bool.default(true),
+
+    /** Web Push VAPID keys. When unset, a key pair is generated once and stored in `app_settings`. */
+    VAPID_PUBLIC_KEY: optionalString,
+    VAPID_PRIVATE_KEY: optionalString,
+    /** `mailto:` or `https:` contact sent to push services. */
+    VAPID_SUBJECT: z
+      .string()
+      .trim()
+      .regex(/^(mailto:|https:\/\/)/, 'VAPID_SUBJECT must start with mailto: or https://')
+      .default('mailto:support@autocommunity.app'),
+    /** Moves seeded users along small loops every 60 s so the demo map stays populated. Defaults to DEMO_MODE. */
+    DEMO_LIVE_LOCATIONS: bool.optional(),
   })
   .superRefine((env, ctx) => {
     const need = (keys: (keyof typeof env)[], when: string) => {
@@ -85,6 +97,7 @@ export const envSchema = z
     if (env.SMS_PROVIDER === 'twilio') need(['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'], 'SMS_PROVIDER=twilio');
     if (env.STORAGE_DRIVER === 's3') need(['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'], 'STORAGE_DRIVER=s3');
     if (env.APPLE_CLIENT_ID) need(['APPLE_REDIRECT_URI'], 'APPLE_CLIENT_ID is set');
+    if (env.VAPID_PUBLIC_KEY || env.VAPID_PRIVATE_KEY) need(['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'], 'either VAPID key is set');
     if (env.NODE_ENV === 'production' && env.SMS_PROVIDER === 'console' && !env.ALLOW_CONSOLE_SMS && !env.DEMO_MODE) {
       ctx.addIssue({ code: 'custom', path: ['SMS_PROVIDER'], message: 'console SMS in production requires ALLOW_CONSOLE_SMS=true' });
     }
@@ -94,7 +107,10 @@ export const envSchema = z
   });
 
 type ParsedEnv = z.output<typeof envSchema>;
-export type Env = Omit<ParsedEnv, 'PUBLIC_MEDIA_URL'> & { PUBLIC_MEDIA_URL: string };
+export type Env = Omit<ParsedEnv, 'PUBLIC_MEDIA_URL' | 'DEMO_LIVE_LOCATIONS'> & {
+  PUBLIC_MEDIA_URL: string;
+  DEMO_LIVE_LOCATIONS: boolean;
+};
 
 function withScheme(value: string): string {
   return value === '' || /^[a-z]+:\/\//i.test(value) ? value : `https://${value}`;
@@ -124,7 +140,11 @@ export function parseEnvOrThrow(source: NodeJS.ProcessEnv = process.env): Env {
   }
   const env = result.data;
   // Behind a same-origin proxy the web app serves /media too, so the first web origin is the default.
-  return { ...env, PUBLIC_MEDIA_URL: env.PUBLIC_MEDIA_URL ?? `${env.WEB_ORIGIN[0]}/media` };
+  return {
+    ...env,
+    PUBLIC_MEDIA_URL: env.PUBLIC_MEDIA_URL ?? `${env.WEB_ORIGIN[0]}/media`,
+    DEMO_LIVE_LOCATIONS: env.DEMO_LIVE_LOCATIONS ?? env.DEMO_MODE,
+  };
 }
 
 export const isCookieSecure = (env: Env): boolean => env.COOKIE_SECURE ?? env.NODE_ENV === 'production';

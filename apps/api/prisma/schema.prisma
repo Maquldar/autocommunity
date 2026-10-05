@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [postgis, citext]
+  extensions = [postgis, citext, pg_trgm]
 }
 
 /* ------------------------------------------------------------------ users & auth */
@@ -57,6 +57,8 @@ model User {
   locale           String      @default("ru")
   onboardedAt      DateTime?   @map("onboarded_at")
   lastActiveAt     DateTime?   @map("last_active_at")
+  /// Created by the demo seed; only these users are moved by DEMO_LIVE_LOCATIONS.
+  isSeed           Boolean     @default(false) @map("is_seed")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
@@ -163,11 +165,18 @@ model Vehicle {
   @@map("vehicles")
 }
 
+/// Who wrote a position: the demo seed (moved by DEMO_LIVE_LOCATIONS) or a client (PUT /me/location).
+enum LocationSource {
+  seed
+  client
+}
+
 /// Latest position only; history is never stored (privacy).
 model UserLocation {
   userId    String                                @id @map("user_id") @db.Uuid
   location  Unsupported("geography(Point,4326)")
   accuracyM Float?                                @map("accuracy_m")
+  source    LocationSource                        @default(client)
   updatedAt DateTime                              @default(now()) @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -785,6 +794,18 @@ model PollVote {
   @@id([optionId, userId])
   @@index([pollId, userId])
   @@map("poll_votes")
+}
+
+/* ------------------------------------------------------------------ app settings */
+
+/// Small server-managed key/value settings (e.g. auto-generated VAPID keys).
+model AppSetting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }
 
 /* ------------------------------------------------------------------ file storage (STORAGE_DRIVER=postgres) */

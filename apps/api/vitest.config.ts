@@ -50,6 +50,11 @@ export default defineConfig({
             TRUST_PROXY: 'loopback',
             GOOGLE_CLIENT_ID: '',
             APPLE_CLIENT_ID: '',
+            // Explicit so values from apps/api/.env (which Prisma loads into process.env) can't leak in.
+            DEMO_MODE: 'false',
+            DEMO_LIVE_LOCATIONS: 'false',
+            VAPID_PUBLIC_KEY: '',
+            VAPID_PRIVATE_KEY: '',
           },
         },
       },

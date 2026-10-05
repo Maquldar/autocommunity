@@ -49,7 +49,8 @@ export default defineConfig({
           command: 'pnpm --filter @autoc/api start',
           // The specs present distinct X-Forwarded-For client IPs (TEST-NET) so repeated runs don't hit the
           // per-IP OTP limit (20/h); that needs the API to trust the loopback proxy hop.
-          env: { TRUST_PROXY: 'loopback' },
+          // DEMO_LIVE_LOCATIONS keeps the seeded drivers' positions fresh (< 15 min) so map.spec sees them.
+          env: { TRUST_PROXY: 'loopback', DEMO_LIVE_LOCATIONS: 'true' },
           url: `${apiURL}/api/v1/health`,
           reuseExistingServer: true,
           timeout: 120_000,

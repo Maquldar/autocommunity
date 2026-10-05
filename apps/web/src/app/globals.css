@@ -441,3 +441,26 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- Map (MapLibre GL) ---------- */
+
+/* Vector/raster map styles are light. In dark mode only the canvas is inverted; markers are DOM and keep their tokens. */
+.dark .map-canvas .maplibregl-canvas {
+  filter: invert(0.9) hue-rotate(180deg) saturate(0.65) brightness(0.95) contrast(0.95);
+}
+
+.map-canvas .maplibregl-ctrl-attrib {
+  background-color: color-mix(in srgb, var(--card) 88%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  border-start-start-radius: 0.5rem;
+}
+
+.map-canvas .maplibregl-ctrl-attrib a {
+  color: var(--foreground);
+}
+
+.map-canvas .maplibregl-ctrl-attrib-button {
+  display: none;
+}

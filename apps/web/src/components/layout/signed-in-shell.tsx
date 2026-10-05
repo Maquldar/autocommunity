@@ -1,35 +1,50 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { AccountMenu } from '@/components/shell/account-menu';
 import { AppShell } from '@/components/shell/app-shell';
+import { LiveNotificationBell } from '@/components/shell/live-notification-bell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth/auth-provider';
-import { RequireAuth } from '@/lib/auth/guards';
+import { RequireAuth, useCurrentUser } from '@/lib/auth/guards';
+import { LocationProvider } from '@/lib/location/location-provider';
+import { registerServiceWorker } from '@/lib/push/push';
+import { RealtimeProvider } from '@/lib/realtime/realtime-provider';
 
 /** AppShell for signed-in, onboarded users. The page area shows `fallback` until the session is known. */
 export function SignedInShell({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
   const { status, me, logout } = useAuth();
   const user = status === 'authenticated' ? me.data : undefined;
 
+  useEffect(() => {
+    // The worker only handles Web Push; registering early lets the settings switch subscribe instantly.
+    void registerServiceWorker();
+  }, []);
+
   return (
-    <AppShell
-      accountSlot={
-        user ? (
-          <AccountMenu
-            user={user}
-            onLogout={() => void logout()}
-          />
-        ) : (
-          <Skeleton className="ms-1 size-8 rounded-full" />
-        )
-      }
-    >
-      <RequireAuth mode="app" fallback={fallback}>
-        {children}
-      </RequireAuth>
-    </AppShell>
+    <RealtimeProvider>
+      <AppShell
+        notificationSlot={<LiveNotificationBell />}
+        accountSlot={
+          user ? (
+            <AccountMenu user={user} onLogout={() => void logout()} />
+          ) : (
+            <Skeleton className="ms-1 size-8 rounded-full" />
+          )
+        }
+      >
+        <RequireAuth mode="app" fallback={fallback}>
+          <SignedInProviders>{children}</SignedInProviders>
+        </RequireAuth>
+      </AppShell>
+    </RealtimeProvider>
   );
+}
+
+/** Providers that need the onboarded user. */
+function SignedInProviders({ children }: { children: ReactNode }) {
+  const me = useCurrentUser();
+  return <LocationProvider userId={me.id}>{children}</LocationProvider>;
 }
 
 /** Generic page skeleton: header block + a few rows. */

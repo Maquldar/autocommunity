@@ -67,4 +67,14 @@ describe('env validation', () => {
     expect(isDevOtpExposed(twilio)).toBe(false);
     expect(isDevOtpExposed(parseEnvOrThrow({ ...base, AUTH_EXPOSE_DEV_CODE: 'true' }))).toBe(true);
   });
+
+  it('defaults DEMO_LIVE_LOCATIONS to DEMO_MODE and requires VAPID keys in pairs', () => {
+    expect(parseEnvOrThrow(base).DEMO_LIVE_LOCATIONS).toBe(false);
+    expect(parseEnvOrThrow({ ...base, DEMO_MODE: 'true' }).DEMO_LIVE_LOCATIONS).toBe(true);
+    expect(parseEnvOrThrow({ ...base, DEMO_MODE: 'true', DEMO_LIVE_LOCATIONS: 'false' }).DEMO_LIVE_LOCATIONS).toBe(false);
+    expect(parseEnvOrThrow({ ...base, DEMO_LIVE_LOCATIONS: 'true' }).DEMO_LIVE_LOCATIONS).toBe(true);
+    expect(() => parseEnvOrThrow({ ...base, VAPID_PUBLIC_KEY: 'abc' })).toThrow(/VAPID_PRIVATE_KEY/);
+    expect(() => parseEnvOrThrow({ ...base, VAPID_SUBJECT: 'admin@example.com' })).toThrow(/VAPID_SUBJECT/);
+    expect(parseEnvOrThrow(base).VAPID_SUBJECT).toMatch(/^mailto:/);
+  });
 });

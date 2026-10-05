@@ -1,9 +1,10 @@
 'use client';
 
-import { Pencil } from 'lucide-react';
+import { Handshake, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { ListGroup, ListItem } from '@/components/ui/list-item';
 import { useCurrentUser } from '@/lib/auth/guards';
 import { MyVehicles } from './my-vehicles';
 import { ProfileHeader } from './profile-header';
@@ -33,6 +34,18 @@ export function OwnProfileView() {
           })}
         </p>
       )}
+      <ListGroup>
+        <ListItem
+          href="/friends"
+          leading={
+            <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-xl bg-primary-soft text-primary-soft-foreground">
+              <Handshake className="size-5" />
+            </span>
+          }
+          title={t('friendsLink')}
+          description={t('friendsLinkHint')}
+        />
+      </ListGroup>
       <MyVehicles />
     </div>
   );

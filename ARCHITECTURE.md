@@ -144,7 +144,8 @@ All list endpoints use **keyset (cursor) pagination** on `(created_at, id)` — 
   - `hidden` → never returned.
   - `friends` → returned only to accepted friends.
   - `community` → returned to users sharing ≥1 active community (and friends).
-  - `everyone` → returned to all authenticated users; coordinates snapped to a ~500 m grid unless the viewer is a friend or co-member.
+  - `everyone` → returned to all authenticated users.
+  - Exact coordinates only for friends and co-members of a shared *private* community; everyone else allowed to see the user (including co-members of public communities) gets them snapped to a ~500 m grid, with the timestamp rounded to the minute.
   - Positions older than 15 min are not returned. Plate number is never part of map payloads.
 
 **Security checklist (applies to every phase)**

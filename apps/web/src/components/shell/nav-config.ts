@@ -1,6 +1,7 @@
 import {
   Bell,
   CalendarDays,
+  Handshake,
   Map as MapIcon,
   MessageCircle,
   Newspaper,
@@ -33,7 +34,7 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { key: 'map', href: '/map', icon: MapIcon, labelKey: 'map', enabled: false, placement: 'tab' },
+  { key: 'map', href: '/map', icon: MapIcon, labelKey: 'map', enabled: true, placement: 'tab' },
   { key: 'communities', href: '/communities', icon: UsersRound, labelKey: 'communities', enabled: false, placement: 'tab' },
   { key: 'sos', href: '/sos', icon: Siren, labelKey: 'sos', enabled: false, placement: 'tab', emphasis: 'sos' },
   { key: 'chats', href: '/chats', icon: MessageCircle, labelKey: 'chats', enabled: false, placement: 'tab' },
@@ -41,7 +42,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'feed', href: '/feed', icon: Newspaper, labelKey: 'feed', enabled: false, placement: 'secondary' },
   { key: 'services', href: '/services', icon: Wrench, labelKey: 'services', enabled: true, placement: 'secondary' },
   { key: 'events', href: '/events', icon: CalendarDays, labelKey: 'events', enabled: false, placement: 'secondary' },
-  { key: 'notifications', href: '/notifications', icon: Bell, labelKey: 'notifications', enabled: false, placement: 'secondary' },
+  { key: 'friends', href: '/friends', icon: Handshake, labelKey: 'friends', enabled: true, placement: 'secondary' },
+  { key: 'notifications', href: '/notifications', icon: Bell, labelKey: 'notifications', enabled: true, placement: 'secondary' },
   { key: 'settings', href: '/settings', icon: Settings, labelKey: 'settings', enabled: true, placement: 'secondary' },
 ];
 
