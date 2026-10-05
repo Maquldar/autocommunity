@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { SOS_LIMITS } from '@autoc/shared';
 import { Queue, Worker, type Job } from 'bullmq';
-import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { ENV, type Env } from '../../config/env';
+import { redisOptionsFromUrl } from '../../infra/redis/redis-options';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { SosDispatchService } from './sos-dispatch.service';
 
 export const SOS_QUEUE_NAME = 'sos';
@@ -21,7 +22,6 @@ const SWEEP_LOCK = 'sos:expire-sweep:lock';
 @Injectable()
 export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(SosQueue.name);
-  private readonly connections: Redis[] = [];
   private readonly instanceId = randomUUID();
   private queue!: Queue;
   private worker: Worker | null = null;
@@ -31,11 +31,12 @@ export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplica
     @Inject(ENV) private readonly env: Env,
     private readonly dispatch: SosDispatchService,
     private readonly redis: RedisService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     this.queue = new Queue(SOS_QUEUE_NAME, {
-      connection: this.connection(),
+      connection: this.connectionOptions(),
       defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true, removeOnFail: 500 },
     });
     this.queue.on('error', (err) => this.logger.warn({ err }, 'SOS queue error'));
@@ -46,22 +47,25 @@ export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplica
         if (job.name === 'sos.expire') return this.dispatch.expire((job.data as ExpireJob).sosId);
         return null;
       },
-      { connection: this.connection(), concurrency: 5 },
+      { connection: this.connectionOptions(), concurrency: 5 },
     );
     this.worker.on('error', (err) => this.logger.warn({ err }, 'SOS worker error'));
+    this.tasks.registerProducer('sos worker', () => this.worker?.close());
+    // app.init() resolves only once BullMQ is connected, so a quick init → close never tears down a handshake.
+    await Promise.all([this.queue.waitUntilReady(), this.worker.waitUntilReady()]);
     this.worker.on('failed', (job, err) => this.logger.warn({ err, job: job?.name }, 'SOS job failed'));
   }
 
   onApplicationBootstrap(): void {
-    this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS);
+    this.sweepTimer = setInterval(() => this.tasks.run('SOS expiry sweep', () => this.sweep()), SWEEP_MS);
     this.sweepTimer.unref();
+    this.tasks.registerProducer('sos sweep timer', () => this.sweepTimer && clearInterval(this.sweepTimer));
   }
 
   async onApplicationShutdown(): Promise<void> {
     if (this.sweepTimer) clearInterval(this.sweepTimer);
-    await this.worker?.close().catch(() => undefined);
-    await this.queue?.close().catch(() => undefined);
-    await Promise.all(this.connections.map((c) => c.quit().catch(() => c.disconnect())));
+    await this.worker?.close().catch((err: unknown) => this.logger.warn({ err }, 'Closing the worker failed'));
+    await this.queue?.close().catch((err: unknown) => this.logger.warn({ err }, 'Closing the queue failed'));
   }
 
   /** Dispatch now, then the two radius expansions; expiry at `expiresAt`. */
@@ -95,10 +99,8 @@ export class SosQueue implements OnModuleInit, OnApplicationBootstrap, OnApplica
     }
   }
 
-  private connection(): Redis {
-    const c = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
-    c.on('error', () => undefined);
-    this.connections.push(c);
-    return c;
+  /** BullMQ owns (creates and closes) its connections; maxRetriesPerRequest: null is required by workers. */
+  private connectionOptions() {
+    return redisOptionsFromUrl(this.env.REDIS_URL, { maxRetriesPerRequest: null });
   }
 }

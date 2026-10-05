@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Prisma, type SosResponseStatus } from '@prisma/client';
 import {
   RATING,
@@ -20,12 +20,15 @@ import { decodeCursor, splitPage } from '../../common/pagination/cursor';
 import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
+import { AccountDeletionHooks } from '../../infra/tasks/account-deletion-hooks';
 import { ChatsService } from '../chats/chats.service';
-import { LocationService } from '../location/location.service';
+import { LocationService, trustedFreshLocation } from '../location/location.service';
 import { MAP_MAX_BBOX_DEG, MAP_MAX_USERS } from '../map/map.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
+import { RatingService } from '../rating/rating.service';
 import { SosBroadcastService } from './sos-broadcast.service';
+import { SosDispatchService } from './sos-dispatch.service';
 import { SosErrors } from './sos-errors';
 import { sosTransition, type SosAction } from './sos-state';
 import { SosViewService } from './sos-view.service';
@@ -39,9 +42,15 @@ const OPEN = Prisma.sql`('created', 'accepted', 'in_progress')`;
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? '';
+/** `/sos/nearby` hints farther than this from the stored location are ignored. */
+const SOS_HINT_MAX_M = 1000;
+/** GET /sos/nearby and GET /map/sos, each, per user per minute. */
+export const SOS_GEO_PER_MINUTE = 60;
+/** Fresh (< 15 min) and trusted position of alias `ul` (no user input in this fragment). */
+const TRUSTED_UL = Prisma.raw(trustedFreshLocation('ul'));
 
 @Injectable()
-export class SosService {
+export class SosService implements OnModuleInit {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
@@ -53,7 +62,29 @@ export class SosService {
     private readonly userView: UserViewService,
     private readonly location: LocationService,
     private readonly rateLimiter: RateLimiterService,
+    private readonly rating: RatingService,
+    private readonly dispatch: SosDispatchService,
+    private readonly deletionHooks: AccountDeletionHooks,
   ) {}
+
+  onModuleInit(): void {
+    this.deletionHooks.register('sos', (userId) => this.onAccountDeleted(userId));
+  }
+
+  /**
+   * Before an account is deleted: its open SOS is cancelled and its live offers/accepted helps are withdrawn,
+   * through the normal transitions (notifications, chat messages, sos:update). Arrived helps stay (they
+   * happened).
+   */
+  private async onAccountDeleted(userId: string): Promise<void> {
+    const open = await this.prisma.sosRequest.findMany({ where: { userId, status: { in: ['created', 'accepted', 'in_progress'] } }, select: { id: true } });
+    for (const s of open) await this.cancel(userId, s.id, 'account_deleted');
+    const live = await this.prisma.sosResponse.findMany({
+      where: { helperId: userId, status: { in: ['offered', 'accepted'] }, sos: { status: { in: ['created', 'accepted', 'in_progress'] } } },
+      select: { sosId: true },
+    });
+    for (const r of live) await this.withdraw(userId, r.sosId);
+  }
 
   /* ------------------------------------------------------------------ create */
 
@@ -78,6 +109,13 @@ export class SosService {
       await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
         await this.assertCanCreate(tx, userId);
+        if (photoIds.length) {
+          // SOS photos (an array column) can't carry a unique index: lock the uploads, then check.
+          await tx.$queryRaw`SELECT id FROM uploads WHERE id = ANY(${photoIds}::uuid[]) FOR UPDATE`;
+          const used = await tx.$queryRaw<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM sos_requests WHERE photo_upload_ids && ${photoIds}::uuid[]`;
+          if (used[0]!.n) throw Errors.badRequest('INVALID_UPLOAD', 'This upload is already used elsewhere');
+        }
         await tx.$executeRaw`
           INSERT INTO sos_requests (id, user_id, type, description, photo_upload_ids, location, status, share_phone,
                                     radius_m, created_at, expires_at, updated_at)
@@ -128,18 +166,33 @@ export class SosService {
     return this.view.toDtos(userId, rows.map((r) => r.id));
   }
 
-  /** Open SOS of others within 20 km of the point, nearest first (max 50); distances from the point. */
-  async nearby(userId: string, lat: number, lng: number): Promise<SosDto[]> {
+  /**
+   * Open SOS of others within 20 km of the viewer's stored location (< 15 min old), nearest first (max 50).
+   * `lat`/`lng` are only hints: used as the origin when within 1 km of the stored location.
+   */
+  async nearby(userId: string, hintLat?: number, hintLng?: number): Promise<SosDto[]> {
+    await this.rateLimiter.consumeOrThrow([{ key: `sos-nearby:${userId}`, limit: SOS_GEO_PER_MINUTE, windowSec: 60 }]);
+    const loc = await this.prisma.$queryRaw<{ lat: number; lng: number; hintOk: boolean | null }[]>`
+      SELECT ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
+             ${hintLat !== undefined && hintLng !== undefined
+               ? Prisma.sql`ST_DWithin(location, ST_SetSRID(ST_MakePoint(${hintLng}::float8, ${hintLat}::float8), 4326)::geography, ${SOS_HINT_MAX_M}::float8)`
+               : Prisma.sql`NULL::boolean`} AS "hintOk"
+      FROM user_locations ul
+      WHERE ul.user_id = ${userId}::uuid AND ${TRUSTED_UL}`;
+    if (!loc[0]) throw Errors.conflict('LOCATION_REQUIRED', 'Share your current location to see SOS nearby');
+    const origin = loc[0].hintOk ? { lat: hintLat!, lng: hintLng! } : { lat: loc[0].lat, lng: loc[0].lng };
+    const point = Prisma.sql`ST_SetSRID(ST_MakePoint(${origin.lng}::float8, ${origin.lat}::float8), 4326)::geography`;
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT s.id FROM sos_requests s
       WHERE s.status IN ${OPEN} AND s.user_id <> ${userId}::uuid
-        AND ST_DWithin(s.location, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography, ${SOS_LIMITS.visibleRadiusM}::float8)
-      ORDER BY ST_Distance(s.location, ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography)
+        AND ST_DWithin(s.location, ${point}, ${SOS_LIMITS.visibleRadiusM}::float8)
+      ORDER BY ST_Distance(s.location, ${point})
       LIMIT 50`;
-    return this.view.toDtos(userId, rows.map((r) => r.id), { lat, lng });
+    return this.view.toDtos(userId, rows.map((r) => r.id), origin);
   }
 
   async map(userId: string, bbox: Bbox): Promise<{ items: SosMapItem[] }> {
+    await this.rateLimiter.consumeOrThrow([{ key: `sos-map:${userId}`, limit: SOS_GEO_PER_MINUTE, windowSec: 60 }]);
     if (bbox.maxLng - bbox.minLng > MAP_MAX_BBOX_DEG || bbox.maxLat - bbox.minLat > MAP_MAX_BBOX_DEG) {
       throw Errors.badRequest('BBOX_TOO_LARGE', `The map area may cover at most ${MAP_MAX_BBOX_DEG}° × ${MAP_MAX_BBOX_DEG}°`);
     }
@@ -147,6 +200,10 @@ export class SosService {
       SELECT id, type, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng, status, created_at AS "createdAt"
       FROM sos_requests
       WHERE status IN ${OPEN} AND user_id <> ${userId}::uuid
+        -- Only SOS within 20 km of the viewer's stored location (no location → nothing): positions can't be
+        -- harvested city-wide by moving the bbox.
+        AND EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = ${userId}::uuid AND ${TRUSTED_UL}
+                      AND ST_DWithin(ul.location, sos_requests.location, ${SOS_LIMITS.visibleRadiusM}::float8))
         AND location && ST_MakeEnvelope(${bbox.minLng}::float8, ${bbox.minLat}::float8, ${bbox.maxLng}::float8, ${bbox.maxLat}::float8, 4326)::geography
         AND ST_Y(location::geometry) BETWEEN ${bbox.minLat}::float8 AND ${bbox.maxLat}::float8
         AND ST_X(location::geometry) BETWEEN ${bbox.minLng}::float8 AND ${bbox.maxLng}::float8
@@ -158,17 +215,29 @@ export class SosService {
   /** As requester or helper (any response), newest first. */
   async history(userId: string, cursor: string | undefined, limit: number): Promise<Paginated<SosDto>> {
     const after = decodeCursor(cursor);
+    const keyset = after ? Prisma.sql`AND (s.created_at, s.id) < (${after.createdAt}, ${after.id}::uuid)` : Prisma.empty;
+    // Two index-backed branches (sos_requests(user_id, created_at) and sos_responses(helper_id)), each
+    // limited, merged: no scan over every SOS testing an OR.
     const rows = await this.prisma.$queryRaw<{ id: string; createdAt: Date }[]>`
-      SELECT s.id, s.created_at AS "createdAt" FROM sos_requests s
-      WHERE (s.user_id = ${userId}::uuid OR EXISTS (SELECT 1 FROM sos_responses r WHERE r.sos_id = s.id AND r.helper_id = ${userId}::uuid))
-        ${after ? Prisma.sql`AND (s.created_at, s.id) < (${after.createdAt}, ${after.id}::uuid)` : Prisma.empty}
-      ORDER BY s.created_at DESC, s.id DESC
+      SELECT id, "createdAt" FROM (
+        (SELECT s.id, s.created_at AS "createdAt" FROM sos_requests s
+          WHERE s.user_id = ${userId}::uuid ${keyset}
+          ORDER BY s.created_at DESC, s.id DESC LIMIT ${limit + 1}::int)
+        UNION
+        (SELECT s.id, s.created_at FROM sos_responses r JOIN sos_requests s ON s.id = r.sos_id
+          WHERE r.helper_id = ${userId}::uuid ${keyset}
+          ORDER BY s.created_at DESC, s.id DESC LIMIT ${limit + 1}::int)
+      ) h
+      ORDER BY "createdAt" DESC, id DESC
       LIMIT ${limit + 1}::int`;
     const page = splitPage(rows, limit);
     return { items: await this.view.toDtos(userId, page.rows.map((r) => r.id)), nextCursor: page.nextCursor };
   }
 
-  /** Requester, any responder, any dispatched user, or anyone whose last location is within 20 km. */
+  /**
+   * Participants (requester, responders, dispatched users) always; anyone else only while the SOS is open
+   * and their fresh (< 15 min), trusted position is within 20 km.
+   */
   async canView(viewerId: string, id: string): Promise<boolean> {
     const rows = await this.prisma.$queryRaw<{ ok: boolean }[]>`
       SELECT EXISTS (
@@ -177,8 +246,10 @@ export class SosService {
           s.user_id = ${viewerId}::uuid
           OR EXISTS (SELECT 1 FROM sos_responses r WHERE r.sos_id = s.id AND r.helper_id = ${viewerId}::uuid)
           OR EXISTS (SELECT 1 FROM sos_dispatches d WHERE d.sos_id = s.id AND d.user_id = ${viewerId}::uuid)
-          OR EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = ${viewerId}::uuid
-                       AND ST_DWithin(ul.location, s.location, ${SOS_LIMITS.visibleRadiusM}::float8))
+          -- Non-participants: only an open SOS, and only near a fresh, trusted position.
+          OR (s.status IN ${OPEN} AND EXISTS (
+                SELECT 1 FROM user_locations ul WHERE ul.user_id = ${viewerId}::uuid AND ${TRUSTED_UL}
+                  AND ST_DWithin(ul.location, s.location, ${SOS_LIMITS.visibleRadiusM}::float8)))
         )) AS ok`;
     return rows[0]?.ok ?? false;
   }
@@ -186,8 +257,10 @@ export class SosService {
   /* ------------------------------------------------------------------ lifecycle */
 
   async respond(helperId: string, id: string): Promise<SosDto> {
+    await this.expireIfOverdue(id);
     if (!(await this.canView(helperId, id))) throw SosErrors.notFound();
-    const helper = await this.prisma.user.findUniqueOrThrow({ where: { id: helperId }, select: { rating: true } });
+    const helper = await this.prisma.user.findUniqueOrThrow({ where: { id: helperId }, select: { rating: true, sosBannedUntil: true } });
+    if (helper.sosBannedUntil && helper.sosBannedUntil.getTime() > Date.now()) throw SosErrors.banned(helper.sosBannedUntil);
     const res = await this.prisma.$transaction(async (tx) => {
       const sos = await this.lock(tx, id);
       if (sos.userId === helperId) throw Errors.badRequest('INVALID_TARGET', "You can't respond to your own SOS");
@@ -208,6 +281,7 @@ export class SosService {
   }
 
   async withdraw(helperId: string, id: string): Promise<SosDto> {
+    await this.expireIfOverdue(id);
     if (!(await this.canView(helperId, id))) throw SosErrors.notFound();
     const res = await this.prisma.$transaction(async (tx) => {
       const sos = await this.lock(tx, id);
@@ -215,19 +289,22 @@ export class SosService {
       if (!mine) throw SosErrors.invalidState('You have not offered help for this SOS');
       const next = this.check(sos, mine.status, await this.activeHelpers(tx, id), 'withdraw');
       await tx.sosResponse.update({ where: { id: mine.id }, data: { status: 'withdrawn' } });
+      // Chat access ends in the same transaction as the help (no window where a withdrawn helper still writes).
+      let chatId: string | null = null;
+      if (mine.status === 'accepted') {
+        chatId = (await tx.chat.findUnique({ where: { refId: id }, select: { id: true } }))?.id ?? null;
+        if (chatId) await tx.chatMember.deleteMany({ where: { chatId, userId: helperId } });
+      }
       let status = next.sos;
       // Back to `created` after the expiry time → it expires right away (the expiry job already ran).
       if (status === 'created' && sos.status !== 'created' && sos.expiresAt.getTime() <= Date.now()) status = 'expired';
       await this.setStatus(tx, id, status, sos.status);
-      return { sos, wasAccepted: mine.status === 'accepted', status };
+      return { sos, chatId, status };
     });
     const helper = await this.mini(helperId);
-    if (res.wasAccepted) {
-      const chat = await this.sosChat(id);
-      if (chat) {
-        await this.chats.postSystemMessage(chat, helperId, `sos.helper_withdrew:${helper.nickname}`);
-        await this.chats.removeFromChat(chat, [helperId]);
-      }
+    if (res.chatId) {
+      this.chats.revoked(res.chatId, [helperId]);
+      await this.chats.postSystemMessage(res.chatId, helperId, `sos.helper_withdrew:${helper.nickname}`);
     }
     await this.notifications.create(res.sos.userId, 'sos_status', { sosId: id, status: res.status, event: 'withdrawn', actor: helper });
     this.broadcast.update(id);
@@ -272,6 +349,7 @@ export class SosService {
 
   /** Accepted helper: their response → arrived. Requester: every accepted response → arrived. SOS → in_progress. */
   async arrived(actorId: string, id: string): Promise<SosDto> {
+    await this.expireIfOverdue(id);
     if (!(await this.canView(actorId, id))) throw SosErrors.notFound();
     const res = await this.prisma.$transaction(async (tx) => {
       const sos = await this.lock(tx, id);
@@ -317,7 +395,11 @@ export class SosService {
         UPDATE sos_requests SET status = ${next.sos}::"SosStatus", closed_at = now(), updated_at = now(),
                cancel_reason = ${action === 'cancel' ? (reason ?? null) : null}
         WHERE id = ${id}::uuid`;
-      const helpers = await tx.sosResponse.findMany({ where: { sosId: id, status: { in: ['offered', 'accepted', 'arrived'] } }, select: { helperId: true } });
+      const helpers = await tx.sosResponse.findMany({ where: { sosId: id, status: { in: ['offered', 'accepted', 'arrived'] } }, select: { helperId: true, status: true } });
+      // A closed SOS confirms the help of everyone who arrived: their rating changes in this transaction.
+      if (next.sos === 'closed') {
+        for (const h of helpers.filter((x) => x.status === 'arrived')) await this.rating.recompute(tx, h.helperId, 'help_confirmed', id);
+      }
       return { status: next.sos, helperIds: helpers.map((h) => h.helperId) };
     });
     const chat = await this.sosChat(id);
@@ -377,9 +459,18 @@ export class SosService {
     return t;
   }
 
+  /**
+   * A `created` SOS past `expiresAt` is expired (committed, with its notification) before any transition is
+   * evaluated, so a late action gets 409 SOS_INVALID_STATE instead of acting on an SOS that should be over.
+   */
+  private async expireIfOverdue(id: string): Promise<void> {
+    await this.dispatch.expire(id);
+  }
+
   /** 404 if the caller can't see the SOS, 403 if they can but aren't the requester; runs `fn` with the row locked. */
   private async requesterTx<T>(requesterId: string, id: string, fn: (tx: Tx, sos: LockedSos) => Promise<T>): Promise<T> {
     if (!(await this.canView(requesterId, id))) throw SosErrors.notFound();
+    await this.expireIfOverdue(id);
     return this.prisma.$transaction(async (tx) => {
       const sos = await this.lock(tx, id);
       if (sos.userId !== requesterId) throw SosErrors.requesterOnly();

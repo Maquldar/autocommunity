@@ -1,4 +1,4 @@
-import type { NestApplicationOptions } from '@nestjs/common';
+import { Logger, type NestApplicationOptions } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
@@ -47,10 +47,24 @@ function parseTrustProxy(value: string): boolean | number | string {
   return value;
 }
 
+/** Logs the resolved client IP of the first request once (debug), to verify TRUST_PROXY after a deploy. */
+function logFirstClientIp() {
+  let logged = false;
+  const logger = new Logger('TrustProxy');
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!logged) {
+      logged = true;
+      logger.debug({ ip: req.ip, forwardedFor: req.headers['x-forwarded-for'] ?? null, socket: req.socket.remoteAddress }, 'First request client IP');
+    }
+    next();
+  };
+}
+
 /** HTTP pipeline shared by main.ts and the integration tests. */
 export function configureApp(app: NestExpressApplication, env: Env): void {
   app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
   app.disable('x-powered-by');
+  app.use(logFirstClientIp());
   app.use(helmet());
   app.use(originGuard(env.WEB_ORIGIN));
   app.use(cookieParser());

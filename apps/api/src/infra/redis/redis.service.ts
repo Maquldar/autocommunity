@@ -1,5 +1,6 @@
 import { OnApplicationShutdown } from '@nestjs/common';
 import Redis from 'ioredis';
+import { closeRedis } from './close-redis';
 
 /** Shared ioredis connection for caches, rate limits and pub/sub publishing. */
 export class RedisService extends Redis implements OnApplicationShutdown {
@@ -8,6 +9,6 @@ export class RedisService extends Redis implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
-    if (this.status !== 'end') await this.quit().catch(() => this.disconnect());
+    await closeRedis(this);
   }
 }

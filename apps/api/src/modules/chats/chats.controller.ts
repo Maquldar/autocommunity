@@ -10,6 +10,7 @@ import {
 } from '@autoc/shared';
 import type { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../../common/auth/decorators';
+import { RequireOnboarded } from '../../common/auth/onboarded.guard';
 import { IdParam, ZBody, ZQuery } from '../../common/validation/zod.pipe';
 import { ChatsService } from './chats.service';
 
@@ -24,6 +25,7 @@ export class ChatsController {
     return this.chats.list(user.id, q.cursor, q.limit);
   }
 
+  @RequireOnboarded()
   @Post('direct')
   @HttpCode(200)
   direct(@CurrentUser() user: AuthUser, @ZBody(directChatSchema) body: z.output<typeof directChatSchema>): Promise<ChatDto> {
@@ -40,6 +42,7 @@ export class ChatsController {
     return this.chats.listMessages(user.id, id, q.cursor, q.limit);
   }
 
+  @RequireOnboarded()
   @Post(':id/messages')
   send(@CurrentUser() user: AuthUser, @IdParam() id: string, @ZBody(sendMessageSchema) body: SendMessageInput): Promise<MessageDto> {
     return this.chats.send(user.id, id, body);

@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import type { AuthResult, PrivacyMode, UserRole } from '@autoc/shared';
+import { communityNameKey, type AuthResult, type PrivacyMode, type UserRole } from '@autoc/shared';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
@@ -168,6 +168,7 @@ export async function createCommunity(
     data: {
       id,
       name: opts.name ?? `Community ${id.slice(-12)}`,
+      nameKey: communityNameKey(opts.name ?? `Community ${id.slice(-12)}`),
       ownerId,
       isPrivate: opts.isPrivate ?? false,
       memberCount: 1 + active.length,

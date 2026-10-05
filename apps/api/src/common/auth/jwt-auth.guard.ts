@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { Errors } from '../errors/api-exception';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RedisService } from '../../infra/redis/redis.service';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { AccessTokenService } from './access-token.service';
 import { IS_PUBLIC, type AuthedRequest } from './decorators';
 import { isUserBlocked, UserStateService } from './user-state.service';
@@ -19,6 +20,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly userState: UserStateService,
     private readonly redis: RedisService,
     private readonly prisma: PrismaService,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -47,13 +49,9 @@ export class JwtAuthGuard implements CanActivate {
 
   /** Updates lastActiveAt at most once per 5 minutes per user; never blocks the request. */
   private touchActivity(userId: string): void {
-    this.redis
-      .set(`user:active:${userId}`, '1', 'EX', ACTIVITY_THROTTLE_SEC, 'NX')
-      .then((set) =>
-        set === 'OK'
-          ? this.prisma.user.update({ where: { id: userId }, data: { lastActiveAt: new Date() }, select: { id: true } })
-          : null,
-      )
-      .catch((err: unknown) => this.logger.warn({ err }, 'Failed to update lastActiveAt'));
+    this.tasks.run('lastActiveAt update', async () => {
+      const set = await this.redis.set(`user:active:${userId}`, '1', 'EX', ACTIVITY_THROTTLE_SEC, 'NX');
+      if (set === 'OK') await this.prisma.user.update({ where: { id: userId }, data: { lastActiveAt: new Date() }, select: { id: true } });
+    });
   }
 }

@@ -14,12 +14,15 @@ import { UserStateService } from '../../common/auth/user-state.service';
 import { Errors } from '../../common/errors/api-exception';
 import { decodeCursor, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { AccountDeletionHooks } from '../../infra/tasks/account-deletion-hooks';
 import { UploadsService } from '../uploads/uploads.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
 import { RelationService } from './relation.service';
 import { UserViewService, userViewInclude, type UserWithView } from './user-view.service';
 
 export const DELETED_USER_NAME = 'Deleted user';
+/** Notification payload keys holding a UserMini of the actor. */
+export const ACTOR_PAYLOAD_KEYS = ['user', 'helper', 'requester', 'actor', 'author'] as const;
 
 const isUniqueViolationOn = (err: unknown, field: string) =>
   err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -41,6 +44,7 @@ export class UsersService {
     private readonly vehicles: VehiclesService,
     private readonly userState: UserStateService,
     private readonly sessions: SessionService,
+    private readonly deletionHooks: AccountDeletionHooks,
   ) {}
 
   getMe(userId: string): Promise<Me> {
@@ -55,7 +59,11 @@ export class UsersService {
     if (input.nickname !== undefined && input.nickname !== current.nickname) {
       await this.assertNicknameFree(userId, input.nickname);
     }
-    if (input.avatarUploadId) await this.uploads.requireOwn(userId, input.avatarUploadId, ['avatar']);
+    if (input.avatarUploadId) {
+      await this.uploads.requireOwn(userId, input.avatarUploadId, ['avatar']);
+      const usedBy = await this.prisma.user.count({ where: { avatarUploadId: input.avatarUploadId, id: { not: userId } } });
+      if (usedBy) throw Errors.badRequest('INVALID_UPLOAD', 'This upload is already used elsewhere');
+    }
     let user: UserWithView;
     try {
       user = await this.prisma.user.update({
@@ -72,6 +80,7 @@ export class UsersService {
       });
     } catch (err) {
       if (isUniqueViolationOn(err, 'nickname')) throw nicknameTaken();
+      if (isUniqueViolationOn(err, 'avatar')) throw Errors.badRequest('INVALID_UPLOAD', 'This upload is already used elsewhere');
       throw err;
     }
     const replacedAvatar = input.avatarUploadId !== undefined && current.avatarUploadId !== input.avatarUploadId;
@@ -108,6 +117,8 @@ export class UsersService {
    * piece of personal data is removed and the account can never sign in again.
    */
   async deleteAccount(userId: string): Promise<void> {
+    // Feature clean-up with its normal side effects first (e.g. open SOS cancelled, responses withdrawn).
+    await this.deletionHooks.run(userId);
     const avatarUploads = await this.prisma.$transaction(async (tx) => {
       const avatars = await tx.upload.findMany({
         where: { ownerId: userId, purpose: 'avatar' },
@@ -154,9 +165,12 @@ export class UsersService {
       await tx.$executeRaw`
         DELETE FROM notifications WHERE type = 'friend_request' AND payload->'user'->>'id' = ${userId}`;
       const anonymous = { id: userId, nickname: '', name: DELETED_USER_NAME, avatarUrl: null, rating: 0 };
-      await tx.$executeRaw`
-        UPDATE notifications SET payload = jsonb_set(payload, '{user}', ${JSON.stringify(anonymous)}::jsonb)
-        WHERE payload->'user'->>'id' = ${userId}`;
+      // Every key a UserMini of an actor is stored under (friends, communities, SOS, reviews).
+      for (const key of ACTOR_PAYLOAD_KEYS) {
+        await tx.$executeRaw`
+          UPDATE notifications SET payload = jsonb_set(payload, ARRAY[${key}]::text[], ${JSON.stringify(anonymous)}::jsonb)
+          WHERE payload->${key}->>'id' = ${userId}`;
+      }
       await tx.upload.deleteMany({ where: { id: { in: avatars.map((a) => a.id) } } });
       return avatars;
     });

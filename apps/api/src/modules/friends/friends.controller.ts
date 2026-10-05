@@ -10,6 +10,7 @@ import {
 import type { Response } from 'express';
 import type { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../../common/auth/decorators';
+import { RequireOnboarded } from '../../common/auth/onboarded.guard';
 import { IdParam, ZBody, ZQuery } from '../../common/validation/zod.pipe';
 import { FriendsService, type FriendRequestResult } from './friends.service';
 
@@ -33,6 +34,7 @@ export class FriendsController {
     return this.friends.listRequests(user.id, query.direction, query.cursor, query.limit);
   }
 
+  @RequireOnboarded()
   /** 201 with `pending` for a new request; 200 with `accepted` when it accepted the target's request. */
   @Post('requests')
   async send(

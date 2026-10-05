@@ -31,6 +31,33 @@ export class RelationService {
     return result;
   }
 
+  /** Relations of several viewers to several users in one query: viewerId → (userId → relation). */
+  async relationsForMany(viewerIds: string[], userIds: string[]): Promise<Map<string, Map<string, Relation>>> {
+    const out = new Map<string, Map<string, Relation>>();
+    const keys = new Set<string>();
+    for (const v of viewerIds) {
+      const m = new Map<string, Relation>();
+      for (const u of userIds) {
+        m.set(u, u === v ? 'self' : 'none');
+        if (u !== v) keys.add(friendPairKey(v, u));
+      }
+      out.set(v, m);
+    }
+    if (!keys.size) return out;
+    const rows = await this.prisma.friendship.findMany({
+      where: { pairKey: { in: [...keys] } },
+      select: { requesterId: true, addresseeId: true, status: true },
+    });
+    for (const f of rows) {
+      for (const [viewer, other] of [[f.requesterId, f.addresseeId], [f.addresseeId, f.requesterId]] as const) {
+        const m = out.get(viewer);
+        if (!m?.has(other)) continue;
+        m.set(other, f.status === 'accepted' ? 'friend' : viewer === f.requesterId ? 'request_out' : 'request_in');
+      }
+    }
+    return out;
+  }
+
   async relationFor(viewerId: string, userId: string): Promise<Relation> {
     return (await this.relationsFor(viewerId, [userId])).get(userId) ?? 'none';
   }

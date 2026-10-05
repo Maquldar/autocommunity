@@ -14,6 +14,7 @@ import {
 import type { Request } from 'express';
 import { z } from 'zod';
 import { CurrentUser, Public, type AuthUser } from '../../common/auth/decorators';
+import { RequireOnboarded } from '../../common/auth/onboarded.guard';
 import { IdParam, ZBody, ZParam, ZQuery } from '../../common/validation/zod.pipe';
 import { SosService } from './sos.service';
 
@@ -21,6 +22,7 @@ import { SosService } from './sos.service';
 export class SosController {
   constructor(private readonly sos: SosService) {}
 
+  @RequireOnboarded()
   @Post()
   create(@CurrentUser() user: AuthUser, @ZBody(createSosSchema) body: CreateSosInput): Promise<SosDto> {
     return this.sos.create(user.id, body);
@@ -46,6 +48,7 @@ export class SosController {
     return this.sos.get(user.id, id);
   }
 
+  @RequireOnboarded()
   @Post(':id/respond')
   @HttpCode(200)
   respond(@CurrentUser() user: AuthUser, @IdParam() id: string): Promise<SosDto> {

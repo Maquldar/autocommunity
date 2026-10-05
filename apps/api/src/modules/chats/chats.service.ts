@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { CHAT_LIMITS, type ChatDto, type ChatType, type MessageDto, type Paginated, type SendMessageInput, type UserMini } from '@autoc/shared';
+import { CHAT_LIMITS, SOS_LIMITS, type ChatDto, type ChatType, type MessageDto, type Paginated, type SendMessageInput, type UserMini } from '@autoc/shared';
 import { isUserBlocked } from '../../common/auth/user-state.service';
 import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
@@ -8,6 +8,7 @@ import { decodeCursor, keysetOrderBy, keysetWhere, splitPage, type CursorKey } f
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { Storage } from '../../infra/storage/storage';
+import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { PushQueue } from '../push/push.queue';
 import { RealtimeService } from '../realtime/realtime.service';
 import { UploadsService } from '../uploads/uploads.service';
@@ -53,6 +54,7 @@ export class ChatsService {
     private readonly rateLimiter: RateLimiterService,
     private readonly push: PushQueue,
     private readonly storage: Storage,
+    private readonly tasks: BackgroundTasks,
   ) {}
 
   /* ------------------------------------------------------------------ reading */
@@ -87,11 +89,13 @@ export class ChatsService {
 
   async send(userId: string, chatId: string, input: SendMessageInput): Promise<MessageDto> {
     const chat = await this.requireMember(userId, chatId);
+    await this.assertWritable(userId, chat);
     let uploadId: string | null = null;
     if (input.type === 'photo') uploadId = (await this.uploads.requireOwn(userId, input.uploadId, ['message'])).id;
     if (input.type === 'voice') uploadId = (await this.uploads.requireOwn(userId, input.uploadId, ['voice'])).id;
     await this.rateLimiter.consumeOrThrow([{ key: `chat-msg:${userId}`, limit: CHAT_LIMITS.messagesPerMinute, windowSec: 60 }]);
 
+    if (uploadId && (await this.prisma.message.count({ where: { uploadId } }))) throw uploadInUse();
     const createdAt = new Date();
     const row = await this.prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
@@ -111,11 +115,14 @@ export class ChatsService {
       // Your own message never counts as unread for you.
       await tx.chatMember.updateMany({ where: { chatId, userId, lastReadAt: { lt: createdAt } }, data: { lastReadAt: createdAt } });
       return message;
+    }).catch((err: unknown) => {
+      // messages.upload_id is unique: the same upload sent twice concurrently.
+      throw isUniqueViolation(err) ? uploadInUse() : err;
     });
     const dto = await this.messages.toDto(row);
     this.realtime.emitToChat(chatId, 'message:new', dto);
     if (chat.type === 'direct') {
-      void this.pushDirect(chatId, userId, dto).catch((err: unknown) => this.logger.warn({ err }, 'Direct message push failed'));
+      this.tasks.run('Direct message push', () => this.pushDirect(chatId, userId, dto));
     }
     return dto;
   }
@@ -132,6 +139,7 @@ export class ChatsService {
     const chat = await this.requireMember(userId, chatId);
     const message = await this.prisma.message.findFirst({ where: { id: messageId, chatId } });
     if (!message) throw Errors.notFound('Message not found');
+    if (message.type === 'system') throw Errors.forbidden('System messages cannot be deleted');
     if (message.senderId !== userId && !(await this.canModerate(userId, chat))) {
       throw Errors.forbidden('Only the sender or a moderator can delete this message');
     }
@@ -241,6 +249,14 @@ export class ChatsService {
 
   /* ------------------------------------------------------------------ internals */
 
+  /** Whether the user may read the chat (same rule as every chat route). */
+  async canAccess(userId: string, chatId: string): Promise<boolean> {
+    return this.requireMember(userId, chatId).then(
+      () => true,
+      () => false,
+    );
+  }
+
   /** 404 unless the user is a member of the chat (and, for community chats, the community is live). */
   private async requireMember(userId: string, chatId: string): Promise<{ id: string; type: ChatType; refId: string }> {
     const rows = await this.prisma.$queryRaw<{ id: string; type: ChatType; refId: string }[]>`
@@ -252,6 +268,29 @@ export class ChatsService {
         AND (c.type <> 'community' OR com.deleted_at IS NULL)`;
     if (!rows[0]) throw chatNotFound();
     return rows[0];
+  }
+
+  /**
+   * Direct chats: the peer must still be an active, onboarded user (404 otherwise). SOS chats: writable until
+   * 24 h after the SOS ended, then read-only (403 CHAT_READ_ONLY).
+   */
+  private async assertWritable(userId: string, chat: { id: string; type: ChatType; refId: string }): Promise<void> {
+    if (chat.type === 'direct') {
+      const peer = await this.prisma.chatMember.findFirst({
+        where: { chatId: chat.id, userId: { not: userId } },
+        select: { user: { select: { status: true, blockedUntil: true, onboardedAt: true } } },
+      });
+      const u = peer?.user;
+      if (!u || !u.onboardedAt || isUserBlocked({ status: u.status, blockedUntil: u.blockedUntil?.toISOString() ?? null })) {
+        throw Errors.notFound('User not found');
+      }
+    }
+    if (chat.type === 'sos') {
+      const sos = await this.prisma.sosRequest.findUnique({ where: { id: chat.refId }, select: { closedAt: true } });
+      if (sos?.closedAt && Date.now() - sos.closedAt.getTime() > SOS_LIMITS.chatGraceHours * 3600_000) {
+        throw Errors.forbidden('This SOS chat is read-only now', 'CHAT_READ_ONLY');
+      }
+    }
   }
 
   private async canModerate(userId: string, chat: { type: ChatType; refId: string }): Promise<boolean> {
@@ -272,8 +311,11 @@ export class ChatsService {
     const me = Prisma.sql`${userId}::uuid`;
     return this.prisma.$queryRaw<ChatListRow[]>`
       SELECT c.id, c.type, c.ref_id AS "refId", c.last_message_at AS "lastMessageAt",
-             (SELECT count(*)::int FROM messages um
-               WHERE um.chat_id = c.id AND um.created_at > cm.last_read_at AND um.sender_id <> ${me} AND um.deleted_at IS NULL
+             -- Capped: counting stops at 100 rows and 99 is returned for "99+" (bounded cost per chat).
+             (SELECT LEAST(count(*), ${UNREAD_CAP}::int)::int FROM (
+                SELECT 1 FROM messages um
+                WHERE um.chat_id = c.id AND um.created_at > cm.last_read_at AND um.sender_id <> ${me} AND um.deleted_at IS NULL
+                LIMIT ${UNREAD_CAP + 1}::int) unread
              ) AS "unreadCount",
              com.name AS "communityName", cu.key AS "communityAvatarKey", cu.thumb_key AS "communityAvatarThumbKey",
              peer.user_id AS "peerId", sru.name AS "sosRequesterName",
@@ -353,3 +395,6 @@ export class ChatsService {
 }
 
 const chatNotFound = () => Errors.notFound('Chat not found');
+/** `unreadCount` never exceeds this; 99 means "99 or more". */
+export const UNREAD_CAP = 99;
+const uploadInUse = () => Errors.badRequest('INVALID_UPLOAD', 'This upload is already used elsewhere');

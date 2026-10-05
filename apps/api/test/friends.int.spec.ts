@@ -116,7 +116,7 @@ describe('friend requests lifecycle', () => {
   it('requires the caller to have completed onboarding', async () => {
     const fresh = await createUser(t, { onboarded: false, nickname: null });
     const b = await createUser(t);
-    const res = await api(fresh.token).send(b.id).expect(400);
+    const res = await api(fresh.token).send(b.id).expect(403);
     expect(res.body.error).toMatchObject({ code: 'ONBOARDING_INCOMPLETE', details: { missing: ['nickname'] } });
   });
 

@@ -84,11 +84,6 @@ export class FriendsService {
    */
   async sendRequest(userId: string, targetId: string): Promise<FriendRequestResult> {
     if (userId === targetId) throw Errors.badRequest('INVALID_TARGET', "You can't add yourself as a friend");
-    const me = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { onboardedAt: true, name: true, nickname: true } });
-    if (!me.onboardedAt) {
-      const missing = [!me.name.trim() && 'name', !me.nickname && 'nickname'].filter(Boolean);
-      throw Errors.badRequest('ONBOARDING_INCOMPLETE', 'Complete your profile first', { missing });
-    }
     const target = await this.prisma.user.findUnique({
       where: { id: targetId },
       select: { status: true, blockedUntil: true, onboardedAt: true },
