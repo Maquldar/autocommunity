@@ -414,7 +414,7 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
   - Dispatch is idempotent (`sos_dispatches` primary key + `ON CONFLICT`). Each step picks up to 20 *new* users.
 - **Seed:** the open seeded SOS has a real 2 h expiry, so on a long-running dev/demo instance it expires 2 h after seeding (re-run the seed to get it back).
 
-## 5. Phase 5 — Ratings, reviews, reports (DRAFT)
+## 5. Phase 5 — Ratings, reviews, reports (FROZEN)
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -424,6 +424,57 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 | GET | `/me/rating/events` | cursor | page of `{ id, delta, reason, refId, createdAt }` |
 | POST | `/reports` | `{ targetType: 'user'\|'message'\|'post'\|'comment'\|'sos'\|'community'\|'service', targetId, reason: 'spam'\|'fake_sos'\|'harassment'\|'fraud'\|'inappropriate'\|'dangerous'\|'other', details? ≤500 }` | 10/day; one open report per reporter+target |
 | GET | `/me/reports` | cursor | own reports with status |
+
+### Phase 5 rules (FROZEN)
+
+**Trust rating** (SPEC A-8; pure function `computeRating(input, now)` in `packages/shared/src/rating.ts`, unit-tested). Result: `clamp(0, 100, round(base + help + reviews + activity + tenure + penalties))`, with `base = 50`.
+- **help** (cap +25): sum over *confirmed helps*, i.e. the user was a helper whose response reached `arrived` on an SOS that ended `closed`.
+  - Each help is worth `3 × q × 0.5^(ageDays/180)`.
+  - `q` = requester's stars / 5 if the requester reviewed the helper, else 0.6.
+- **reviews** (range ±15): from all reviews *received* about the user (SOS reviews, both directions).
+  - Bayesian mean `m = (Σstars + 4.0×3) / (n + 3)`; component `= clamp(-15, 15, (m - 3.5) × 10)`.
+  - 0 when n = 0.
+- **activity** (cap +5): `min(5, activeDays30 / 4)`. `activeDays30` = distinct days in the last 30 days with ≥ 1 of: a message sent, an SOS response, an SOS created, a review written.
+- **tenure** (cap +5): `min(5, monthsSinceOnboarded × 0.5)`.
+- **penalties**: sum of negative `rating_events` deltas from the last 365 days.
+  - `report_confirmed` −10, `fake_sos` −50 (Phase 6 creates these). Older penalties expire.
+
+**Recompute and ledger:**
+- Rating is recomputed transactionally after each relevant event (review created, SOS closed, penalty), and by a daily job for decay, tenure and activity (Redis lock).
+- Each recompute that changes the rating writes a `rating_events` row with `delta` = new − old.
+  - `reason` ∈ `help_confirmed`, `review_received`, `penalty`, `recalc_daily`, `recalc`.
+  - `refId` = the SOS, review or report id when there is one.
+- The `users.rating` cache is updated in the same transaction.
+- `GET /me/rating` → `{ rating, breakdown: { base, help, reviews, activity, tenure, penalties }, nextThresholds: { sosCreate: 20, sosHelp: 30 } }`. The breakdown is computed live, so it sums to the rating (±1 rounding).
+- `GET /users/:id/rating`: same shape, readable by anyone (transparency). The ledger stays private (`/me/rating/events`).
+
+**SOS reviews** (`POST /sos/:id/reviews`):
+- Allowed when the SOS is `closed` and the pair is (requester → helper whose response reached `arrived`) or (that helper → requester).
+- Body `{ targetUserId, stars, comment? }`; `targetUserId` is required because there can be several helpers.
+- One review per direction per SOS → 409 `ALREADY_REVIEWED`; window 14 days after `closedAt` → 409 `REVIEW_WINDOW_CLOSED`.
+- Otherwise 403 `REVIEW_NOT_ALLOWED`.
+- The target gets a `review_received` notification.
+- `SosDto.canReview` becomes true when the viewer has at least one pending allowed review, and `SosDto.reviewTargets: UserMini[]` lists them.
+- Reviews are public on profiles (`GET /users/:id/reviews`, newest first) with author UserMini, stars, comment and createdAt.
+- Authors can't edit or delete their reviews; admins can (Phase 6).
+
+**Reports** (`POST /reports`):
+- Allowed target types: `user | message | sos | community | service`. `post | comment` are accepted only after Phase 8 adds them; until then → 400 `INVALID_TARGET`.
+- The target must exist and be visible to the reporter (the same visibility as reading it), else 404.
+- `targetUserId` is resolved server-side: the user, message sender, SOS requester, community owner, or service submitter.
+- Can't report yourself → 400 `INVALID_TARGET`.
+- One `open` report per reporter + target → 409 `ALREADY_REPORTED`; 10 reports/day per reporter → 429.
+- `reason='fake_sos'` only for targetType `sos`.
+- `details` ≤ 500.
+- Creation notifies no one (the admin queue comes in Phase 6).
+- `GET /me/reports` returns the user's own reports with status and resolution note.
+
+**SOS fixes carried into Phase 5:**
+- `GET /sos/nearby` uses the viewer's stored location (< 15 min old), never arbitrary coordinates.
+  - `lat`/`lng` become optional hints, ignored unless within 1 km of the stored location.
+  - No fresh location → 409 `LOCATION_REQUIRED`.
+- `/map/sos` keeps bbox semantics but returns only SOS within 20 km of the viewer's stored location (otherwise empty), so SOS positions can't be harvested city-wide.
+- **Demo:** when `DEMO_LIVE_LOCATIONS` is on, the ticker makes sure there is always one open SOS from a seed account near the centre (re-created when the previous one expires, closes or is cancelled), so the demo always has something to help with.
 
 ## 6. Phase 6 — Admin (DRAFT) — all require `role=admin`
 
