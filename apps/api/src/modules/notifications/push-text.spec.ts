@@ -1,5 +1,6 @@
+import type { NotificationType } from '@autoc/shared';
 import { describe, expect, it } from 'vitest';
-import { pushPayloadFor } from './push-text';
+import { PUSH_TEXT_TYPES, pushPayloadFor } from './push-text';
 
 const user = { id: '0192f0c0-0000-7000-8000-000000000001', nickname: 'aidar', name: 'Айдар', avatarUrl: null, rating: 60 };
 
@@ -68,4 +69,88 @@ describe('pushPayloadFor (reviews)', () => {
       tag: 'review:r1',
     });
   });
+});
+
+describe('pushPayloadFor (phase 8: events, feed and the remaining types)', () => {
+  const eventId = '0192f0c0-0000-7000-8000-0000000000e1';
+  const communityId = '0192f0c0-0000-7000-8000-0000000000c1';
+  const event = { eventId, communityId, communityName: 'Toyota Club KZ', title: 'Встреча клуба', startsAt: '2026-10-10T06:00:00.000Z', place: 'Достык Плаза' };
+
+  it('event_new: new / updated / cancelled, times in Asia/Almaty', () => {
+    expect(pushPayloadFor('event_new', event, 'ru')).toEqual({
+      title: 'Новое событие',
+      body: '«Toyota Club KZ»: Встреча клуба · 10 окт., 11:00',
+      url: `/events/${eventId}`,
+      tag: `event:${eventId}`,
+    });
+    expect(pushPayloadFor('event_new', { ...event, change: 'updated' }, 'en')).toMatchObject({
+      title: 'Event updated',
+      body: 'Updated: Встреча клуба · 10 Oct, 11:00 · Достык Плаза',
+      url: `/events/${eventId}`,
+    });
+    expect(pushPayloadFor('event_new', { ...event, change: 'cancelled' }, 'ru')).toMatchObject({
+      title: 'Событие отменено',
+      body: 'Отменено: Встреча клуба',
+      url: `/communities/${communityId}?tab=events`,
+    });
+  });
+
+  it('event_reminder, post_comment, post_like', () => {
+    expect(pushPayloadFor('event_reminder', event, 'en')).toEqual({
+      title: 'Starting soon',
+      body: 'Встреча клуба · 10 Oct, 11:00 · Достык Плаза',
+      url: `/events/${eventId}`,
+      tag: `event_reminder:${eventId}`,
+    });
+    const postId = '0192f0c0-0000-7000-8000-0000000000a1';
+    expect(pushPayloadFor('post_comment', { postId, commentId: 'c', preview: 'Отличная идея!', user }, 'ru')).toEqual({
+      title: 'Новый комментарий',
+      body: 'Айдар (@aidar): Отличная идея!',
+      url: `/posts/${postId}`,
+      tag: `post_comment:${postId}`,
+    });
+    expect(pushPayloadFor('post_like', { postId, preview: '', user }, 'en')).toMatchObject({ body: 'Айдар (@aidar) liked your post', url: `/posts/${postId}` });
+  });
+});
+
+/** One representative payload per type. `Record<NotificationType, …>` makes a missing type a compile error. */
+const SAMPLES: Record<NotificationType, Record<string, unknown>> = {
+  friend_request: { requestId: 'r', user },
+  friend_accepted: { user },
+  community_request: { communityId: 'c1', communityName: 'Club', user },
+  community_approved: { communityId: 'c1', communityName: 'Club' },
+  community_role: { communityId: 'c1', communityName: 'Club', role: 'moderator' },
+  sos_nearby: { sosId: 's1', type: 'battery', distanceM: 500, requester: user },
+  sos_response: { sosId: 's1', responseId: 'r', helper: user },
+  sos_accepted: { sosId: 's1', requester: user },
+  sos_status: { sosId: 's1', status: 'closed' },
+  review_received: { reviewId: 'rv', sosId: 's1', stars: 5, author: user },
+  message: { chatId: 'ch1', sender: user, text: 'Привет' },
+  admin_warning: { kind: 'warning', note: 'Не спамьте в чатах' },
+  event_new: { eventId: 'e1', communityId: 'c1', communityName: 'Club', title: 'Meetup', startsAt: '2026-10-10T06:00:00.000Z', place: 'Mega' },
+  event_reminder: { eventId: 'e1', communityId: 'c1', communityName: 'Club', title: 'Meetup', startsAt: '2026-10-10T06:00:00.000Z', place: 'Mega' },
+  post_comment: { postId: 'p1', commentId: 'c', preview: 'Nice', user },
+  post_like: { postId: 'p1', preview: 'Nice', user },
+  service_status: { serviceId: 'sv1', serviceName: 'Шиномонтаж', status: 'verified' },
+  visit_status: { visitId: 'v1', serviceId: 'sv1', serviceName: 'Шиномонтаж', status: 'approved' },
+  report_resolved: { reportId: 'rp1', decision: 'confirm' },
+};
+
+describe('push text completeness (F-43)', () => {
+  it('covers every NotificationType', () => {
+    expect([...PUSH_TEXT_TYPES].sort()).toEqual(Object.keys(SAMPLES).sort());
+  });
+
+  for (const type of Object.keys(SAMPLES) as NotificationType[]) {
+    it(`${type}: localized title, body and a same-origin url in ru and en`, () => {
+      for (const locale of ['ru', 'en'] as const) {
+        const push = pushPayloadFor(type, SAMPLES[type], locale);
+        expect(push, `${type}/${locale}`).not.toBeNull();
+        expect(push!.title.trim()).not.toBe('');
+        expect(push!.body.trim()).not.toBe('');
+        expect(push!.url).toMatch(/^\/(?!\/)/);
+        expect(push!.tag).toMatch(new RegExp(`^[a-z_]+:`));
+      }
+    });
+  }
 });

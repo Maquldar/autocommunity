@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, ShieldAlert, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, CalendarX, Check, ShieldAlert, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -24,6 +24,11 @@ type TitleSpec =
   | { key: 'types.sosStatus'; values: { name: string; event: string } }
   | { key: 'types.reviewReceived'; values: { name: string; stars: number } }
   | { key: 'types.moderation'; values: { variant: string; service: string } }
+  | { key: 'types.eventNew' | 'types.eventUpdated'; values: { title: string; community: string; when: string } }
+  | { key: 'types.eventCancelled'; values: { title: string } }
+  | { key: 'types.eventReminder'; values: { title: string; when: string } }
+  | { key: 'types.postComment'; values: { name: string; preview: string } }
+  | { key: 'types.postLike'; values: { name: string } }
   | { key: 'types.generic'; values: Record<string, never> };
 
 type TitleContext = {
@@ -31,10 +36,16 @@ type TitleContext = {
   someCommunity: string;
   sosType: (type: Extract<NotificationView, { kind: 'sos_nearby' }>['sosType']) => string;
   distance: (meters: number | null) => string;
+  /** Event times in notifications: Almaty wall-clock time (the app's time zone). */
+  when: (iso: string) => string;
 };
 
+function eventWhen(iso: string | null, format: (iso: string) => string): string {
+  return iso ? format(iso) : '';
+}
+
 function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
-  const { someone, someCommunity } = ctx;
+  const { someone, someCommunity, when } = ctx;
   switch (view.kind) {
     case 'sos_nearby':
       return { key: 'types.sosNearby', values: { name: displayName(view.user) ?? someone, type: ctx.sosType(view.sosType), distance: ctx.distance(view.distanceM) } };
@@ -58,9 +69,26 @@ function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
       return { key: 'types.communityRole', values: { community: view.communityName || someCommunity, role: view.role } };
     case 'moderation':
       return { key: 'types.moderation', values: { variant: view.variant, service: view.serviceName || someCommunity } };
+    case 'event_new':
+      if (view.change === 'cancelled') return { key: 'types.eventCancelled', values: { title: view.title } };
+      return {
+        key: view.change === 'updated' ? 'types.eventUpdated' : 'types.eventNew',
+        values: { title: view.title, community: view.communityName || someCommunity, when: eventWhen(view.startsAt, when) },
+      };
+    case 'event_reminder':
+      return { key: 'types.eventReminder', values: { title: view.title, when: eventWhen(view.startsAt, when) } };
+    case 'post_comment':
+      return { key: 'types.postComment', values: { name: displayName(view.user) ?? someone, preview: view.preview } };
+    case 'post_like':
+      return { key: 'types.postLike', values: { name: displayName(view.user) ?? someone } };
     default:
       return { key: 'types.generic', values: {} };
   }
+}
+
+function useWhen(): (iso: string) => string {
+  const format = useFormatter();
+  return (iso) => format.dateTime(new Date(iso), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 
 /** Plain-text title for toasts and push-style surfaces. */
@@ -68,8 +96,10 @@ function useTitleContext(): TitleContext {
   const t = useTranslations('notifications');
   const ts = useTranslations('sos.types');
   const format = useFormatter();
+  const when = useWhen();
   return {
     someone: t('someone'),
+    when,
     someCommunity: t('someCommunity'),
     sosType: (type) => ts(type),
     distance: (meters) => {
@@ -115,7 +145,14 @@ function Leading({ view }: { view: NotificationView }) {
       </span>
     );
   }
-  if ((view.kind === 'friend_request' || view.kind === 'friend_accepted' || view.kind === 'community_request') && view.user) {
+  if (
+    (view.kind === 'friend_request' ||
+      view.kind === 'friend_accepted' ||
+      view.kind === 'community_request' ||
+      view.kind === 'post_comment' ||
+      view.kind === 'post_like') &&
+    view.user
+  ) {
     return <Avatar id={view.user.id} name={view.user.name || view.user.nickname} src={view.user.avatarUrl} size="md" decorative />;
   }
   const Icon =
@@ -127,7 +164,13 @@ function Leading({ view }: { view: NotificationView }) {
           ? ShieldCheck
           : view.kind === 'moderation'
             ? ShieldAlert
-            : Bell;
+            : view.kind === 'event_new'
+              ? view.change === 'cancelled'
+                ? CalendarX
+                : CalendarDays
+              : view.kind === 'event_reminder'
+                ? CalendarClock
+                : Bell;
   return (
     <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
       <Icon className="size-5" />

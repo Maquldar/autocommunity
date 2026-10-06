@@ -10,7 +10,7 @@ import { CLUSTER_PROPERTIES, toFeatureCollection } from './geojson';
 import { loadMapStyle } from './map-style';
 import { ClusterMarker, DriverMarker, OwnPositionMarker, SosMarker } from './markers';
 
-type MapLib = typeof import('maplibre-gl');
+export type MapLib = typeof import('maplibre-gl');
 
 const SOURCE = 'drivers';
 const HIT_LAYER = 'drivers-hit';
@@ -36,6 +36,8 @@ export type MapCanvasProps = {
   sosItems?: readonly SosMapItem[];
   selectedSosId?: string | null;
   onSelectSos?: (id: string) => void;
+  /** Called once the map and its style are ready (extra layers, e.g. events). */
+  onMapReady?: (map: MlMap, lib: MapLib) => void;
 };
 
 type MarkerEntry = {
@@ -76,6 +78,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     sosItems = EMPTY_SOS,
     selectedSosId = null,
     onSelectSos,
+    onMapReady,
   },
   ref,
 ) {
@@ -93,8 +96,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [sosPortals, setSosPortals] = useState<Array<{ item: SosMapItem; element: HTMLDivElement }>>([]);
 
   // Latest callbacks without re-creating the map.
-  const callbacks = useRef({ onViewChange, onTilesUnavailable });
-  callbacks.current = { onViewChange, onTilesUnavailable };
+  const callbacks = useRef({ onViewChange, onTilesUnavailable, onMapReady });
+  callbacks.current = { onViewChange, onTilesUnavailable, onMapReady };
   const initial = useRef(initialView);
 
   const syncMarkers = useCallback(() => {
@@ -201,6 +204,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         updateApproxSize(map);
         markZoom(map);
         setReady(true);
+        callbacks.current.onMapReady?.(map, lib);
         emitView(map);
       };
       map.on('style.load', setUpSource);

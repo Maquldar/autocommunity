@@ -25,6 +25,8 @@ export type AppHandlerDeps = {
 const FRIEND_TYPES = new Set(['friend_request', 'friend_accepted']);
 const COMMUNITY_TYPES = new Set(['community_request', 'community_approved', 'community_role']);
 const SOS_TYPES = new Set(['sos_nearby', 'sos_response', 'sos_accepted', 'sos_status']);
+const EVENT_TYPES = new Set(['event_new', 'event_reminder']);
+const POST_TYPES = new Set(['post_comment', 'post_like']);
 
 /** What the app does with each server event. Pure wiring over the query cache, unit-tested with a fake socket. */
 export function createAppRealtimeHandlers({
@@ -47,6 +49,9 @@ export function createAppRealtimeHandlers({
         void queryClient.invalidateQueries({ queryKey: ['reviews'] });
         void queryClient.invalidateQueries({ queryKey: ['me'], exact: true });
       }
+      // New / changed / cancelled events and new comments or likes on the viewer's posts.
+      if (EVENT_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['events'] });
+      if (POST_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['feed'] });
       // "Someone nearby needs help" gets the urgent SOS banner instead of an ordinary toast.
       const alert = alertFromNotification(notification);
       if (alert) alerts.push(alert);

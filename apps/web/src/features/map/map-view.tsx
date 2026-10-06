@@ -16,7 +16,10 @@ import { DriverCard } from './driver-card';
 import { useMyCommunities } from '@/features/communities/queries';
 import { DEFAULT_FILTERS, sanitizeCommunityIds, type MapFilters } from './geojson';
 import { LocationControls } from './location-controls';
-import { MapCanvas, type MapCanvasHandle } from './map-canvas';
+import { MapCanvas, type MapCanvasHandle, type MapLib } from './map-canvas';
+import type { Map as MlMap } from 'maplibre-gl';
+import { EventsMapLayer } from '@/features/events/events-map-layer';
+import { EventsLayerToggle, useEventsLayer } from '@/features/events/events-layer-toggle';
 import { MapFiltersControl } from './map-filters';
 import { PrivacyToggle } from './privacy-toggle';
 import { useMapUsers } from './queries';
@@ -76,6 +79,9 @@ export function MapView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tilesUnavailable, setTilesUnavailable] = useState(false);
   const centeredOnUser = useRef(false);
+  const [mapHandle, setMapHandle] = useState<{ map: MlMap; lib: MapLib } | null>(null);
+  const [showEvents, setShowEvents] = useEventsLayer();
+  const onMapReady = useCallback((map: MlMap, lib: MapLib) => setMapHandle({ map, lib }), []);
   const movedByUser = useRef(false);
   const [sosLayer, setSosLayerState] = useState(true);
   const [selectedSosId, setSelectedSosId] = useState<string | null>(null);
@@ -159,13 +165,16 @@ export function MapView() {
         onViewChange={onViewChange}
         onTilesUnavailable={setTilesUnavailable}
         labels={{ region: t('regionLabel'), zoomIn: t('zoomInControl'), zoomOut: t('zoomOutControl') }}
+        onMapReady={onMapReady}
       />
+      <EventsMapLayer map={mapHandle?.map ?? null} lib={mapHandle?.lib ?? null} bbox={tooLarge ? null : bbox} enabled={showEvents} />
 
       {/* Top: visibility + filters, then the status pill. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-raised flex flex-col items-center gap-2 p-3 sm:p-4">
         <div className="flex w-full items-start justify-between gap-2">
           <PrivacyToggle className="pointer-events-auto min-w-0" />
           <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+            <EventsLayerToggle pressed={showEvents} onPressedChange={setShowEvents} />
             <button
               type="button"
               aria-pressed={sosLayer}

@@ -8,6 +8,7 @@ import { decodeCursor, keysetOrderBy, keysetWhere, splitPage } from '../../commo
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { AntifraudService } from '../antifraud/antifraud.service';
 import { ChatsService } from '../chats/chats.service';
+import { FeedService } from '../feed/feed.service';
 import { SosService } from '../sos/sos.service';
 
 const notFound = () => Errors.notFound('Report target not found');
@@ -33,6 +34,7 @@ export class ReportsService {
     private readonly chats: ChatsService,
     private readonly sos: SosService,
     private readonly antifraud: AntifraudService,
+    private readonly feed: FeedService,
   ) {}
 
   async create(reporterId: string, input: CreateReportInput): Promise<ReportDto> {
@@ -112,9 +114,16 @@ export class ReportsService {
         if (!s || (s.status !== 'verified' && s.submittedById !== reporterId)) throw notFound();
         return s.submittedById;
       }
-      case 'post':
-      case 'comment':
-        throw invalidTarget('Posts and comments can be reported once the feed exists');
+      case 'post': {
+        const authorId = await this.feed.visibleAuthor(reporterId, id);
+        if (!authorId) throw notFound();
+        return authorId;
+      }
+      case 'comment': {
+        const authorId = await this.feed.visibleCommentAuthor(reporterId, id);
+        if (!authorId) throw notFound();
+        return authorId;
+      }
     }
   }
 }

@@ -38,6 +38,10 @@ export type NotificationView =
       serviceName: string;
       href: string | null;
     }
+  | { kind: 'event_new'; title: string; communityName: string; startsAt: string | null; change: 'updated' | 'cancelled' | null; href: string | null }
+  | { kind: 'event_reminder'; title: string; startsAt: string | null; href: string | null }
+  | { kind: 'post_comment'; user: UserMini | null; preview: string; href: string | null }
+  | { kind: 'post_like'; user: UserMini | null; preview: string; href: string | null }
   | { kind: 'generic'; type: string; href: string | null };
 
 export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
@@ -82,6 +86,10 @@ function safePath(value: unknown): string | null {
 /** Ids go into URLs: accept only plain id characters. */
 function safeId(value: unknown): string | null {
   return typeof value === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(value) ? value : null;
+}
+
+function isoDate(value: unknown): string | null {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : null;
 }
 
 function text(value: unknown): string {
@@ -162,6 +170,29 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
     case 'service_status':
     case 'visit_status':
       return describeModeration(notification.type, payload);
+    case 'event_new': {
+      const eventId = safeId(payload.eventId);
+      const communityId = safeId(payload.communityId);
+      const change = payload.change === 'updated' || payload.change === 'cancelled' ? payload.change : null;
+      return {
+        kind: 'event_new',
+        title: text(payload.title),
+        communityName: text(payload.communityName),
+        startsAt: isoDate(payload.startsAt),
+        change,
+        // A cancelled event is gone: open its community's events instead.
+        href: change === 'cancelled' ? (communityId ? `/communities/${communityId}?tab=events` : '/events') : eventId ? `/events/${eventId}` : safePath(payload.url),
+      };
+    }
+    case 'event_reminder': {
+      const eventId = safeId(payload.eventId);
+      return { kind: 'event_reminder', title: text(payload.title), startsAt: isoDate(payload.startsAt), href: eventId ? `/events/${eventId}` : null };
+    }
+    case 'post_comment':
+    case 'post_like': {
+      const postId = safeId(payload.postId);
+      return { kind: notification.type, user: parseUserMini(payload.user), preview: text(payload.preview), href: postId ? `/posts/${postId}` : null };
+    }
     default:
       return { kind: 'generic', type: String(notification.type), href: safePath(payload.url) };
   }

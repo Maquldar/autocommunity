@@ -7,7 +7,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('pageMetaTitle') };
 }
 
-const TABS: readonly CommunityTab[] = ['chat', 'members', 'requests'];
+const TABS: readonly CommunityTab[] = ['chat', 'members', 'requests', 'events', 'feed'];
 
 /** `?tab=requests` opens a tab directly (push and notification links use /communities/{id}/requests). */
 export default async function CommunityPage({

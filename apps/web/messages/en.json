@@ -909,7 +909,13 @@
       "sosAccepted": "<b>{name}</b> accepted your help",
       "sosStatus": "{event, select, withdrawn {<b>{name}</b> withdrew their offer} declined {<b>{name}</b> chose other helpers} arrived {<b>{name}</b> has arrived} in_progress {<b>{name}</b> confirmed that help arrived} closed {<b>{name}</b> marked the SOS as resolved} cancelled {<b>{name}</b> cancelled the SOS} expired {The SOS expired} other {SOS updated}}",
       "reviewReceived": "<b>{name}</b> rated you {stars, plural, one {# star} other {# stars}}",
-      "moderation": "{variant, select, warning {Moderator warning} blocked {Your account was blocked} sos_ban {You can't create SOS requests for now} fake_sos {Your SOS was marked as fake} report_confirmed {Your report was confirmed. Thank you!} report_dismissed {Your report was reviewed: no violation found} service_verified {<b>{service}</b> was verified and is now listed} service_rejected {<b>{service}</b> didn't pass moderation} visit_verified {Your visit to <b>{service}</b> was confirmed — you can leave a review} visit_rejected {Your visit to <b>{service}</b> wasn't confirmed} other {Moderation update}}"
+      "moderation": "{variant, select, warning {Moderator warning} blocked {Your account was blocked} sos_ban {You can't create SOS requests for now} fake_sos {Your SOS was marked as fake} report_confirmed {Your report was confirmed. Thank you!} report_dismissed {Your report was reviewed: no violation found} service_verified {<b>{service}</b> was verified and is now listed} service_rejected {<b>{service}</b> didn't pass moderation} visit_verified {Your visit to <b>{service}</b> was confirmed — you can leave a review} visit_rejected {Your visit to <b>{service}</b> wasn't confirmed} other {Moderation update}}",
+      "eventNew": "New event in <b>{community}</b>: <b>{title}</b>, {when}",
+      "eventUpdated": "<b>{title}</b> was changed: now {when}",
+      "eventCancelled": "<b>{title}</b> was cancelled",
+      "eventReminder": "Starting soon: <b>{title}</b>, {when}",
+      "postComment": "<b>{name}</b> commented on your post: {preview}",
+      "postLike": "<b>{name}</b> liked your post"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
@@ -990,7 +996,9 @@
       "label": "Community sections",
       "chat": "Chat",
       "members": "Members",
-      "requests": "Requests"
+      "requests": "Requests",
+      "events": "Events",
+      "feed": "Feed"
     },
     "chat": {
       "title": "Community chat",
@@ -2337,6 +2345,258 @@
       "rejectDescription": "The driver is notified; no review is possible for this visit.",
       "approved": "Visit approved",
       "rejected": "Visit rejected"
+    }
+  },
+  "events": {
+    "metaTitle": "Events",
+    "title": "Events",
+    "description": "Meetups, trips and rides of your communities.",
+    "loading": "Loading events…",
+    "private": "Private",
+    "ended": "Ended",
+    "create": "Create event",
+    "hasRoute": "Route",
+    "goingCount": "{count, plural, =0 {Nobody going yet} one {# going} other {# going}}",
+    "interestedCount": "{count, plural, one {# interested} other {# interested}}",
+    "distance": "{km} km from you",
+    "list": {
+      "when": "When",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "community": "Community",
+      "allCommunities": "All communities",
+      "upcomingLabel": "Upcoming events",
+      "pastLabel": "Past events"
+    },
+    "empty": {
+      "upcomingTitle": "No upcoming events",
+      "upcomingDescription": "Join communities to see their meetups and trips here.",
+      "communityDescription": "This community hasn't planned anything yet.",
+      "pastTitle": "No past events",
+      "pastDescription": "Events that have ended will show up here.",
+      "findCommunities": "Find communities"
+    },
+    "notFound": {
+      "title": "Event not found",
+      "description": "It may have been cancelled, or it belongs to a private community.",
+      "back": "All events"
+    },
+    "details": {
+      "placeTitle": "Place",
+      "routeTitle": "{count, plural, one {Route · # point} other {Route · # points}}",
+      "mapLabel": "Event map",
+      "placeMarker": "Meeting point: {place}",
+      "openInMaps": "Open in maps",
+      "addToCalendar": "Add to calendar",
+      "about": "About",
+      "organizer": "Organized by"
+    },
+    "rsvp": {
+      "label": "Your answer",
+      "question": "Are you going?",
+      "youAreGoing": "You're going",
+      "youAreInterested": "You're interested",
+      "going": "Going",
+      "interested": "Interested",
+      "cancel": "Remove my answer",
+      "openChat": "Open event chat",
+      "chatHint": "Answer “Going” to join the event chat.",
+      "goingToast": "See you there! You've joined the event chat.",
+      "endedNote": "This event has ended."
+    },
+    "manage": {
+      "menu": "Event actions",
+      "delete": "Delete event",
+      "deleteTitle": "Delete this event?",
+      "deleteDescription": "{count, plural, =0 {The event and its chat will be deleted.} one {The event and its chat will be deleted. # participant will be notified.} other {The event and its chat will be deleted. # participants will be notified.}}",
+      "deleted": "Event deleted"
+    },
+    "participants": {
+      "title": "Participants",
+      "emptyTitle": "No answers yet",
+      "emptyDescription": "Be the first to say you're going."
+    },
+    "errors": {
+      "full": "The event is full: 500 people are already going.",
+      "ended": "This event has already ended."
+    },
+    "map": {
+      "layer": "Events",
+      "marker": "Event: {title}, {when}",
+      "open": "Open event"
+    },
+    "form": {
+      "createTitle": "New event",
+      "editTitle": "Edit event",
+      "create": "Create event",
+      "save": "Save changes",
+      "created": "Event created",
+      "saved": "Event updated",
+      "title": "Title",
+      "description": "Description",
+      "startsAt": "Starts",
+      "endsAt": "Ends",
+      "timeZoneHint": "Almaty time",
+      "place": "Meeting point",
+      "placeHint": "Address or a landmark, e.g. “Mega parking, Rozybakiev St”",
+      "mapLegend": "Place and route on the map",
+      "tapMode": "Tapping the map sets",
+      "modePlace": "Place",
+      "modeRoute": "Route",
+      "placeTapHint": "Tap the map to put the meeting point.",
+      "routeTapHint": "Tap the map to add route points in order. Undo removes the last one.",
+      "mapLabel": "Map for choosing the place and route",
+      "placeMarker": "Meeting point",
+      "useMyPosition": "Use my position",
+      "undoPoint": "Undo point",
+      "clearRoute": "Clear route",
+      "placeSet": "Meeting point: {lat}, {lng}",
+      "placeNotSet": "Meeting point not set yet",
+      "routePoints": "{count, plural, =0 {No route (optional)} one {Route: # point — add at least one more} other {Route: # points}}",
+      "locationUnavailable": "Couldn't get your position. Tap the map instead.",
+      "noRightsTitle": "Only moderators can do this",
+      "noRightsDescription": "Events are created and edited by community owners and moderators.",
+      "back": "Back",
+      "errors": {
+        "title": "Use {min}–{max} characters",
+        "description": "At most {max} characters",
+        "place": "Use {min}–{max} characters",
+        "location": "Put the meeting point on the map",
+        "startsAt": "Choose the start date and time",
+        "startsPast": "The start must be in the future",
+        "startsFar": "At most a year ahead",
+        "endsAt": "Choose a valid end time",
+        "endsBefore": "The end must be after the start",
+        "routeShort": "A route needs at least 2 points",
+        "routeLong": "At most {max} route points"
+      }
+    },
+    "distanceM": "{m} m from you"
+  },
+  "feed": {
+    "metaTitle": "Feed",
+    "title": "Feed",
+    "description": "News, photos and polls from drivers and your communities.",
+    "listLabel": "Posts",
+    "communityJoinToPost": "Join the community to post here.",
+    "scope": {
+      "label": "Show posts",
+      "all": "All",
+      "communities": "Communities",
+      "friends": "Friends"
+    },
+    "empty": {
+      "title": "No posts yet",
+      "all": "Be the first to share something with drivers.",
+      "communities": "Posts from your communities will appear here.",
+      "friends": "Posts from your friends will appear here.",
+      "community": "Nobody has posted in this community yet."
+    },
+    "media": {
+      "label": "Photos by {name}",
+      "video": "Video",
+      "open": "Open photo {index} of {count}",
+      "counter": "Photo {index} of {count}",
+      "photo": "Photo {index} of {count}",
+      "previous": "Previous photo",
+      "next": "Next photo"
+    },
+    "poll": {
+      "results": "Poll results",
+      "yourVote": "your vote",
+      "votes": "{count, plural, one {# vote} other {# votes}}",
+      "voters": "{count, plural, =0 {No votes yet} one {# voter} other {# voters}}",
+      "multiple": "several answers",
+      "final": "Votes are final",
+      "vote": "Vote"
+    },
+    "post": {
+      "menu": "Post actions",
+      "report": "Report",
+      "delete": "Delete post",
+      "deleteTitle": "Delete this post?",
+      "deleteDescription": "It will disappear from the feed for everyone.",
+      "deleted": "Post deleted",
+      "likeLabel": "{count, plural, one {Like (# like)} other {Like (# likes)}}",
+      "comments": "{count, plural, =0 {No comments} one {# comment} other {# comments}}"
+    },
+    "comment": {
+      "menu": "Comment actions by {name}",
+      "report": "Report",
+      "delete": "Delete comment",
+      "deleteTitle": "Delete this comment?",
+      "deleted": "Comment deleted"
+    },
+    "thread": {
+      "title": "Post",
+      "comments": "Comments",
+      "emptyTitle": "No comments yet",
+      "emptyDescription": "Start the conversation.",
+      "commentLabel": "Your comment",
+      "commentPlaceholder": "Write a comment…",
+      "commentEmpty": "Write something first",
+      "send": "Send",
+      "notFoundTitle": "Post not found",
+      "notFoundDescription": "It was deleted or belongs to a private community.",
+      "back": "Back to the feed"
+    },
+    "composer": {
+      "title": "New post",
+      "textLabel": "Post text",
+      "placeholder": "What's happening on the road?",
+      "attachments": "Attachments",
+      "photoPreview": "Photo {index}",
+      "videoPreview": "Video",
+      "uploading": "Uploading…",
+      "uploadFailed": "Failed",
+      "removeAttachment": "Remove attachment {index}",
+      "addPhotos": "Add photos (up to {max})",
+      "addVideo": "Add a video",
+      "addPoll": "Add a poll",
+      "pollTitle": "Poll",
+      "pollQuestion": "Question",
+      "pollOption": "Option {index}",
+      "removeOption": "Remove option {index}",
+      "addOption": "Add option",
+      "pollMultiple": "Allow several answers",
+      "removePoll": "Remove poll",
+      "audience": "Post to",
+      "everyone": "Everyone",
+      "publish": "Publish",
+      "waitUploads": "Uploading…",
+      "posted": "Posted",
+      "empty": "Add text, a photo, a video or a poll",
+      "tooLong": "At most {max} characters",
+      "tooManyPhotos": "At most {max} photos per post",
+      "videoTooLarge": "The video must be at most {mb} MB",
+      "removeFailed": "Remove the attachments that failed to upload",
+      "pollQuestionShort": "The question needs at least {min} characters",
+      "pollOptionsShort": "Add at least {min} options",
+      "pollOptionsSame": "Options must be different"
+    },
+    "report": {
+      "titlePost": "Report post",
+      "titleComment": "Report comment",
+      "description": "Moderators will review it. The author won't know who reported.",
+      "reasonLabel": "Reason",
+      "chooseReason": "Choose a reason",
+      "details": "Details",
+      "submit": "Send report",
+      "sent": "Report sent. Thank you!",
+      "reasons": {
+        "spam": "Spam or advertising",
+        "harassment": "Harassment or insults",
+        "inappropriate": "Inappropriate content",
+        "fraud": "Fraud",
+        "dangerous": "Dangerous behaviour",
+        "other": "Something else"
+      }
+    },
+    "errors": {
+      "alreadyVoted": "You've already voted in this poll.",
+      "invalidOption": "This option no longer exists. Reload the post.",
+      "alreadyReported": "You've already reported this; moderators are on it.",
+      "rateLimited": "Too many posts or comments for now (limits: {posts} posts a day, {comments} comments an hour). Try again later."
     }
   }
 }
