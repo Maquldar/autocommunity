@@ -129,6 +129,9 @@ describe('reports', () => {
     expect(canRemoveContent(report({}))).toBe(true);
     expect(canRemoveContent(report({ targetType: 'community' }))).toBe(true);
     expect(canRemoveContent(report({ targetType: 'service' }))).toBe(true);
+    expect(canRemoveContent(report({ targetType: 'post' }))).toBe(true);
+    expect(canRemoveContent(report({ targetType: 'comment' }))).toBe(true);
+    expect(canRemoveContent(report({ targetType: 'post', preview: { title: null, text: 'x', imageUrl: null, deleted: true } }))).toBe(false);
     expect(canRemoveContent(report({ targetType: 'user' }))).toBe(false);
     expect(canRemoveContent(report({ targetType: 'sos', reason: 'spam' }))).toBe(false);
     expect(canRemoveContent(report({ targetType: 'sos', reason: 'fake_sos' }))).toBe(true);
@@ -144,6 +147,13 @@ describe('reports', () => {
     expect(reportTargetHref(report({ targetType: 'community', preview: { title: null, text: null, imageUrl: null, deleted: true } }))).toBeNull();
     expect(reportTargetHref(report({ targetType: 'message' }))).toBe('/admin/users/b');
     expect(reportTargetHref(report({ targetType: 'message', targetUser: null }))).toBeNull();
+    expect(reportTargetHref(report({ targetType: 'post', targetId: 'p1' }))).toBe('/posts/p1');
+    expect(reportTargetHref(report({ targetType: 'post', targetId: 'p1', preview: { title: null, text: 'x', imageUrl: null, deleted: true } }))).toBeNull();
+    const postId = '11111111-2222-3333-4444-555555555555';
+    const withPost = { title: null, text: 'c', imageUrl: null, deleted: false, postId } as AdminReportDto['preview'];
+    expect(reportTargetHref(report({ targetType: 'comment', targetId: 'k1', preview: withPost }))).toBe(`/posts/${postId}`);
+    expect(reportTargetHref(report({ targetType: 'comment', targetId: 'k1' }))).toBe('/admin/users/b');
+    expect(reportTargetHref(report({ targetType: 'comment', targetId: 'k1', targetUser: null }))).toBeNull();
   });
 });
 

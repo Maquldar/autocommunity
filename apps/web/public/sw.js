@@ -12,9 +12,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-/** Accepts only same-origin paths so a payload can't open an arbitrary site. */
+/**
+ * Accepts only same-origin paths so a payload can't open an arbitrary site: a single leading '/', no
+ * backslashes ('/\evil.com' is protocol-relative to the URL parser) and no control characters (tabs and
+ * newlines are stripped by the URL parser, so '/\t/evil.com' would become '//evil.com').
+ */
 function safeUrl(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/notifications';
+  if (typeof value !== 'string' || value[0] !== '/' || value[1] === '/' || value.includes('\\')) return '/notifications';
+  if (/[\u0000-\u001f\u007f]/.test(value)) return '/notifications';
   return value;
 }
 

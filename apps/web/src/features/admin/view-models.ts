@@ -148,7 +148,21 @@ export function noteError(note: string): 'tooShort' | 'tooLong' | null {
 export function canRemoveContent(report: Pick<AdminReportDto, 'targetType' | 'reason' | 'preview' | 'status'>): boolean {
   if (report.status !== 'open' || report.preview.deleted) return false;
   if (report.targetType === 'sos') return report.reason === 'fake_sos';
-  return report.targetType === 'message' || report.targetType === 'community' || report.targetType === 'service';
+  return (
+    report.targetType === 'message' ||
+    report.targetType === 'post' ||
+    report.targetType === 'comment' ||
+    report.targetType === 'community' ||
+    report.targetType === 'service'
+  );
+}
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+/** Parent post of a reported comment, when the preview carries it (older API builds don't). */
+function commentPostId(preview: AdminReportDto['preview']): string | null {
+  const id = (preview as { postId?: unknown }).postId;
+  return typeof id === 'string' && UUID_RE.test(id) ? id : null;
 }
 
 /** Where the admin can look at the reported thing (null when there is no page for it). */
@@ -162,6 +176,14 @@ export function reportTargetHref(report: Pick<AdminReportDto, 'targetType' | 'ta
       return report.preview.deleted ? null : `/communities/${report.targetId}`;
     case 'service':
       return `/services/${report.targetId}`;
+    case 'post':
+      // Admins can open a post regardless of community membership; a deleted one has no page.
+      return report.preview.deleted ? null : `/posts/${report.targetId}`;
+    case 'comment': {
+      const postId = commentPostId(report.preview);
+      if (postId) return `/posts/${postId}`;
+      return report.targetUser ? `/admin/users/${report.targetUser.id}` : null;
+    }
     default:
       return report.targetUser ? `/admin/users/${report.targetUser.id}` : null;
   }

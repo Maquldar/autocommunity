@@ -20,6 +20,22 @@ export function safeHref(raw: string): string | null {
   }
 }
 
+const NON_ASCII = /[^\x00-\x7f]/;
+
+/**
+ * Link text as shown to the reader. A host with non-ASCII characters (IDN, e.g. Cyrillic "а" in `аpple.com`)
+ * is shown in its punycode form (`xn--pple-43d.com`) so a look-alike domain can't pass for a real one;
+ * the rest of the text (path, query) is left as typed.
+ */
+export function displayLink(value: string, href: string): string {
+  const prefix = value.match(/^(?:https?:\/\/)?/i)?.[0] ?? '';
+  const rest = value.slice(prefix.length);
+  const end = rest.search(/[/?#\\]/);
+  const authority = end === -1 ? rest : rest.slice(0, end);
+  if (!NON_ASCII.test(authority)) return value;
+  return prefix + new URL(href).host + rest.slice(authority.length);
+}
+
 export function tokenize(text: string): TextToken[] {
   const tokens: TextToken[] = [];
   let last = 0;
@@ -40,7 +56,7 @@ export function tokenize(text: string): TextToken[] {
     value = trailing ? value.slice(0, -trailing.length) : value;
     const href = value.length > 4 ? safeHref(value) : null;
     push(text.slice(last, start));
-    if (href) tokens.push({ type: 'link', value, href });
+    if (href) tokens.push({ type: 'link', value: displayLink(value, href), href });
     else push(value);
     push(trailing);
     last = start + match[0].length;

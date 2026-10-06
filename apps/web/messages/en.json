@@ -2196,7 +2196,7 @@
       "dismissed": "Report dismissed",
       "removeContent": "Remove the content",
       "removeHint": {
-        "content": "Deletes the message, community or service listing.",
+        "content": "Deletes the message, post, comment, community or service listing.",
         "sos": "Marks the SOS as fake (−50 more for the author)."
       }
     },
