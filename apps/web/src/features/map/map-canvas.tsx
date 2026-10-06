@@ -10,7 +10,7 @@ import { CLUSTER_PROPERTIES, toFeatureCollection } from './geojson';
 import { loadMapStyle } from './map-style';
 import { ClusterMarker, DriverMarker, OwnPositionMarker } from './markers';
 
-type MapLib = typeof import('maplibre-gl');
+export type MapLib = typeof import('maplibre-gl');
 
 const SOURCE = 'drivers';
 const HIT_LAYER = 'drivers-hit';
@@ -32,6 +32,8 @@ export type MapCanvasProps = {
   onTilesUnavailable: (unavailable: boolean) => void;
   labels: { region: string; zoomIn: string; zoomOut: string };
   className?: string;
+  /** Called once the map and its style are ready (extra layers, e.g. events). */
+  onMapReady?: (map: MlMap, lib: MapLib) => void;
 };
 
 type MarkerEntry = {
@@ -58,7 +60,7 @@ function boundsOf(map: MlMap): Bounds {
  * keyboard-accessible and don't depend on the style's glyphs/sprites.
  */
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas(
-  { users, initialView, ownPosition, selectedId, onSelect, onViewChange, onTilesUnavailable, labels, className },
+  { users, initialView, ownPosition, selectedId, onSelect, onViewChange, onTilesUnavailable, labels, className, onMapReady },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,8 +75,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [ownElement, setOwnElement] = useState<HTMLDivElement | null>(null);
 
   // Latest callbacks without re-creating the map.
-  const callbacks = useRef({ onViewChange, onTilesUnavailable });
-  callbacks.current = { onViewChange, onTilesUnavailable };
+  const callbacks = useRef({ onViewChange, onTilesUnavailable, onMapReady });
+  callbacks.current = { onViewChange, onTilesUnavailable, onMapReady };
   const initial = useRef(initialView);
 
   const syncMarkers = useCallback(() => {
@@ -181,6 +183,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         updateApproxSize(map);
         markZoom(map);
         setReady(true);
+        callbacks.current.onMapReady?.(map, lib);
         emitView(map);
       };
       map.on('style.load', setUpSource);

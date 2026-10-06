@@ -93,9 +93,9 @@ describe('POST /reports per target type', () => {
     expect((await t.prisma.report.findUniqueOrThrow({ where: { id: o.id } })).targetUserId).toBeNull();
   });
 
-  it('post / comment are not reportable yet; validation', async () => {
+  it('unknown post / comment → 404 (Phase 8 targets, covered in feed.int.spec); validation', async () => {
     const me = await createUser(t);
-    for (const type of ['post', 'comment']) expect((await report(me, target(type, newId())).expect(400)).body.error.code).toBe('INVALID_TARGET');
+    for (const type of ['post', 'comment']) await report(me, target(type, newId())).expect(404);
     for (const body of [
       target('video', newId()),
       target('user', 'nope'),

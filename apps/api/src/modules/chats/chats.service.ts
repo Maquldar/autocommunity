@@ -19,6 +19,7 @@ import { MessageViewService, type MessageRow } from './message-view.service';
 
 type ChatListRow = {
   sosRequesterName: string | null;
+  eventTitle: string | null;
   id: string;
   type: ChatType;
   refId: string;
@@ -294,9 +295,13 @@ export class ChatsService {
   }
 
   private async canModerate(userId: string, chat: { type: ChatType; refId: string }): Promise<boolean> {
-    if (chat.type !== 'community') return false;
+    if (chat.type !== 'community' && chat.type !== 'event') return false;
+    // Event chats are moderated by the moderators of the event's community.
+    const communityId =
+      chat.type === 'event' ? (await this.prisma.event.findUnique({ where: { id: chat.refId }, select: { communityId: true } }))?.communityId : chat.refId;
+    if (!communityId) return false;
     const m = await this.prisma.communityMember.findUnique({
-      where: { communityId_userId: { communityId: chat.refId, userId } },
+      where: { communityId_userId: { communityId, userId } },
       select: { role: true, status: true },
     });
     return !!m && m.status === 'active' && (m.role === 'owner' || m.role === 'moderator');
@@ -318,7 +323,7 @@ export class ChatsService {
                 LIMIT ${UNREAD_CAP + 1}::int) unread
              ) AS "unreadCount",
              com.name AS "communityName", cu.key AS "communityAvatarKey", cu.thumb_key AS "communityAvatarThumbKey",
-             peer.user_id AS "peerId", sru.name AS "sosRequesterName",
+             peer.user_id AS "peerId", sru.name AS "sosRequesterName", ev.title AS "eventTitle",
              lm.id AS "lmId", lm.sender_id AS "lmSenderId", lm.type AS "lmType", lm.text AS "lmText", lm.upload_id AS "lmUploadId",
              lm.lat AS "lmLat", lm.lng AS "lmLng", lm.created_at AS "lmCreatedAt", lm.deleted_at AS "lmDeletedAt"
       FROM chat_members cm
@@ -327,6 +332,7 @@ export class ChatsService {
       LEFT JOIN uploads cu ON cu.id = com.avatar_upload_id
       LEFT JOIN sos_requests sr ON sr.id = CASE WHEN c.type = 'sos' THEN c.ref_id::uuid END
       LEFT JOIN users sru ON sru.id = sr.user_id
+      LEFT JOIN events ev ON ev.id = CASE WHEN c.type = 'event' THEN c.ref_id::uuid END
       LEFT JOIN LATERAL (
         SELECT o.user_id FROM chat_members o WHERE c.type = 'direct' AND o.chat_id = c.id AND o.user_id <> ${me} LIMIT 1
       ) peer ON true
@@ -376,6 +382,7 @@ export class ChatsService {
         return { ...base, title: peer ? peer.name || peer.nickname : '', avatarUrl: peer?.avatarUrl ?? null, ...(peer ? { peer } : {}) };
       }
       if (r.type === 'sos') return { ...base, title: r.sosRequesterName ? `SOS · ${r.sosRequesterName}` : 'SOS', avatarUrl: null };
+      if (r.type === 'event') return { ...base, title: r.eventTitle ?? '', avatarUrl: null };
       const key = r.communityAvatarThumbKey ?? r.communityAvatarKey;
       return { ...base, title: r.communityName ?? '', avatarUrl: key ? this.storage.publicUrl(key) : null };
     });

@@ -18,6 +18,7 @@ import { COMMUNITIES, seedCommunities } from './communities';
 import { createRng, type Rng } from './rng';
 import { seedSos } from './sos';
 import { seedServices } from './services';
+import { seedEventsAndFeed } from './events-feed';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
@@ -415,6 +416,7 @@ async function main(): Promise<void> {
       note: 'Некорректное поведение в чате сообщества',
     },
   });
+  console.log(`Seeded ${await seedEventsAndFeed({ prisma, storage, newId, now: NOW, users })}.`);
 
   const vehicles = users.reduce((n, u) => n + u.vehicles.length, 0);
   console.log(

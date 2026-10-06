@@ -7,3 +7,5 @@ export * from './sos';
 export * from './services';
 export * from './rating';
 export * from './reviews-reports';
+export * from './events';
+export * from './feed';

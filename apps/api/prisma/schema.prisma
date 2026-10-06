@@ -717,6 +717,7 @@ model EventParticipant {
 
   @@id([eventId, userId])
   @@index([userId])
+  @@index([eventId, status, createdAt])
   @@map("event_participants")
 }
 
@@ -742,6 +743,7 @@ model Post {
   @@index([createdAt(sort: Desc), id])
   @@index([communityId, createdAt(sort: Desc)])
   @@index([authorId, createdAt(sort: Desc)])
+  @@index([mediaUploadIds], type: Gin)
   @@map("posts")
 }
 
@@ -777,6 +779,8 @@ model Poll {
   postId   String       @unique @map("post_id") @db.Uuid
   question String
   multiple Boolean      @default(false)
+  /// distinct users who voted (votes are final, so this only grows)
+  totalVoters Int       @default(0) @map("total_voters")
   options  PollOption[]
 
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)

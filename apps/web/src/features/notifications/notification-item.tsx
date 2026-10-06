@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, ShieldCheck, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, CalendarX, Check, ShieldCheck, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -18,9 +18,19 @@ type TitleSpec =
   | { key: 'types.communityRequest'; values: { name: string; community: string } }
   | { key: 'types.communityApproved'; values: { community: string } }
   | { key: 'types.communityRole'; values: { community: string; role: string } }
+  | { key: 'types.eventNew' | 'types.eventUpdated'; values: { title: string; community: string; when: string } }
+  | { key: 'types.eventCancelled'; values: { title: string } }
+  | { key: 'types.eventReminder'; values: { title: string; when: string } }
+  | { key: 'types.postComment'; values: { name: string; preview: string } }
+  | { key: 'types.postLike'; values: { name: string } }
   | { key: 'types.generic'; values: Record<string, never> };
 
-function titleSpec(view: NotificationView, someone: string, someCommunity: string): TitleSpec {
+/** Event times in notifications: Almaty wall-clock time (the app's time zone). */
+function eventWhen(iso: string | null, format?: (iso: string) => string): string {
+  return iso && format ? format(iso) : '';
+}
+
+function titleSpec(view: NotificationView, someone: string, someCommunity: string, when?: (iso: string) => string): TitleSpec {
   switch (view.kind) {
     case 'friend_request':
       return { key: 'types.friendRequest', values: { name: displayName(view.user) ?? someone } };
@@ -32,16 +42,34 @@ function titleSpec(view: NotificationView, someone: string, someCommunity: strin
       return { key: 'types.communityApproved', values: { community: view.communityName || someCommunity } };
     case 'community_role':
       return { key: 'types.communityRole', values: { community: view.communityName || someCommunity, role: view.role } };
+    case 'event_new':
+      if (view.change === 'cancelled') return { key: 'types.eventCancelled', values: { title: view.title } };
+      return {
+        key: view.change === 'updated' ? 'types.eventUpdated' : 'types.eventNew',
+        values: { title: view.title, community: view.communityName || someCommunity, when: eventWhen(view.startsAt, when) },
+      };
+    case 'event_reminder':
+      return { key: 'types.eventReminder', values: { title: view.title, when: eventWhen(view.startsAt, when) } };
+    case 'post_comment':
+      return { key: 'types.postComment', values: { name: displayName(view.user) ?? someone, preview: view.preview } };
+    case 'post_like':
+      return { key: 'types.postLike', values: { name: displayName(view.user) ?? someone } };
     default:
       return { key: 'types.generic', values: {} };
   }
 }
 
+function useWhen(): (iso: string) => string {
+  const format = useFormatter();
+  return (iso) => format.dateTime(new Date(iso), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
 /** Plain-text title for toasts and push-style surfaces. */
 export function useNotificationTitle(): (notification: Pick<NotificationDto, 'type' | 'payload'>) => string {
   const t = useTranslations('notifications');
+  const when = useWhen();
   return (notification) => {
-    const spec = titleSpec(describeNotification(notification), t('someone'), t('someCommunity'));
+    const spec = titleSpec(describeNotification(notification), t('someone'), t('someCommunity'), when);
     return t.markup(spec.key, { ...spec.values, b: (c) => c });
   };
 }
@@ -49,12 +77,19 @@ export function useNotificationTitle(): (notification: Pick<NotificationDto, 'ty
 function Title({ view }: { view: NotificationView }) {
   const t = useTranslations('notifications');
   const b = (chunks: ReactNode) => <strong className="font-semibold">{chunks}</strong>;
-  const spec = titleSpec(view, t('someone'), t('someCommunity'));
+  const spec = titleSpec(view, t('someone'), t('someCommunity'), useWhen());
   return <>{t.rich(spec.key, { ...spec.values, b })}</>;
 }
 
 function Leading({ view }: { view: NotificationView }) {
-  if ((view.kind === 'friend_request' || view.kind === 'friend_accepted' || view.kind === 'community_request') && view.user) {
+  if (
+    (view.kind === 'friend_request' ||
+      view.kind === 'friend_accepted' ||
+      view.kind === 'community_request' ||
+      view.kind === 'post_comment' ||
+      view.kind === 'post_like') &&
+    view.user
+  ) {
     return <Avatar id={view.user.id} name={view.user.name || view.user.nickname} src={view.user.avatarUrl} size="md" decorative />;
   }
   const Icon =
@@ -64,7 +99,13 @@ function Leading({ view }: { view: NotificationView }) {
         ? UsersRound
         : view.kind === 'community_role'
           ? ShieldCheck
-          : Bell;
+          : view.kind === 'event_new'
+            ? view.change === 'cancelled'
+              ? CalendarX
+              : CalendarDays
+            : view.kind === 'event_reminder'
+              ? CalendarClock
+              : Bell;
   return (
     <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
       <Icon className="size-5" />
