@@ -1,6 +1,22 @@
 import type { Locale, NotificationType, PushPayload, UserMini } from '@autoc/shared';
 
-type Ctx = { actor: string; community: string; role: string; sosType: string; distance: string; status: string; stars: string };
+type Ctx = {
+  actor: string;
+  community: string;
+  role: string;
+  sosType: string;
+  distance: string;
+  status: string;
+  stars: string;
+  /* phase 8 and the remaining types */
+  title: string;
+  when: string;
+  place: string;
+  preview: string;
+  note: string;
+  service: string;
+  change: string;
+};
 type Texts = { title: string; body: (c: Ctx) => string };
 
 const ROLE_NAMES: Record<Locale, Record<string, string>> = {
@@ -37,7 +53,36 @@ const SOS_STATUS_TEXT: Record<Locale, Record<string, string>> = {
   },
 };
 
-const TEXTS: Partial<Record<NotificationType, Record<Locale, Texts>>> = {
+/** Event times in push texts are Almaty wall-clock time (the pilot city). */
+const PUSH_TIME_ZONE = 'Asia/Almaty';
+
+function formatWhen(iso: unknown, l: Locale): string {
+  if (typeof iso !== 'string') return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat(l === 'ru' ? 'ru-RU' : 'en-GB', {
+    timeZone: PUSH_TIME_ZONE,
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+const join = (...parts: string[]) => parts.filter(Boolean).join(' · ');
+
+const SERVICE_STATUS_TEXT: Record<Locale, Record<string, string>> = {
+  ru: { verified: 'проверен и опубликован', rejected: 'отклонён модератором', approved: 'подтверждён', pending: 'на проверке' },
+  en: { verified: 'was verified and published', rejected: 'was rejected by a moderator', approved: 'was approved', pending: 'is under review' },
+};
+
+const REPORT_DECISION_TEXT: Record<Locale, Record<string, string>> = {
+  ru: { confirm: 'Жалоба подтверждена, меры приняты', dismiss: 'Жалоба рассмотрена, нарушений не найдено' },
+  en: { confirm: 'Your report was confirmed and action was taken', dismiss: 'Your report was reviewed; no violation was found' },
+};
+
+/** Every notification type has push text (enforced by the type: a missing key doesn't compile). */
+const TEXTS: Record<NotificationType, Record<Locale, Texts>> = {
   friend_request: {
     ru: { title: 'Заявка в друзья', body: (c) => `${c.actor} хочет добавить вас в друзья` },
     en: { title: 'Friend request', body: (c) => `${c.actor} wants to be your friend` },
@@ -78,7 +123,62 @@ const TEXTS: Partial<Record<NotificationType, Record<Locale, Texts>>> = {
     ru: { title: 'Новая роль', body: (c) => `Теперь вы — ${c.role} сообщества «${c.community}»` },
     en: { title: 'New role', body: (c) => `You are now ${c.role} of “${c.community}”` },
   },
+  message: {
+    ru: { title: 'Новое сообщение', body: (c) => join(c.actor, c.preview) || 'Новое сообщение' },
+    en: { title: 'New message', body: (c) => join(c.actor, c.preview) || 'New message' },
+  },
+  admin_warning: {
+    ru: { title: 'Предупреждение от модератора', body: (c) => c.note || 'Пожалуйста, соблюдайте правила сообщества' },
+    en: { title: 'Warning from a moderator', body: (c) => c.note || 'Please follow the community rules' },
+  },
+  event_new: {
+    ru: {
+      title: 'Новое событие',
+      body: (c) =>
+        c.change === 'cancelled'
+          ? `Отменено: ${c.title}`
+          : c.change === 'updated'
+            ? `Изменено: ${join(c.title, c.when, c.place)}`
+            : `«${c.community}»: ${join(c.title, c.when)}`,
+    },
+    en: {
+      title: 'New event',
+      body: (c) =>
+        c.change === 'cancelled'
+          ? `Cancelled: ${c.title}`
+          : c.change === 'updated'
+            ? `Updated: ${join(c.title, c.when, c.place)}`
+            : `“${c.community}”: ${join(c.title, c.when)}`,
+    },
+  },
+  event_reminder: {
+    ru: { title: 'Скоро начало', body: (c) => join(c.title, c.when, c.place) },
+    en: { title: 'Starting soon', body: (c) => join(c.title, c.when, c.place) },
+  },
+  post_comment: {
+    ru: { title: 'Новый комментарий', body: (c) => (c.preview ? `${c.actor}: ${c.preview}` : `${c.actor} прокомментировал(а) ваш пост`) },
+    en: { title: 'New comment', body: (c) => (c.preview ? `${c.actor}: ${c.preview}` : `${c.actor} commented on your post`) },
+  },
+  post_like: {
+    ru: { title: 'Новая отметка «Нравится»', body: (c) => `${c.actor} нравится ваш пост` },
+    en: { title: 'New like', body: (c) => `${c.actor} liked your post` },
+  },
+  service_status: {
+    ru: { title: 'Статус автосервиса', body: (c) => `«${c.service}» ${c.status}` },
+    en: { title: 'Service status', body: (c) => `“${c.service}” ${c.status}` },
+  },
+  visit_status: {
+    ru: { title: 'Визит проверен', body: (c) => `Визит в «${c.service}» ${c.status}` },
+    en: { title: 'Visit reviewed', body: (c) => `Your visit to “${c.service}” ${c.status}` },
+  },
+  report_resolved: {
+    ru: { title: 'Жалоба рассмотрена', body: (c) => c.status },
+    en: { title: 'Report reviewed', body: (c) => c.status },
+  },
 };
+
+/** Every type with push text (all of NotificationType; see push-text.spec). */
+export const PUSH_TEXT_TYPES = Object.keys(TEXTS) as NotificationType[];
 
 const asLocale = (locale: string): Locale => (locale === 'en' ? 'en' : 'ru');
 
@@ -92,10 +192,20 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
   const l = asLocale(locale);
   const texts = TEXTS[type]?.[l];
   if (!texts) return null;
-  const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor ?? payload.author) as UserMini | undefined;
+  const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor ?? payload.author ?? payload.sender) as UserMini | undefined;
   const sosId = typeof payload.sosId === 'string' ? payload.sosId : null;
   const meters = typeof payload.distanceM === 'number' ? payload.distanceM : null;
   const communityId = typeof payload.communityId === 'string' ? payload.communityId : null;
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  const postId = typeof payload.postId === 'string' ? payload.postId : null;
+  const eventId = typeof payload.eventId === 'string' ? payload.eventId : null;
+  const serviceId = typeof payload.serviceId === 'string' ? payload.serviceId : null;
+  const statusText =
+    type === 'service_status' || type === 'visit_status'
+      ? (SERVICE_STATUS_TEXT[l][String(payload.status)] ?? String(payload.status ?? ''))
+      : type === 'report_resolved'
+        ? (REPORT_DECISION_TEXT[l][String(payload.decision)] ?? REPORT_DECISION_TEXT[l].dismiss!)
+        : (SOS_STATUS_TEXT[l][String(payload.event ?? payload.status)] ?? String(payload.status ?? ''));
   const ctx: Ctx = {
     actor: actorLabel(user),
     community: typeof payload.communityName === 'string' ? payload.communityName : '',
@@ -103,9 +213,16 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
     sosType: SOS_TYPE_NAMES[l][String(payload.type)] ?? SOS_TYPE_NAMES[l].other!,
     distance: meters === null ? '' : meters < 1000 ? `${Math.round(meters / 10) * 10} ${l === 'ru' ? 'м' : 'm'}` : `${(meters / 1000).toFixed(1)} ${l === 'ru' ? 'км' : 'km'}`,
     stars: String(payload.stars ?? ''),
-    status: SOS_STATUS_TEXT[l][String(payload.event ?? payload.status)] ?? String(payload.status ?? ''),
+    status: statusText,
+    title: str(payload.title),
+    when: formatWhen(payload.startsAt, l),
+    place: str(payload.place),
+    preview: str(payload.preview ?? payload.text),
+    note: str(payload.note),
+    service: str(payload.serviceName),
+    change: str(payload.change),
   };
-  const make = (url: string, tag: string): PushPayload => ({ title: texts.title, body: texts.body(ctx), url, tag });
+  const make = (url: string, tag: string, title = texts.title): PushPayload => ({ title, body: texts.body(ctx), url, tag });
   switch (type) {
     case 'friend_request':
       return user ? make(`/u/${user.id}`, `friend_request:${user.id}`) : null;
@@ -124,7 +241,30 @@ export function pushPayloadFor(type: NotificationType, payload: Record<string, u
     case 'sos_accepted':
     case 'sos_status':
       return sosId ? make(`/sos/${sosId}`, `sos:${sosId}`) : null;
-    default:
-      return null;
+    case 'message': {
+      const chatId = typeof payload.chatId === 'string' ? payload.chatId : null;
+      return chatId ? make(`/chats/${chatId}`, `chat:${chatId}`, ctx.actor || texts.title) : null;
+    }
+    case 'admin_warning':
+      return make('/notifications', `admin_warning:${str(payload.actionId) || 'latest'}`);
+    case 'event_new': {
+      if (!eventId) return null;
+      const title = ctx.change === 'cancelled' ? (l === 'ru' ? 'Событие отменено' : 'Event cancelled') : ctx.change === 'updated' ? (l === 'ru' ? 'Событие изменено' : 'Event updated') : texts.title;
+      // A cancelled event no longer exists: open its community instead.
+      const url = ctx.change === 'cancelled' ? (communityId ? `/communities/${communityId}?tab=events` : '/events') : `/events/${eventId}`;
+      return make(url, `event:${eventId}`, title);
+    }
+    case 'event_reminder':
+      return eventId ? make(`/events/${eventId}`, `event_reminder:${eventId}`) : null;
+    case 'post_comment':
+      return postId && user ? make(`/posts/${postId}`, `post_comment:${postId}`) : null;
+    case 'post_like':
+      return postId && user ? make(`/posts/${postId}`, `post_like:${postId}`) : null;
+    case 'service_status':
+      return serviceId ? make(`/services/${serviceId}`, `service_status:${serviceId}`) : null;
+    case 'visit_status':
+      return serviceId ? make(`/services/${serviceId}`, `visit_status:${str(payload.visitId) || serviceId}`) : null;
+    case 'report_resolved':
+      return make('/notifications', `report_resolved:${str(payload.reportId) || 'latest'}`);
   }
 }

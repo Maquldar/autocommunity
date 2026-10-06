@@ -23,8 +23,10 @@ import { MembersList, RequestsList } from './members-panel';
 import { MembershipButton } from './membership-button';
 import { communityPermissions } from './membership-state';
 import { useCommunity, useCommunityMembers } from './queries';
+import { CommunityEventsPanel } from '@/features/events/community-events-panel';
+import { CommunityFeedPanel } from '@/features/feed/community-feed-panel';
 
-export type CommunityTab = 'chat' | 'members' | 'requests';
+export type CommunityTab = 'chat' | 'members' | 'requests' | 'events' | 'feed';
 
 /** /communities/[id] (and /communities/[id]/requests): header, membership, tabs, settings. */
 export function CommunityView({ id, initialTab }: { id: string; initialTab?: CommunityTab }) {
@@ -59,6 +61,8 @@ function CommunityPage({ community, initialTab }: { community: CommunityDto; ini
   const [settingsOpen, setSettingsOpen] = useState(false);
   const available: CommunityTab[] = [
     ...(permissions.isMember ? (['chat'] as const) : []),
+    'events',
+    'feed',
     'members',
     ...(permissions.canSeeRequests ? (['requests'] as const) : []),
   ];
@@ -92,6 +96,8 @@ function CommunityPage({ community, initialTab }: { community: CommunityDto; ini
         <Tabs value={current} onValueChange={(value) => setTab(value as CommunityTab)}>
           <TabsList aria-label={t('tabs.label')}>
             {permissions.isMember ? <TabsTrigger value="chat">{t('tabs.chat')}</TabsTrigger> : null}
+            <TabsTrigger value="events">{t('tabs.events')}</TabsTrigger>
+            <TabsTrigger value="feed">{t('tabs.feed')}</TabsTrigger>
             <TabsTrigger value="members">{t('tabs.members')}</TabsTrigger>
             {permissions.canSeeRequests ? (
               <TabsTrigger value="requests">
@@ -105,6 +111,12 @@ function CommunityPage({ community, initialTab }: { community: CommunityDto; ini
               <CommunityChatPreview community={community} />
             </TabsContent>
           ) : null}
+          <TabsContent value="events">
+            <CommunityEventsPanel community={community} />
+          </TabsContent>
+          <TabsContent value="feed">
+            <CommunityFeedPanel community={community} />
+          </TabsContent>
           <TabsContent value="members">
             <MembersList community={community} />
           </TabsContent>

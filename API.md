@@ -651,3 +651,30 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
 - Seed: about 25 realistic Russian posts (photos from generated images, 3 polls) across global and community scopes, with likes and comments.
 
 **Push for all event types** (F-43): every notification type has localized push text and a URL.
+
+### Phase 8 clarifications (added during implementation)
+
+- **Shared:** `packages/shared/src/events.ts` (`EVENT_LIMITS`, `EventDto`, `EventParticipantDto`, `EventMapItem`, `EventNotificationPayload`, request schemas, `eventEndsAt`) and `feed.ts` (`FEED_LIMITS`, `PostDto`, `PollDto`, `PostCommentDto`, `LikeResult`, request schemas, `textPreview`).
+- **Events:**
+  - `EventDto` also has `canManage: boolean` (creator, or active owner/moderator of the community).
+  - An event without `endsAt` counts as ended 3 h after `startsAt`. *Upcoming* = not ended, `startsAt` asc; *past* = ended, `startsAt` desc. Keyset on (`startsAt`, id).
+  - `POST /communities/:id/events` → `201 EventDto`; non-moderators → `403`; unknown/deleted community → `404`. `PATCH` takes any subset of the create fields (`null` clears `endsAt` / `route`); time rules are re-checked on the merged event, and `startsAt` must be in the future only when it is sent. A PATCH that changes nothing sends no notices.
+  - `GET /events?communityId=` and `GET /communities/:id/events` for a private community the viewer isn't an active member of → `403`. `GET /events/:id`, participants and RSVP for an invisible event → `404`.
+  - `POST /events/:id/rsvp` → `200 EventDto`; requires onboarding; ended → `409 EVENT_ENDED`; 500 going → `409 EVENT_FULL` (checked under a row lock). Repeating the current status is a no-op.
+  - `GET /events/:id/participants?status=going|interested&cursor` → page of `{ user: UserMini, status, createdAt }`, oldest RSVP first.
+  - `GET /map/events?bbox` → `{ items: EventMapItem[], truncated }` (`{ id, title, place, lat, lng, startsAt, communityName, goingCount, myRsvp }`, at most 200, soonest first).
+  - `distanceM` is from the viewer's stored position (any age), `null` without one.
+  - The event chat's `ChatDto.title` is the event title; owners/moderators of the event's community may delete messages in it. Deleting an event deletes its chat.
+  - `event_new` payload `{ eventId, communityId, communityName, title, startsAt, place, change? }`. In-app to all active members except the creator; pushed only to members with an RSVP (any event of that community) created in the last 90 days. Change notices (`change: 'updated'`) go to all participants except the actor; delete sends `change: 'cancelled'`.
+  - `event_reminder` (same payload, no `change`) goes once to `going` participants `EVENT_REMINDER_LEAD_MS` (env, default 2 h) before the start. BullMQ job id `event-reminder-{eventId}-{startsAtMs}`; PATCH of `startsAt` removes the old job and resets `reminderSentAt`; delete removes it; the handler re-checks the event and its `startsAt`. An event created inside the lead window gets no reminder.
+- **Feed:**
+  - `PostDto` and `PostCommentDto` also carry `canDelete: boolean`. `GET /posts/:id` returns one visible post (`404` otherwise; deleted posts and posts of deleted authors/communities are invisible).
+  - `POST /posts` → `201 PostDto`; requires onboarding; community posts need an active membership (`403`), unknown/deleted community `404`. Media: own uploads only, all `post` (≤ 6) or exactly one `video` (mixing → `400 VALIDATION_ERROR`); not one's own / wrong purpose / already attached to another post → `400 INVALID_UPLOAD`. Poll options must differ (case-insensitive).
+  - `GET /feed?communityId` of a private community the viewer isn't in → `403`. `authorId` and `communityId` narrow any scope.
+  - `POST|DELETE /posts/:id/like` → `200 { likeCount, likedByMe }`.
+  - `POST /posts/:id/comments` → `201 PostCommentDto`; `GET` excludes deleted comments; `DELETE /comments/:id` → `204` (soft; `commentCount` decremented).
+  - `POST /posts/:id/poll/vote { optionIds }` → `200 PollDto`. No poll → `404`; several options on a single-choice poll → `400 VALIDATION_ERROR`; an option of another poll → `400 INVALID_OPTION`; second vote → `409 ALREADY_VOTED` (serialized by a row lock on the poll). `polls.total_voters` counts distinct voters.
+  - `post_comment` payload `{ postId, commentId, preview, user }`, `post_like` `{ postId, preview, user }` (`preview` ≤ 120 chars). Throttles are Redis `SET NX EX` keys per post (`notify:post_comment:{postId}` 10 min, `notify:post_like:{postId}` 1 h): events inside the window create no notification.
+  - Rate limits: `feed-post:{userId}` 20 / 24 h, `feed-comment:{userId}` 60 / h → `429 RATE_LIMITED`.
+- **Reports:** `post` / `comment` targets are visible when the post is (comments: not deleted); `targetUserId` is the post / comment author.
+- **Push (F-43):** every `NotificationType` has ru/en text and a URL (enforced at compile time and by `push-text.spec.ts`): `event_new` → `/events/{id}` (cancelled → `/communities/{id}?tab=events`), `event_reminder` → `/events/{id}`, `post_comment`/`post_like` → `/posts/{id}`, `message` → `/chats/{chatId}`, `service_status`/`visit_status` → `/services/{serviceId}`, `admin_warning`/`report_resolved` → `/notifications`. Event times in push texts are Asia/Almaty.

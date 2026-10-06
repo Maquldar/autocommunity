@@ -280,7 +280,7 @@ Shell (`src/components/shell/`): `AppShell`, `nav-config.ts`, `ThemeToggle` (men
 - **Phones (<1024px):** sticky top bar (logo, page title, actions, bell, avatar menu), content, fixed **bottom tab bar** (`h-16` + `env(safe-area-inset-bottom)`). Main content is padded so the bar never covers it.
 - **Desktop (≥1024px, `lg`):** fixed **sidebar** (`--sidebar-width` 16rem) with the logo, SOS button, primary items, a "More" group of secondary items, and theme/language switchers at the bottom. The bottom bar is hidden.
 - **Content width:** `max-w-content` (960px). Forms use `max-w-narrow` (640px).
-- **Navigation config** (`nav-config.ts`): one array of `{ key, href, icon, labelKey, enabled, placement: 'tab' | 'secondary', emphasis?: 'sos' }`. **Disabled items do not render.** Flip `enabled: true` in the same change that ships the page. Currently enabled: `map`, `communities`, `chats`, `profile` (tabs) and `friends`, `notifications`, `settings`. `AppShell` takes `badges` (`{ chats: n }`): a `CountBadge` on the icon and an accessible name like "Chats, 3 unread" (`shell.navUnread`). `AccountMenu` takes its Profile/Settings links from the same config.
+- **Navigation config** (`nav-config.ts`): one array of `{ key, href, icon, labelKey, enabled, placement: 'tab' | 'secondary', emphasis?: 'sos' }`. **Disabled items do not render.** Flip `enabled: true` in the same change that ships the page. Currently enabled: `map`, `communities`, `chats`, `profile` (tabs) and `feed`, `services`, `events`, `friends`, `notifications`, `settings`. `AppShell` takes `badges` (`{ chats: n }`): a `CountBadge` on the icon and an accessible name like "Chats, 3 unread" (`shell.navUnread`). `AccountMenu` takes its Profile/Settings links from the same config.
 - **Conversations (`/chats/{id}`)** are full-bleed like the map, and the phone tab bar steps aside (`hidesTabBar`): the composer owns the bottom edge (`pb-safe`). Back goes to `/chats`.
 - **Safe areas:** `viewport-fit=cover`. Use the utilities `pt-safe`, `pb-safe`, `px-safe` and the variables `--safe-top/right/bottom/left`. The header, bottom bar, sheets and toasts already respect them.
 - **Skip link:** "Skip to content" (first focusable) jumps to `#main-content` (`tabIndex=-1`).
@@ -307,6 +307,24 @@ Shell (`src/components/shell/`): `AppShell`, `nav-config.ts`, `ThemeToggle` (men
 **History scrolling**: newest at the bottom; a top sentinel loads older pages (keyset) and the view keeps its reading position (`overflow-anchor: none` + manual anchoring); new messages keep the view pinned only if it already was at the bottom (or the message is yours); a "Jump to latest" button appears when far up. The list is `role="log"`.
 
 **Composer** (`features/chats/composer.tsx`): [Attach ⋯ (Photo, My location)] [auto-growing textarea, 16px, max ~6 lines] [Send when there is text/photo, otherwise Mic]. Enter sends, Shift+Enter breaks the line (IME composition respected); max 4000 with a counter from 80% (warning colour, danger at the limit, sr-only "n of 4000 characters used"). A chosen photo shows as a removable preview strip; the text becomes its caption. Location asks first (`ConfirmDialog`: "Everyone in this chat will see where you are"). Recording replaces the row: Cancel (trash) · a `role=status` pill with a `danger` dot and `m:ss / 3:00` · Send. A typing line ("Aidar is typing…", `aria-live=polite`) sits above the composer in group chats; direct chats show "typing…" in the header.
+
+## 11b. Events & feed patterns (Phase 8)
+
+**Event card** (`features/events/event-card.tsx`): the whole card is one link. A calendar tile (`primary` month strip + day number, Almaty date) · title (semibold, wraps) · date/time range (`tabular-nums`, Asia/Almaty, e.g. "Sat 10 Oct, 11:00–13:00") · place with `MapPin` · community (with `Lock` for private ones) · "N going" with `UsersRound` · "Route" with `Route` when there is one · the viewer's RSVP as a badge (`success` + `Check` "Going" / `primary` + `Star` "Interested", never colour alone).
+
+**Event page**: header with ⋯ (Edit / Delete, delete via `ConfirmDialog tone="danger"`) for managers · meta rows (community link, time, place + distance, counts) · the **RSVP panel**: a `role=status` line ("Are you going?" / "You're going"), two toggle buttons with `aria-pressed` (Going = primary when chosen, Interested = secondary), "Remove my answer", and "Open event chat" (full-width primary) once going · the map (place pin = token-coloured SVG pin; route = `primary` line on a white casing with start/end dots; fitted to both) with "Open in maps" and "Add to calendar" (.ics) · description · organizer · participants list with status badges.
+
+**Event form**: native `datetime-local` inputs labelled "Almaty time"; one map where a `SegmentedControl` decides what a tap does (Place / Route), plus "Use my position", "Undo point", "Clear route" and live text of the pin coordinates and route point count (`aria-live`). Double-tap zoom is off in the form so quick taps add points.
+
+**Main map events layer**: a pressed/unpressed "Events" button (`aria-pressed`, tinted when on, label hidden < 400px) next to the filters; markers are mini calendar tiles (DOM buttons); tapping one shows a card linking to the event.
+
+**Post card** (`features/feed/post-card.tsx`): `article` labelled by the author link · avatar, name, @nickname, relative time (link to the thread) · community badge (`primary-soft` pill with `UsersRound`) · ⋯ menu (Report; Delete last, after a separator, when allowed) · text with links (tokenized; React text nodes only, `rel="noopener noreferrer nofollow ugc"`, only http/https) · media grid (1: natural ratio, 2–4: 2 columns, 5–6: 3 columns, 3: wide first) opening a lightbox `Dialog` with prev/next, or a native `<video controls>` · poll · footer: like toggle (`aria-pressed`, filled `Heart` in `primary` when liked, optimistic) and the comment count link.
+
+**Poll**: before voting, native radios (single) or checkboxes (multiple) in 44px rows and a "Vote" button; after voting (votes are final), result rows with a bar behind the text (`primary-soft` for the viewer's choices + `Check` + sr-only "your vote", `muted` otherwise), bold leading option(s), percentages (largest-remainder rounding for single choice, share of voters for multiple), and "N voters · Votes are final".
+
+**Composer**: textarea, attachment thumbnails with a `role=progressbar` while uploading (XHR progress) and a remove button, icon buttons for photos (≤ 6) / video (1) / poll, a poll builder (question, 2–6 options, "Allow several answers" switch), audience select (Everyone or a community) outside community pages; Publish waits for uploads.
+
+**Report dialog** (`features/feed/report-dialog.tsx`): radio list of reasons, optional details (≤ 500, counter), inline error when no reason is chosen.
 
 ## 12. State patterns
 
@@ -347,7 +365,7 @@ Query defaults (`lib/query-client.ts`): `staleTime` 30s, `gcTime` 5min, no retry
 
 - next-intl **without locale URL prefixes**. The locale comes from the `NEXT_LOCALE` cookie (`ru` default, `en`), read in `src/i18n/request.ts`. `LanguageSwitcher` writes the cookie (1 year, `SameSite=Lax`) and calls `router.refresh()`. Time zone `Asia/Almaty`.
 - Message keys are **type-checked** (`src/i18n/global.d.ts` → `en.json` is the reference). `src/i18n/messages.test.ts` checks that ru and en have the same keys and the same ICU placeholders.
-- Namespaces: `meta`, `common` (actions), `nav`, `shell`, `states`, `errors`, `form`, `otp`, `phone`, `rating`, `theme`, `language`, `emergency`, `privacy`, `landing`, `styleguide`. Feature agents add their own namespace per feature (`auth`, `profile`, `map`, `sos`, `communities`, …) and reuse `common` / `states` / `errors`.
+- Namespaces: `meta`, `common` (actions), `nav`, `shell`, `states`, `errors`, `form`, `otp`, `phone`, `rating`, `theme`, `language`, `emergency`, `privacy`, `landing`, `styleguide`. Feature agents add their own namespace per feature (`auth`, `profile`, `map`, `sos`, `communities`, `events`, `feed`, …) and reuse `common` / `states` / `errors`.
 - Use ICU plurals for every count (Russian has one/few/many). Never concatenate translated fragments.
 
 ## 16. Contributing checklist

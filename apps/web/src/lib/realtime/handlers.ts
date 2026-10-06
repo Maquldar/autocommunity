@@ -19,6 +19,8 @@ export type AppHandlerDeps = {
 
 const FRIEND_TYPES = new Set(['friend_request', 'friend_accepted']);
 const COMMUNITY_TYPES = new Set(['community_request', 'community_approved', 'community_role']);
+const EVENT_TYPES = new Set(['event_new', 'event_reminder']);
+const POST_TYPES = new Set(['post_comment', 'post_like']);
 
 /** What the app does with each server event. Pure wiring over the query cache, unit-tested with a fake socket. */
 export function createAppRealtimeHandlers({ queryClient, toast, logout, getMyId = () => null }: AppHandlerDeps): RealtimeHandlers {
@@ -29,6 +31,9 @@ export function createAppRealtimeHandlers({ queryClient, toast, logout, getMyId 
       if (FRIEND_TYPES.has(notification.type)) void invalidateFriendData(queryClient);
       // Requests, approvals and role changes change memberships, member lists and moderator rights.
       if (COMMUNITY_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: communityKeys.all });
+      // New / changed / cancelled events and new comments or likes on the viewer's posts.
+      if (EVENT_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['events'] });
+      if (POST_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['feed'] });
       toast(notification);
     },
     onCount: (count) => setUnreadCount(queryClient, count),

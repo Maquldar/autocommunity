@@ -9,6 +9,8 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ChatsModule } from './modules/chats/chats.module';
 import { CommunitiesModule } from './modules/communities/communities.module';
 import { DemoModule } from './modules/demo/demo.module';
+import { EventsModule } from './modules/events/events.module';
+import { FeedModule } from './modules/feed/feed.module';
 import { FriendsModule } from './modules/friends/friends.module';
 import { HealthModule } from './modules/health/health.module';
 import { LocationModule } from './modules/location/location.module';
@@ -50,6 +52,8 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     DemoModule,
     HealthModule,
     ServicesModule,
+    EventsModule,
+    FeedModule,
   ],
 })
 export class AppModule {}

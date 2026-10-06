@@ -18,6 +18,9 @@ export const toNotificationDto = (n: Notification): NotificationDto => ({
   createdAt: n.createdAt.toISOString(),
 });
 
+/** `pushTo`: only these recipients get a Web Push (everyone still gets the in-app notification). */
+export type DeliveryOptions = { pushTo?: ReadonlySet<string> };
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -47,9 +50,13 @@ export class NotificationsService {
    * The same notification type for many users in a constant number of queries: one insert, then (in the
    * background) one unread-count query, one locale query and one push-subscription query for all of them.
    */
-  async createMany(type: NotificationType, items: { userId: string; payload: Record<string, unknown> }[]): Promise<NotificationDto[]> {
+  async createMany(
+    type: NotificationType,
+    items: { userId: string; payload: Record<string, unknown> }[],
+    opts: DeliveryOptions = {},
+  ): Promise<NotificationDto[]> {
     const batch = await this.insertMany(this.prisma, type, items);
-    this.deliverLater(batch);
+    this.deliverLater(batch, opts);
     return batch.map((b) => b.dto);
   }
 
@@ -66,11 +73,11 @@ export class NotificationsService {
     return rows.map((r) => ({ userId: r.userId, dto: toNotificationDto({ ...r, payload: r.payload as Prisma.JsonValue, readAt: null }) }));
   }
 
-  deliverLater(batch: { userId: string; dto: NotificationDto }[]): void {
-    if (batch.length) this.tasks.run(`Delivery of ${batch.length} notifications`, () => this.deliverMany(batch));
+  deliverLater(batch: { userId: string; dto: NotificationDto }[], opts: DeliveryOptions = {}): void {
+    if (batch.length) this.tasks.run(`Delivery of ${batch.length} notifications`, () => this.deliverMany(batch, opts));
   }
 
-  private async deliverMany(batch: { userId: string; dto: NotificationDto }[]): Promise<void> {
+  private async deliverMany(batch: { userId: string; dto: NotificationDto }[], opts: DeliveryOptions = {}): Promise<void> {
     const userIds = [...new Set(batch.map((b) => b.userId))];
     for (const b of batch) this.realtime.emitToUser(b.userId, 'notification:new', b.dto);
     const [counts, users] = await Promise.all([
@@ -80,6 +87,7 @@ export class NotificationsService {
     for (const c of counts) this.realtime.emitToUser(c.userId, 'notification:count', { count: c._count._all });
     const locale = new Map(users.map((u) => [u.id, u.locale]));
     const pushes = batch
+      .filter((b) => !opts.pushTo || opts.pushTo.has(b.userId))
       .map((b) => ({ userId: b.userId, payload: pushPayloadFor(b.dto.type, b.dto.payload, locale.get(b.userId) ?? 'ru') }))
       .filter((p): p is { userId: string; payload: NonNullable<typeof p.payload> } => p.payload !== null);
     if (pushes.length) await this.push.enqueueForUsers(pushes);
