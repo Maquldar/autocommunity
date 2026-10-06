@@ -10,3 +10,6 @@ uploads-data*
 *.tsbuildinfo
 next-env.d.ts
 node-compile-cache
+
+# Redis snapshots from a local redis-server
+dump.rdb

@@ -43,6 +43,9 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
           ref={ref}
           className={cn(
             'fixed left-1/2 top-1/2 z-modal flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto',
+            // A scrollbar appearing near max-h narrows the content, re-wraps it and changes the height, which moves
+            // the centred dialog (and can flip back): reserve the gutter so the layout can't oscillate.
+            '[scrollbar-gutter:stable]',
             'rounded-2xl border bg-popover p-6 text-popover-foreground shadow-xl focus:outline-none',
             'data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out',
             className,
