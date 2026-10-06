@@ -11,6 +11,7 @@ export type SosGuidanceKey =
   | 'ratingTooLowCreate'
   | 'ratingTooLowHelp'
   | 'banned'
+  | 'bannedHelp'
   | 'rateLimit'
   | 'alreadyOpen'
   | 'locationRequired'
@@ -58,7 +59,8 @@ export function sosGuidance(error: unknown, context: SosGuidanceContext, nowMs =
     case 'SOS_BANNED': {
       const raw = detailString(error, 'until');
       const until = raw ? new Date(raw) : null;
-      return { key: 'banned', tone: 'danger', values: until && !Number.isNaN(until.getTime()) ? { until } : {} };
+      // The ban also blocks offering help (API §4 review fixes).
+      return { key: context === 'create' ? 'banned' : 'bannedHelp', tone: 'danger', values: until && !Number.isNaN(until.getTime()) ? { until } : {} };
     }
     case 'SOS_RATE_LIMIT': {
       const seconds = getRetryAfterSec(error);

@@ -1,10 +1,10 @@
 /**
  * System messages carry a key, not prose (API.md §4 "SOS chat"): `sos.chat_created`,
  * `sos.helper_accepted:<nickname>`, `sos.helper_arrived:<nickname>`, `sos.helper_withdrew:<nickname>`,
- * `sos.closed`, `sos.cancelled`. The client localizes them (`chats.system.*`).
+ * `sos.closed`, `sos.cancelled`, `sos.timed_out` (an accepted SOS that was never closed within 24 h). The client localizes them (`chats.system.*`).
  */
 
-export type SystemMessageKey = 'chatCreated' | 'helperAccepted' | 'helperArrived' | 'helperWithdrew' | 'closed' | 'cancelled';
+export type SystemMessageKey = 'chatCreated' | 'helperAccepted' | 'helperArrived' | 'helperWithdrew' | 'closed' | 'cancelled' | 'timedOut';
 
 export type ParsedSystemMessage = { key: SystemMessageKey; nickname: string | null } | { key: 'unknown'; nickname: null };
 
@@ -15,6 +15,7 @@ const KEYS: Record<string, SystemMessageKey> = {
   'sos.helper_withdrew': 'helperWithdrew',
   'sos.closed': 'closed',
   'sos.cancelled': 'cancelled',
+  'sos.timed_out': 'timedOut',
 };
 
 const WITH_NICKNAME = new Set<SystemMessageKey>(['helperAccepted', 'helperArrived', 'helperWithdrew']);

@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
+import { cn } from '@/lib/cn';
 import { sosAlertStore } from './alerts';
 import { useDistance } from './parts';
 import { SOS_TYPE_ICONS } from './sos-type';
@@ -34,7 +35,13 @@ export function SosAlertHost() {
   const more = alerts.length - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(var(--safe-top)+var(--header-height)+0.5rem)] z-toast flex justify-center px-3 lg:ps-[calc(var(--sidebar-width)+0.75rem)]">
+    <div
+      className={cn(
+        'pointer-events-none fixed inset-x-0 z-toast flex justify-center px-3 lg:ps-[calc(var(--sidebar-width)+0.75rem)]',
+        // On the map, sit below the map's own top controls (visibility, SOS layer, filters) so they stay usable.
+        pathname === '/map' ? 'top-[calc(var(--safe-top)+var(--header-height)+4.25rem)]' : 'top-[calc(var(--safe-top)+var(--header-height)+0.5rem)]',
+      )}
+    >
       <div
         role="alert"
         aria-live="assertive"

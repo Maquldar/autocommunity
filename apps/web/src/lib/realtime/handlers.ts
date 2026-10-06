@@ -42,6 +42,11 @@ export function createAppRealtimeHandlers({
       // Requests, approvals and role changes change memberships, member lists and moderator rights.
       if (COMMUNITY_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: communityKeys.all });
       if (SOS_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: sosKeys.active });
+      if (notification.type === 'review_received') {
+        void queryClient.invalidateQueries({ queryKey: ['rating'] });
+        void queryClient.invalidateQueries({ queryKey: ['reviews'] });
+        void queryClient.invalidateQueries({ queryKey: ['me'], exact: true });
+      }
       // "Someone nearby needs help" gets the urgent SOS banner instead of an ordinary toast.
       const alert = alertFromNotification(notification);
       if (alert) alerts.push(alert);

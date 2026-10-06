@@ -19,6 +19,7 @@ import { hasErrorCode } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/auth/guards';
 import { useRealtimeConnected, useRealtimeSocket } from '@/lib/realtime/realtime-provider';
 import { notify } from '@/lib/toast';
+import { ReportDialog } from '@/features/reports/report-dialog';
 import { communityPermissions } from '@/features/communities/membership-state';
 import { useCommunity } from '@/features/communities/queries';
 import { flattenMessages, setActiveChat } from './cache';
@@ -114,6 +115,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
   const removeMessage = useDeleteMessage(chat.id);
   const markRead = useMarkChatRead(chat.id);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   const server = useMemo(() => flattenMessages(messages.data), [messages.data]);
   const timeline = useMemo(() => buildTimeline(server, pending, me), [server, pending, me]);
@@ -163,6 +165,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
   }, [socket, throttle, chat.id]);
 
   const onDelete = useCallback((messageId: string) => setDeleting(messageId), []);
+  const onReport = useCallback((messageId: string) => setReporting(messageId), []);
 
   return (
     <>
@@ -177,6 +180,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
         peerRead={peerRead}
         canModerate={isModerator}
         onDelete={onDelete}
+        onReport={onReport}
         onRetry={retry}
         onDiscard={discard}
       />
@@ -186,6 +190,11 @@ function Conversation({ chat }: { chat: ChatDto }) {
         <Composer disabled={!online} onSend={send} onTyping={onTyping} />
       </div>
 
+      <ReportDialog
+        target={reporting ? { type: 'message', id: reporting } : null}
+        open={reporting !== null}
+        onOpenChange={(open) => (open ? undefined : setReporting(null))}
+      />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => (open ? undefined : setDeleting(null))}
@@ -317,6 +326,7 @@ function MessageList({
   peerRead,
   canModerate,
   onDelete,
+  onReport,
   onRetry,
   onDiscard,
 }: {
@@ -328,6 +338,7 @@ function MessageList({
   peerRead: number;
   canModerate: boolean;
   onDelete: (messageId: string) => void;
+  onReport: (messageId: string) => void;
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
 }) {
@@ -494,6 +505,8 @@ function MessageList({
                       read={mine && peerRead >= Date.parse(item.message.createdAt)}
                       canDelete={deletable}
                       onDelete={onDelete}
+                      canReport={item.status === 'sent' && !mine && !item.message.deletedAt && item.message.type !== 'system'}
+                      onReport={onReport}
                       onRetry={onRetry}
                       onDiscard={onDiscard}
                     />

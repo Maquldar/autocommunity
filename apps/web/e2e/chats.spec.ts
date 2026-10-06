@@ -83,8 +83,11 @@ test('direct message from a profile: text and photo, live unread badge on the ot
     await timur.page.keyboard.press('Escape');
     await expect(timur.page.getByRole('dialog')).toBeHidden();
 
-    // Timur deletes nothing of Anna's: no actions on her messages in a direct chat.
-    await expect(timur.page.getByTestId('message').filter({ hasText: 'Hi Timur!' }).getByRole('button', { name: 'Message actions' })).toHaveCount(0);
+    // Timur deletes nothing of Anna's in a direct chat: her messages only offer "Report".
+    await timur.page.getByTestId('message').filter({ hasText: 'Hi Timur!' }).getByRole('button', { name: 'Message actions' }).click();
+    await expect(timur.page.getByRole('menuitem', { name: 'Report' })).toBeVisible();
+    await expect(timur.page.getByRole('menuitem', { name: 'Delete message' })).toHaveCount(0);
+    await timur.page.keyboard.press('Escape');
 
     for (const page of [anna.page, timur.page]) expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
   } finally {

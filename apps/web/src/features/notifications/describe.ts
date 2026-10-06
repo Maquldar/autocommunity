@@ -28,6 +28,7 @@ export type NotificationView =
       user: UserMini | null;
       href: string | null;
     }
+  | { kind: 'review_received'; sosId: string | null; stars: number; user: UserMini | null; href: string | null }
   | { kind: 'generic'; type: string; href: string | null };
 
 export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
@@ -87,6 +88,10 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
       return { kind: 'sos_response', sosId, user: parseUserMini(payload.helper), href: sosHref };
     case 'sos_accepted':
       return { kind: 'sos_accepted', sosId, user: parseUserMini(payload.requester), href: sosHref };
+    case 'review_received': {
+      const stars = typeof payload.stars === 'number' && payload.stars >= 1 && payload.stars <= 5 ? Math.round(payload.stars) : 0;
+      return { kind: 'review_received', sosId, stars, user: parseUserMini(payload.author), href: '/profile#reviews' };
+    }
     case 'sos_status': {
       const status = typeof payload.status === 'string' && (SOS_STATUSES as readonly string[]).includes(payload.status) ? (payload.status as SosStatus) : null;
       return { kind: 'sos_status', sosId, status, event: sosStatusEvent(payload.event, status), user: parseUserMini(payload.actor), href: sosHref };

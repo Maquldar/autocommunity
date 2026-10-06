@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, Ban, Check, CheckCheck, Clock, MoreHorizontal, RotateCw, Trash2, X } from 'lucide-react';
+import { AlertCircle, Ban, Check, CheckCheck, Clock, Flag, MoreHorizontal, RotateCw, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { memo } from 'react';
@@ -26,6 +26,9 @@ export type MessageBubbleProps = {
   read: boolean;
   canDelete: boolean;
   onDelete: (messageId: string) => void;
+  /** Others' messages can be reported (opens the report dialog in the conversation). */
+  canReport?: boolean;
+  onReport?: (messageId: string) => void;
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
 };
@@ -45,6 +48,8 @@ export const MessageBubble = memo(function MessageBubble({
   read,
   canDelete,
   onDelete,
+  canReport = false,
+  onReport,
   onRetry,
   onDiscard,
 }: MessageBubbleProps) {
@@ -168,7 +173,12 @@ export const MessageBubble = memo(function MessageBubble({
         ) : null}
       </div>
 
-      {!mine && canDelete ? <MessageActions onDelete={() => onDelete(message.id)} /> : null}
+      {!mine && (canDelete || canReport) ? (
+        <MessageActions
+          onDelete={canDelete ? () => onDelete(message.id) : undefined}
+          onReport={canReport && onReport ? () => onReport(message.id) : undefined}
+        />
+      ) : null}
     </div>
   );
 });
@@ -177,7 +187,7 @@ export const MessageBubble = memo(function MessageBubble({
  * ⋯ menu beside a bubble. Always in the tab order and visible on touch screens; on hover-capable
  * screens it fades in on hover or keyboard focus.
  */
-function MessageActions({ onDelete }: { onDelete: () => void }) {
+function MessageActions({ onDelete, onReport }: { onDelete?: () => void; onReport?: () => void }) {
   const t = useTranslations('chats.message');
   return (
     <DropdownMenu>
@@ -192,10 +202,18 @@ function MessageActions({ onDelete }: { onDelete: () => void }) {
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center">
-        <DropdownMenuItem destructive onSelect={onDelete}>
-          <Trash2 aria-hidden="true" />
-          {t('delete')}
-        </DropdownMenuItem>
+        {onReport ? (
+          <DropdownMenuItem onSelect={onReport}>
+            <Flag aria-hidden="true" />
+            {t('report')}
+          </DropdownMenuItem>
+        ) : null}
+        {onDelete ? (
+          <DropdownMenuItem destructive onSelect={onDelete}>
+            <Trash2 aria-hidden="true" />
+            {t('delete')}
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

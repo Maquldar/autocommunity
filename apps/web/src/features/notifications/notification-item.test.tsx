@@ -13,7 +13,7 @@ const aidar = { id: 'u1', nickname: 'aidar', name: 'Aidar K.', avatarUrl: null, 
 const base = { readAt: null, createdAt: new Date(Date.now() - 5 * 60_000).toISOString() };
 const friendRequest: NotificationDto = { id: 'n1', type: 'friend_request', payload: { requestId: 'r1', user: aidar }, ...base };
 const friendAccepted: NotificationDto = { id: 'n2', type: 'friend_accepted', payload: { user: aidar }, ...base };
-const unknown: NotificationDto = { id: 'n3', type: 'review_received', payload: { foo: 1 }, ...base };
+const unknown: NotificationDto = { id: 'n3', type: 'event_new', payload: { foo: 1 }, ...base };
 
 /** Clicks a link without jsdom trying (and failing) to navigate. */
 function clickLink(link: HTMLElement) {
@@ -34,7 +34,7 @@ describe('describeNotification', () => {
     expect(describeNotification(friendAccepted)).toEqual({ kind: 'friend_accepted', user: aidar, href: '/u/u1' });
   });
   it('falls back to generic for other types, with a same-origin url only', () => {
-    expect(describeNotification(unknown)).toEqual({ kind: 'generic', type: 'review_received', href: null });
+    expect(describeNotification(unknown)).toEqual({ kind: 'generic', type: 'event_new', href: null });
     expect(describeNotification({ type: 'event_new', payload: { url: '/events/1' } }).href).toBe('/events/1');
     expect(describeNotification({ type: 'event_new', payload: { url: 'https://evil.example' } }).href).toBeNull();
     expect(describeNotification({ type: 'event_new', payload: { url: '//evil.example' } }).href).toBeNull();
@@ -108,5 +108,35 @@ describe('community notifications', () => {
   });
   it('rejects unsafe ids', () => {
     expect(describeNotification({ type: 'community_approved', payload: { communityId: '../x', communityName: 'A' } }).href).toBeNull();
+  });
+});
+
+describe('SOS and review notifications', () => {
+  it('describe SOS payloads with links to the SOS', () => {
+    expect(describeNotification({ type: 'sos_nearby', payload: { sosId: 's-1', type: 'fuel', distanceM: 900, requester: aidar } })).toEqual({
+      kind: 'sos_nearby',
+      sosId: 's-1',
+      sosType: 'fuel',
+      distanceM: 900,
+      user: aidar,
+      href: '/sos/s-1',
+    });
+    expect(describeNotification({ type: 'sos_status', payload: { sosId: 's-1', status: 'accepted', event: 'withdrawn', actor: aidar } })).toMatchObject({
+      kind: 'sos_status',
+      event: 'withdrawn',
+      href: '/sos/s-1',
+    });
+    expect(describeNotification({ type: 'sos_status', payload: { sosId: 's-1', status: 'expired' } })).toMatchObject({ event: 'expired' });
+    expect(describeNotification({ type: 'review_received', payload: { stars: 5, author: aidar } })).toMatchObject({ kind: 'review_received', href: '/profile#reviews' });
+  });
+
+  it('renders titles with the event', () => {
+    const n = (type: NotificationDto['type'], payload: Record<string, unknown>): NotificationDto => ({ id: `x-${type}`, type, payload, ...base });
+    render(<NotificationItem notification={n('sos_status', { sosId: 's1', status: 'accepted', event: 'arrived', actor: aidar })} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /Aidar K\. has arrived/ })).toHaveAttribute('href', '/sos/s1');
+    render(<NotificationItem notification={n('sos_nearby', { sosId: 's2', type: 'battery', distanceM: 1200, requester: aidar })} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /Aidar K\. needs help nearby: Dead battery, 1\.2 km/ })).toBeInTheDocument();
+    render(<NotificationItem notification={n('review_received', { stars: 4, author: aidar })} onRead={vi.fn()} />);
+    expect(screen.getByRole('link', { name: /Aidar K\. rated you 4 stars/ })).toBeInTheDocument();
   });
 });

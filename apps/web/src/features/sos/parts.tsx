@@ -217,7 +217,7 @@ export function SosGuidanceNotice({
   const until = values.until ? format.dateTime(values.until, { dateStyle: 'medium', timeStyle: 'short' }) : null;
   const time = values.retryAt ? format.dateTime(values.retryAt, { hour: '2-digit', minute: '2-digit' }) : null;
   let body: string;
-  if (key === 'banned') body = until ? t('banned.body', { until }) : t('banned.bodyNoDate');
+  if (key === 'banned' || key === 'bannedHelp') body = until ? t(`${key}.body`, { until }) : t(`${key}.bodyNoDate`);
   else if (key === 'rateLimit') body = time ? t('rateLimit.body', { time, max: 3 }) : t('rateLimit.bodyNoTime', { max: 3 });
   else if (key === 'ratingTooLowCreate' || key === 'ratingTooLowHelp') body = t(`${key}.body`, { min: values.min ?? 0 });
   else body = t(`${key}.body`);

@@ -15,6 +15,7 @@ import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { hasErrorCode } from '@/lib/api/errors';
 import { roundCoords, useService } from './api';
 import { CategoryTile } from './category';
+import { ReportButton } from '@/features/reports/report-dialog';
 import { ContactsCard } from './contacts-card';
 import { useServiceErrorMessage } from './errors';
 import { HoursTable } from './hours-table';
@@ -176,6 +177,9 @@ export function ServiceDetailsView({ id }: { id: string }) {
             <ReviewsList serviceId={s.id} />
           </section>
         ) : null}
+        <div className="flex justify-center lg:col-start-1">
+          <ReportButton target={{ type: 'service', id: s.id }} label={t('details.report')} size="sm" />
+        </div>
       </div>
     </div>
   );

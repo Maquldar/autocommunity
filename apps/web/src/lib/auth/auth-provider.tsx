@@ -56,7 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus((current) => (current === 'blocked' ? current : 'authenticated'));
       } else {
         queryClient.removeQueries();
-        if (event.type === 'logout') setLogoutReason(event.reason);
+        if (event.type === 'logout') {
+          // Ending the session on purpose (account deletion): the server's revoke can beat the HTTP
+          // response; land where the user was going instead of on the "session expired" login.
+          const exit = intendedExit.current;
+          if (exit && event.reason !== 'user') {
+            setAfterLogoutPath(exit);
+            setLogoutReason('user');
+          } else {
+            setLogoutReason(event.reason);
+          }
+        }
         setStatus(event.type === 'blocked' ? 'blocked' : 'anonymous');
       }
     });

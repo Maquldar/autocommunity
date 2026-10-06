@@ -40,14 +40,24 @@ const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 export function SosEntryView() {
   const router = useRouter();
   const active = useActiveSos();
-  const mine = active.data?.find((s) => s.myRole === 'requester') ?? null;
   const helping = active.data?.find((s) => s.myRole !== 'requester') ?? null;
-
+  // Decided once, on arrival: an SOS opened elsewhere while filling the form is reported on send
+  // (SOS_ALREADY_OPEN guidance) instead of yanking the driver away mid-form.
+  const [redirectTo, setRedirectTo] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    if (mine) router.replace(`/sos/${mine.id}`);
-  }, [mine, router]);
+    if (redirectTo !== undefined || !active.data) return;
+    const mine = active.data.find((s) => s.myRole === 'requester');
+    setRedirectTo(mine ? `/sos/${mine.id}` : null);
+  }, [active.data, redirectTo]);
+  useEffect(() => {
+    if (redirectTo) router.replace(redirectTo);
+  }, [redirectTo, router]);
 
-  if (active.isPending || mine) return <RequestSkeleton />;
+  if (active.isError && redirectTo === undefined) {
+    // Can't tell whether an SOS is open: let the driver ask for help anyway (the API enforces one).
+    return <RequestFlow helping={null} />;
+  }
+  if (redirectTo === undefined || redirectTo) return <RequestSkeleton />;
   return <RequestFlow helping={helping} />;
 }
 
@@ -230,7 +240,7 @@ function RequestFlow({ helping }: { helping: SosDto | null }) {
           ) : null}
 
           {step !== 'type' ? (
-            <div className="sticky bottom-[calc(var(--nav-height)+var(--safe-bottom)+0.5rem)] z-raised flex flex-col-reverse gap-2 rounded-2xl border bg-background/95 p-2 shadow-md backdrop-blur-md sm:flex-row sm:justify-end lg:bottom-4">
+            <div className="sticky bottom-[calc(var(--nav-height)+var(--safe-bottom)+0.5rem)] z-raised flex gap-2 rounded-2xl border bg-background/95 p-2 shadow-md backdrop-blur-md sm:justify-end lg:bottom-4 [&>*:last-child]:flex-1 sm:[&>*:last-child]:flex-none">
               <Button variant="ghost" size="lg" leadingIcon={<ArrowLeft aria-hidden="true" className="rtl:rotate-180" />} onClick={() => goTo(step === 'confirm' ? 'details' : 'type')}>
                 {t('back')}
               </Button>
