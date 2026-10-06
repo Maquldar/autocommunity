@@ -1,4 +1,4 @@
-import { DEMO_TEST_CARD, type PaymentProviderName } from '@autoc/shared';
+import { DEMO_TEST_CARD, GOOGLE_PAY_TEST, type PaymentProviderName } from '@autoc/shared';
 
 export type CreatePaymentInput = { topupId: string; userId: string; amount: number };
 export type CreatedPayment = { providerRef: string | null; checkoutUrl: string };
@@ -13,6 +13,28 @@ export type PaymentOutcome = { topupId: string; status: 'succeeded' | 'declined'
 export abstract class PaymentProvider {
   abstract readonly name: PaymentProviderName;
   abstract createPayment(input: CreatePaymentInput): Promise<CreatedPayment>;
+  /**
+   * Phase 10 (API.md §10): charges a Google Pay token for a point order in one step (a top-up that is
+   * spent on the purchase straight away). A real provider sends the token to its gateway.
+   */
+  abstract chargeGooglePay(input: GooglePayChargeInput): Promise<GooglePayCharge>;
+}
+
+export type GooglePayChargeInput = { orderId: string; userId: string; amount: number; token: string };
+export type GooglePayCharge = { status: 'succeeded' | 'declined'; providerRef: string };
+
+/**
+ * Google Pay TEST tokens: the example gateway returns `examplePaymentMethodToken`; DIRECT / other gateways in
+ * TEST return a signed JSON envelope (`protocolVersion`, `signedMessage`). Anything else is declined.
+ */
+export function isGooglePayTestToken(token: string): boolean {
+  if (token === GOOGLE_PAY_TEST.exampleToken) return true;
+  try {
+    const parsed = JSON.parse(token) as Record<string, unknown>;
+    return typeof parsed.protocolVersion === 'string' && typeof parsed.signedMessage === 'string';
+  } catch {
+    return false;
+  }
 }
 
 /** In-app demo checkout: no money moves. The test card succeeds, every other card is declined. */
@@ -25,6 +47,11 @@ export class DemoPaymentProvider extends PaymentProvider {
 
   async createPayment(input: CreatePaymentInput): Promise<CreatedPayment> {
     return { providerRef: `demo_${input.topupId}`, checkoutUrl: `${this.webOrigin}/wallet/checkout/${input.topupId}` };
+  }
+
+  /** No money moves: a Google Pay TEST-environment token succeeds, anything else is declined. */
+  async chargeGooglePay(input: GooglePayChargeInput): Promise<GooglePayCharge> {
+    return { status: isGooglePayTestToken(input.token) ? 'succeeded' : 'declined', providerRef: `demo_gpay_${input.orderId}` };
   }
 
   /** The demo "bank" decision for a normalized card number. */

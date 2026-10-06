@@ -31,7 +31,7 @@ const SOS_TYPES = new Set(['sos_nearby', 'sos_response', 'sos_accepted', 'sos_st
 const EVENT_TYPES = new Set(['event_new', 'event_reminder']);
 const POST_TYPES = new Set(['post_comment', 'post_like']);
 /* phase 9: coins and premium change the wallet (and Me.isPremium); votes and violations move the rating. */
-const WALLET_TYPES = new Set(['wallet_received', 'wallet_admin', 'premium_reminder', 'premium_renewed', 'premium_expired']);
+const WALLET_TYPES = new Set(['wallet_received', 'wallet_admin', 'premium_reminder', 'premium_renewed', 'premium_expired', 'purchase_paid']);
 const VIOLATION_TYPES = new Set(['violation_reported', 'violation_status']);
 
 /** What the app does with each server event. Pure wiring over the query cache, unit-tested with a fake socket. */
@@ -73,7 +73,8 @@ export function createAppRealtimeHandlers({
       // "Someone nearby needs help" gets the urgent SOS banner instead of an ordinary toast.
       const alert = alertFromNotification(notification);
       if (alert) alerts.push(alert);
-      else toast(notification);
+      // The buyer is already looking at the receipt (phase 10): the notification only lands in the list.
+      else if (notification.type !== 'purchase_paid') toast(notification);
     },
     onCount: (count) => setUnreadCount(queryClient, count),
     onFriendsChanged: () => void invalidateFriendData(queryClient),

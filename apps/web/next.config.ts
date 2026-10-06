@@ -40,6 +40,8 @@ const tileHosts = ['https://tile.openstreetmap.org', 'https://*.tile.openstreetm
 // Google Identity Services and Sign in with Apple JS. Only used when GET /auth/providers enables them.
 const googleSignIn = 'https://accounts.google.com';
 const appleSignIn = ['https://appleid.cdn-apple.com', 'https://appleid.apple.com'];
+// Google Pay API for Web (TEST environment, phase 10): pay.js, its payment sheet iframe and API calls.
+const googlePay = 'https://pay.google.com';
 
 function directive(name: string, sources: Array<string | null | false>): string {
   const unique = [...new Set(sources.filter((s): s is string => Boolean(s)))];
@@ -49,7 +51,7 @@ function directive(name: string, sources: Array<string | null | false>): string 
 const contentSecurityPolicy = [
   directive('default-src', ["'self'"]),
   // Next.js App Router injects inline bootstrap scripts; 'unsafe-eval' is only needed by the dev overlay / HMR.
-  directive('script-src', ["'self'", "'unsafe-inline'", isDev && "'unsafe-eval'", googleSignIn, appleSignIn[0]!]),
+  directive('script-src', ["'self'", "'unsafe-inline'", isDev && "'unsafe-eval'", googleSignIn, appleSignIn[0]!, googlePay]),
   // Radix, MapLibre and next/font inject inline styles.
   directive('style-src', ["'self'", "'unsafe-inline'", googleSignIn]),
   directive('img-src', ["'self'", 'data:', 'blob:', 'https:', apiOrigin]),
@@ -63,13 +65,14 @@ const contentSecurityPolicy = [
     mapStyleOrigin,
     googleSignIn,
     ...appleSignIn,
+    googlePay,
     isDev && 'ws:',
   ]),
   // MapLibre GL spins up its tile workers from blob: URLs.
   directive('worker-src', ["'self'", 'blob:']),
   directive('child-src', ["'self'", 'blob:']),
   directive('manifest-src', ["'self'"]),
-  directive('frame-src', [googleSignIn, ...appleSignIn]),
+  directive('frame-src', [googleSignIn, ...appleSignIn, googlePay]),
   directive('frame-ancestors', ["'none'"]),
   directive('object-src', ["'none'"]),
   directive('base-uri', ["'self'"]),
@@ -90,8 +93,9 @@ const securityHeaders = [
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   {
     key: 'Permissions-Policy',
-    // Location (map, SOS), camera (photos) and microphone (voice messages) are core features.
-    value: 'geolocation=(self), camera=(self), microphone=(self), payment=(), usb=(), interest-cohort=()',
+    // Location (map, SOS), camera (photos, QR) and microphone (voice messages) are core features; payment is
+    // for Google Pay (its sheet may use the Payment Request API from pay.google.com).
+    value: 'geolocation=(self), camera=(self), microphone=(self), payment=(self "https://pay.google.com"), usb=(), interest-cohort=()',
   },
   ...(isDev
     ? []

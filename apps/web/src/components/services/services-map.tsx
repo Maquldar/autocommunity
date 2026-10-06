@@ -117,6 +117,7 @@ const detailsToListItem = (s: NonNullable<ReturnType<typeof useService>['data']>
   status: s.status,
   distanceM: s.distanceM,
   openNow: s.openNow,
+  acceptsPayments: s.acceptsPayments,
   photoUrl: s.photos[0]?.thumbUrl ?? s.photos[0]?.url ?? null,
 });
 

@@ -19,6 +19,6 @@ import { WalletService } from './wallet.service';
     PremiumService,
     PremiumRenewalService,
   ],
-  exports: [WalletService, PremiumService],
+  exports: [WalletService, PremiumService, PaymentProvider],
 })
 export class WalletModule {}

@@ -12,4 +12,5 @@ $PNPM --filter @autoc/api exec prisma generate
 $PNPM --filter @autoc/shared build
 $PNPM --filter @autoc/api build
 # The browser talks to the web origin only; Next proxies /api/v1 and /media to the API on localhost.
-NEXT_PUBLIC_API_URL=/ API_PROXY_TARGET=http://127.0.0.1:4000 $PNPM --filter @autoc/web build
+# DEMO_MODE also enables the dev-only `?simulateTag=` on the NFC pay screen (phase 10).
+NEXT_PUBLIC_DEMO_MODE=${DEMO_MODE:-false} NEXT_PUBLIC_API_URL=/ API_PROXY_TARGET=http://127.0.0.1:4000 $PNPM --filter @autoc/web build

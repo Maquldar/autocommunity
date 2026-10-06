@@ -12,7 +12,9 @@ datasource db {
   extensions = [postgis, citext, pg_trgm]
 }
 
-/* ------------------------------------------------------------------ users & auth */
+/**
+ * ------------------------------------------------------------------ users & auth
+ */
 
 enum PrivacyMode {
   hidden
@@ -39,52 +41,52 @@ enum AuthProvider {
 }
 
 model User {
-  id               String      @id @db.Uuid
-  phone            String?     @unique
-  phoneVerifiedAt  DateTime?   @map("phone_verified_at")
-  name             String      @default("")
-  nickname         String?     @unique @db.Citext
-  avatarUploadId   String?     @map("avatar_upload_id") @db.Uuid
-  city             String?
-  bio              String?
-  rating           Int         @default(50)
-  privacyMode      PrivacyMode @default(community) @map("privacy_mode")
-  receiveSos       Boolean     @default(true) @map("receive_sos")
-  role             UserRole    @default(user)
-  status           UserStatus  @default(active)
-  blockedUntil     DateTime?   @map("blocked_until")
-  sosBannedUntil   DateTime?   @map("sos_banned_until")
-  locale           String      @default("ru")
-  onboardedAt      DateTime?   @map("onboarded_at")
-  lastActiveAt     DateTime?   @map("last_active_at")
+  id              String      @id @db.Uuid
+  phone           String?     @unique
+  phoneVerifiedAt DateTime?   @map("phone_verified_at")
+  name            String      @default("")
+  nickname        String?     @unique @db.Citext
+  avatarUploadId  String?     @map("avatar_upload_id") @db.Uuid
+  city            String?
+  bio             String?
+  rating          Int         @default(50)
+  privacyMode     PrivacyMode @default(community) @map("privacy_mode")
+  receiveSos      Boolean     @default(true) @map("receive_sos")
+  role            UserRole    @default(user)
+  status          UserStatus  @default(active)
+  blockedUntil    DateTime?   @map("blocked_until")
+  sosBannedUntil  DateTime?   @map("sos_banned_until")
+  locale          String      @default("ru")
+  onboardedAt     DateTime?   @map("onboarded_at")
+  lastActiveAt    DateTime?   @map("last_active_at")
   /// Created by the demo seed; only these users are moved by DEMO_LIVE_LOCATIONS.
-  isSeed           Boolean     @default(false) @map("is_seed")
+  isSeed          Boolean     @default(false) @map("is_seed")
   /// Phase 9: end of the paid premium period (cache of premium_subscriptions; premium while > now).
-  premiumUntil     DateTime?   @map("premium_until")
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
+  premiumUntil    DateTime?   @map("premium_until")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  avatar             Upload?            @relation("UserAvatar", fields: [avatarUploadId], references: [id], onDelete: SetNull)
+  avatar             Upload?               @relation("UserAvatar", fields: [avatarUploadId], references: [id], onDelete: SetNull)
   identities         AuthIdentity[]
   refreshTokens      RefreshToken[]
   vehicles           Vehicle[]
   location           UserLocation?
-  sentRequests       Friendship[]       @relation("FriendRequester")
-  receivedRequests   Friendship[]       @relation("FriendAddressee")
-  ownedCommunities   Community[]        @relation("CommunityOwner")
+  sentRequests       Friendship[]          @relation("FriendRequester")
+  receivedRequests   Friendship[]          @relation("FriendAddressee")
+  ownedCommunities   Community[]           @relation("CommunityOwner")
   memberships        CommunityMember[]
   sosRequests        SosRequest[]
   sosResponses       SosResponse[]
   chatMembers        ChatMember[]
   messages           Message[]
-  reviewsWritten     Review[]           @relation("ReviewAuthor")
+  reviewsWritten     Review[]              @relation("ReviewAuthor")
   ratingEvents       RatingEvent[]
-  reportsFiled       Report[]           @relation("ReportReporter")
+  reportsFiled       Report[]              @relation("ReportReporter")
   notifications      Notification[]
   pushSubscriptions  PushSubscription[]
-  uploads            Upload[]           @relation("UploadOwner")
-  adminActionsDone   AdminAction[]      @relation("AdminActor")
-  adminActionsOn     AdminAction[]      @relation("AdminTarget")
+  uploads            Upload[]              @relation("UploadOwner")
+  adminActionsDone   AdminAction[]         @relation("AdminActor")
+  adminActionsOn     AdminAction[]         @relation("AdminTarget")
   posts              Post[]
   postComments       PostComment[]
   postLikes          PostLike[]
@@ -92,16 +94,18 @@ model User {
   eventParticipants  EventParticipant[]
   eventsCreated      Event[]
   serviceVisits      ServiceVisit[]
-  servicesSubmitted  ServiceCenter[]
+  servicesSubmitted  ServiceCenter[]       @relation("ServiceSubmitter")
+  servicesOwned      ServiceCenter[]       @relation("ServiceOwner")
+  payOrders          PayOrder[]
   fraudFlags         FraudFlag[]
   wallet             Wallet?
   walletTransactions WalletTransaction[]
   topups             Topup[]
   premiumSubs        PremiumSubscription[]
-  votesGiven         UserVote[]         @relation("VoteVoter")
-  votesReceived      UserVote[]         @relation("VoteTarget")
-  violationsOwned    Violation[]        @relation("ViolationOwner")
-  violationsFiled    Violation[]        @relation("ViolationSubmitter")
+  votesGiven         UserVote[]            @relation("VoteVoter")
+  votesReceived      UserVote[]            @relation("VoteTarget")
+  violationsOwned    Violation[]           @relation("ViolationOwner")
+  violationsFiled    Violation[]           @relation("ViolationSubmitter")
 
   @@index([city])
   @@index([status])
@@ -125,13 +129,13 @@ model AuthIdentity {
 }
 
 model OtpCode {
-  id        String   @id @db.Uuid
+  id        String    @id @db.Uuid
   phone     String
-  codeHash  String   @map("code_hash")
-  attempts  Int      @default(0)
-  expiresAt DateTime @map("expires_at")
+  codeHash  String    @map("code_hash")
+  attempts  Int       @default(0)
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([phone, createdAt(sort: Desc)])
   @@map("otp_codes")
@@ -156,16 +160,18 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-/* ------------------------------------------------------------------ vehicles & location */
+/**
+ * ------------------------------------------------------------------ vehicles & location
+ */
 
 model Vehicle {
-  id        String   @id @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  brand     String
-  model     String
-  year      Int
-  plate     String?
-  isPrimary Boolean  @default(false) @map("is_primary")
+  id             String               @id @db.Uuid
+  userId         String               @map("user_id") @db.Uuid
+  brand          String
+  model          String
+  year           Int
+  plate          String?
+  isPrimary      Boolean              @default(false) @map("is_primary")
   // phase 9 details; the VIN is owner-only, never in public DTOs
   vin            String?
   engineVolumeL  Float?               @map("engine_volume_l")
@@ -179,8 +185,8 @@ model Vehicle {
   photoUploadIds String[]             @default([]) @map("photo_upload_ids") @db.Uuid
   /// First photo (photo_upload_ids[1]), joined into embedded user views without extra queries.
   coverUploadId  String?              @map("cover_upload_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   cover      Upload?     @relation("VehicleCover", fields: [coverUploadId], references: [id], onDelete: SetNull)
@@ -200,14 +206,14 @@ enum LocationSource {
 
 /// Latest position only; history is never stored (privacy).
 model UserLocation {
-  userId    String                                @id @map("user_id") @db.Uuid
-  location  Unsupported("geography(Point,4326)")
-  accuracyM Float?                                @map("accuracy_m")
-  source    LocationSource                        @default(client)
+  userId         String                               @id @map("user_id") @db.Uuid
+  location       Unsupported("geography(Point,4326)")
+  accuracyM      Float?                               @map("accuracy_m")
+  source         LocationSource                       @default(client)
   /// Set when an update implied an impossible speed (> 300 km/h): until then the position is ignored for
   /// SOS visibility, /sos/nearby, /map/sos and dispatch.
-  untrustedUntil DateTime?                         @map("untrusted_until")
-  updatedAt DateTime                              @default(now()) @map("updated_at")
+  untrustedUntil DateTime?                            @map("untrusted_until")
+  updatedAt      DateTime                             @default(now()) @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -215,7 +221,9 @@ model UserLocation {
   @@map("user_locations")
 }
 
-/* ------------------------------------------------------------------ friends */
+/**
+ * ------------------------------------------------------------------ friends
+ */
 
 enum FriendshipStatus {
   pending
@@ -240,7 +248,9 @@ model Friendship {
   @@map("friendships")
 }
 
-/* ------------------------------------------------------------------ communities */
+/**
+ * ------------------------------------------------------------------ communities
+ */
 
 enum CommunityRole {
   owner
@@ -297,7 +307,9 @@ model CommunityMember {
   @@map("community_members")
 }
 
-/* ------------------------------------------------------------------ SOS */
+/**
+ * ------------------------------------------------------------------ SOS
+ */
 
 enum SosType {
   flat_tire
@@ -373,19 +385,21 @@ model SosResponse {
 
 /// Users notified about an SOS (dispatch log); prevents duplicate pushes on radius expansion.
 model SosDispatch {
-  sosId     String   @map("sos_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  distanceM Int      @map("distance_m")
+  sosId      String    @map("sos_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  distanceM  Int       @map("distance_m")
   /// Set once the user's notification/push/socket event went out; a retried job notifies rows still null.
   notifiedAt DateTime? @map("notified_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@id([sosId, userId])
   @@index([userId])
   @@map("sos_dispatches")
 }
 
-/* ------------------------------------------------------------------ chats */
+/**
+ * ------------------------------------------------------------------ chats
+ */
 
 enum ChatType {
   direct
@@ -450,7 +464,9 @@ model Message {
   @@map("messages")
 }
 
-/* ------------------------------------------------------------------ services (v2) */
+/**
+ * ------------------------------------------------------------------ services (v2)
+ */
 
 enum ServiceCategory {
   repair
@@ -458,6 +474,7 @@ enum ServiceCategory {
   wash
   parts
   tow
+  fuel
 }
 
 enum ServiceStatus {
@@ -479,27 +496,36 @@ enum VisitStatus {
 }
 
 model ServiceCenter {
-  id             String                               @id @db.Uuid
-  name           String
-  category       ServiceCategory
-  description    String                               @default("")
-  address        String
-  phone          String?
+  id              String                               @id @db.Uuid
+  name            String
+  category        ServiceCategory
+  description     String                               @default("")
+  address         String
+  phone           String?
   /// e.g. {"mon":"09:00-19:00", ..., "sun":null}
-  hours          Json                                 @default("{}")
-  photoUploadIds String[]                             @default([]) @map("photo_upload_ids") @db.Uuid
-  location       Unsupported("geography(Point,4326)")
-  rating         Float                                @default(0)
-  reviewCount    Int                                  @default(0) @map("review_count")
-  visitCount     Int                                  @default(0) @map("visit_count")
-  status         ServiceStatus                        @default(pending)
-  qrSecret       String                               @map("qr_secret")
-  submittedById  String?                              @map("submitted_by_id") @db.Uuid
-  createdAt      DateTime                             @default(now()) @map("created_at")
-  updatedAt      DateTime                             @updatedAt @map("updated_at")
+  hours           Json                                 @default("{}")
+  photoUploadIds  String[]                             @default([]) @map("photo_upload_ids") @db.Uuid
+  location        Unsupported("geography(Point,4326)")
+  rating          Float                                @default(0)
+  reviewCount     Int                                  @default(0) @map("review_count")
+  visitCount      Int                                  @default(0) @map("visit_count")
+  status          ServiceStatus                        @default(pending)
+  qrSecret        String                               @map("qr_secret")
+  submittedById   String?                              @map("submitted_by_id") @db.Uuid
+  /// Phase 10: a payment partner ("Оплата на точке").
+  acceptsPayments Boolean                              @default(false) @map("accepts_payments")
+  /// Opaque token in the NFC sticker / QR (`/pay/t/<payTag>`); never the service id.
+  payTag          String?                              @unique @map("pay_tag")
+  /// The user whose wallet receives `sale` rows; null = merchant settlement.
+  ownerId         String?                              @map("owner_id") @db.Uuid
+  createdAt       DateTime                             @default(now()) @map("created_at")
+  updatedAt       DateTime                             @updatedAt @map("updated_at")
 
-  submittedBy User?          @relation(fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedBy User?          @relation("ServiceSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  owner       User?          @relation("ServiceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   visits      ServiceVisit[]
+  payItems    PayItem[]
+  payOrders   PayOrder[]
 
   @@index([category, status])
   @@index([status, rating])
@@ -526,7 +552,9 @@ model ServiceVisit {
   @@map("service_visits")
 }
 
-/* ------------------------------------------------------------------ reviews, rating, reports */
+/**
+ * ------------------------------------------------------------------ reviews, rating, reports
+ */
 
 enum ReviewTarget {
   user
@@ -554,16 +582,16 @@ model Review {
 
 /// Append-only ledger; users.rating is derived from it (see packages/shared/rating.ts).
 model RatingEvent {
-  id        String   @id @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  delta     Int
-  reason    String
-  refId     String?  @map("ref_id") @db.Uuid
+  id            String   @id @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  delta         Int
+  reason        String
+  refId         String?  @map("ref_id") @db.Uuid
   /// Penalty rows only (reason "penalty"): the penalty's points (e.g. -10) and kind; `delta` is the
   /// resulting rating change. computeRating sums these points over 365 days.
-  penaltyPoints Int?    @map("penalty_points")
-  penaltyKind   String? @map("penalty_kind")
-  createdAt DateTime @default(now()) @map("created_at")
+  penaltyPoints Int?     @map("penalty_points")
+  penaltyKind   String?  @map("penalty_kind")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -646,7 +674,9 @@ model AdminAction {
   @@map("admin_actions")
 }
 
-/* ------------------------------------------------------------------ notifications */
+/**
+ * ------------------------------------------------------------------ notifications
+ */
 
 model Notification {
   id        String    @id @db.Uuid
@@ -676,7 +706,9 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
-/* ------------------------------------------------------------------ uploads */
+/**
+ * ------------------------------------------------------------------ uploads
+ */
 
 model Upload {
   id          String   @id @db.Uuid
@@ -704,7 +736,9 @@ model Upload {
   @@map("uploads")
 }
 
-/* ------------------------------------------------------------------ events (v2) */
+/**
+ * ------------------------------------------------------------------ events (v2)
+ */
 
 enum RsvpStatus {
   going
@@ -712,21 +746,21 @@ enum RsvpStatus {
 }
 
 model Event {
-  id          String                                @id @db.Uuid
-  communityId String                                @map("community_id") @db.Uuid
-  createdById String                                @map("created_by_id") @db.Uuid
-  title       String
-  description String                                @default("")
-  place       String
-  location    Unsupported("geography(Point,4326)")
-  startsAt    DateTime                              @map("starts_at")
-  endsAt      DateTime?                             @map("ends_at")
+  id             String                               @id @db.Uuid
+  communityId    String                               @map("community_id") @db.Uuid
+  createdById    String                               @map("created_by_id") @db.Uuid
+  title          String
+  description    String                               @default("")
+  place          String
+  location       Unsupported("geography(Point,4326)")
+  startsAt       DateTime                             @map("starts_at")
+  endsAt         DateTime?                            @map("ends_at")
   /// [[lng, lat], ...]
-  route       Json?
-  goingCount  Int                                   @default(0) @map("going_count")
-  reminderSentAt DateTime?                          @map("reminder_sent_at")
-  createdAt   DateTime                              @default(now()) @map("created_at")
-  updatedAt   DateTime                              @updatedAt @map("updated_at")
+  route          Json?
+  goingCount     Int                                  @default(0) @map("going_count")
+  reminderSentAt DateTime?                            @map("reminder_sent_at")
+  createdAt      DateTime                             @default(now()) @map("created_at")
+  updatedAt      DateTime                             @updatedAt @map("updated_at")
 
   community    Community          @relation(fields: [communityId], references: [id], onDelete: Cascade)
   createdBy    User               @relation(fields: [createdById], references: [id])
@@ -752,7 +786,9 @@ model EventParticipant {
   @@map("event_participants")
 }
 
-/* ------------------------------------------------------------------ feed (v2) */
+/**
+ * ------------------------------------------------------------------ feed (v2)
+ */
 
 model Post {
   id             String    @id @db.Uuid
@@ -806,13 +842,13 @@ model PostLike {
 }
 
 model Poll {
-  id       String       @id @db.Uuid
-  postId   String       @unique @map("post_id") @db.Uuid
-  question String
-  multiple Boolean      @default(false)
+  id          String       @id @db.Uuid
+  postId      String       @unique @map("post_id") @db.Uuid
+  question    String
+  multiple    Boolean      @default(false)
   /// distinct users who voted (votes are final, so this only grows)
-  totalVoters Int       @default(0) @map("total_voters")
-  options  PollOption[]
+  totalVoters Int          @default(0) @map("total_voters")
+  options     PollOption[]
 
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -820,11 +856,11 @@ model Poll {
 }
 
 model PollOption {
-  id        String     @id @db.Uuid
-  pollId    String     @map("poll_id") @db.Uuid
+  id        String @id @db.Uuid
+  pollId    String @map("poll_id") @db.Uuid
   text      String
   position  Int
-  voteCount Int        @default(0) @map("vote_count")
+  voteCount Int    @default(0) @map("vote_count")
 
   poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
   votes PollVote[]
@@ -847,7 +883,9 @@ model PollVote {
   @@map("poll_votes")
 }
 
-/* ------------------------------------------------------------------ app settings */
+/**
+ * ------------------------------------------------------------------ app settings
+ */
 
 /// Small server-managed key/value settings (e.g. auto-generated VAPID keys).
 model AppSetting {
@@ -859,7 +897,9 @@ model AppSetting {
   @@map("app_settings")
 }
 
-/* ------------------------------------------------------------------ file storage (STORAGE_DRIVER=postgres) */
+/**
+ * ------------------------------------------------------------------ file storage (STORAGE_DRIVER=postgres)
+ */
 
 /// Upload bytes for deployments without a persistent disk or object store (demo hosting).
 model StoredFile {
@@ -871,7 +911,9 @@ model StoredFile {
   @@map("stored_files")
 }
 
-/* ------------------------------------------------------------------ phase 9: vehicles, wallet, premium, votes, violations */
+/**
+ * ------------------------------------------------------------------ phase 9: vehicles, wallet, premium, votes, violations
+ */
 
 enum VehicleFuel {
   petrol
@@ -944,6 +986,8 @@ enum WalletTxKind {
   subscription
   admin_adjust
   refund
+  purchase
+  sale
 }
 
 /// Immutable ledger (UPDATE/DELETE are rejected by a trigger). balance_after = wallet balance after the row.
@@ -1118,4 +1162,78 @@ model Violation {
   @@index([status, createdAt])
   @@index([photoUploadIds], type: Gin)
   @@map("violations")
+}
+
+/**
+ * ------------------------------------------------------------------ phase 10: payments at partner points
+ */
+
+enum PayUnit {
+  l
+  pcs
+  service
+}
+
+enum PayMethod {
+  coins
+  google_pay
+}
+
+/// A partner point's price list row (coins per unit).
+model PayItem {
+  id         String   @id @db.Uuid
+  serviceId  String   @map("service_id") @db.Uuid
+  name       String
+  priceCoins Int      @map("price_coins")
+  unit       PayUnit
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  service ServiceCenter @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("pay_items")
+}
+
+/// A paid order. `lines` is a snapshot (name, unit, qty, price) so receipts survive price-list edits.
+model PayOrder {
+  id             String    @id @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  serviceId      String    @map("service_id") @db.Uuid
+  method         PayMethod
+  total          Int
+  lines          Json
+  idempotencyKey String    @map("idempotency_key")
+  /// The buyer's `purchase` ledger row.
+  walletTxId     String?   @map("wallet_tx_id") @db.Uuid
+  /// Google Pay: the demo top-up that funded it.
+  topupId        String?   @map("topup_id") @db.Uuid
+  /// The owner's wallet credited with `sale`; null = a merchant settlement row.
+  payeeUserId    String?   @map("payee_user_id") @db.Uuid
+  cardNetwork    String?   @map("card_network")
+  cardLast4      String?   @map("card_last4")
+  balanceAfter   BigInt?   @map("balance_after")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service ServiceCenter @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt(sort: Desc), id])
+  @@index([serviceId, createdAt])
+  @@map("pay_orders")
+}
+
+/// What the platform owes a partner point that has no owner account (demo: recorded, never paid out).
+model MerchantSettlement {
+  id        String   @id @db.Uuid
+  serviceId String   @map("service_id") @db.Uuid
+  orderId   String   @unique @map("order_id") @db.Uuid
+  amount    Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([serviceId, createdAt])
+  @@map("merchant_settlements")
 }

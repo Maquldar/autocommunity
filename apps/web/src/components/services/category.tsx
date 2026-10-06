@@ -1,5 +1,5 @@
 import type { ServiceCategory } from '@autoc/shared';
-import { Cog, Disc3, Droplets, Truck, Wrench, type LucideIcon } from 'lucide-react';
+import { Cog, Disc3, Droplets, Fuel, Truck, Wrench, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /**
@@ -12,6 +12,7 @@ export const CATEGORY_META: Record<ServiceCategory, { icon: LucideIcon; tile: st
   wash: { icon: Droplets, tile: 'bg-avatar-6', cssVar: '--avatar-6' },
   parts: { icon: Cog, tile: 'bg-avatar-5', cssVar: '--avatar-5' },
   tow: { icon: Truck, tile: 'bg-avatar-4', cssVar: '--avatar-4' },
+  fuel: { icon: Fuel, tile: 'bg-avatar-2', cssVar: '--avatar-2' },
 };
 
 export function CategoryTile({ category, className, iconClassName }: { category: ServiceCategory; className?: string; iconClassName?: string }) {

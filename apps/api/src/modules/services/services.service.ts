@@ -34,6 +34,7 @@ const SERVICE_COLUMNS = Prisma.sql`
   s.id, s.name, s.category::text AS category, s.description, s.address, s.phone, s.hours,
   s.photo_upload_ids AS "photoUploadIds", s.rating, s.review_count AS "reviewCount", s.visit_count AS "visitCount",
   s.status::text AS status, s.submitted_by_id AS "submittedById",
+  s.accepts_payments AS "acceptsPayments", s.owner_id AS "ownerId",
   ST_Y(s.location::geometry) AS lat, ST_X(s.location::geometry) AS lng`;
 
 type ServiceRow = {
@@ -50,6 +51,8 @@ type ServiceRow = {
   visitCount: number;
   status: ServiceStatus;
   submittedById: string | null;
+  acceptsPayments: boolean;
+  ownerId: string | null;
   lat: number;
   lng: number;
   distance: number | null;
@@ -176,10 +179,11 @@ export class ServicesService {
   }
 
   async details(viewer: AuthUser, id: string, at?: { lat: number; lng: number }): Promise<ServiceDto> {
-    return this.toDto(viewer.id, await this.requireVisible(viewer, id, at));
+    const row = await this.requireVisible(viewer, id, at);
+    return this.toDto(viewer.id, row, viewer.role === 'admin' || (row.ownerId !== null && row.ownerId === viewer.id));
   }
 
-  async toDto(viewerId: string, row: ServiceRow): Promise<ServiceDto> {
+  async toDto(viewerId: string, row: ServiceRow, canManagePay = false): Promise<ServiceDto> {
     const [uploads, myVisit] = await Promise.all([
       row.photoUploadIds.length ? this.prisma.upload.findMany({ where: { id: { in: row.photoUploadIds } } }) : [],
       this.myVisit(viewerId, row.id),
@@ -195,6 +199,7 @@ export class ServicesService {
       hours: normalizeHours(row.hours),
       photos,
       myVisit,
+      canManagePay,
     };
   }
 
@@ -230,6 +235,7 @@ export class ServicesService {
       reviewCount: r.reviewCount,
       visitCount: r.visitCount,
       status: r.status,
+      acceptsPayments: r.acceptsPayments,
       distanceM: r.distance === null || r.distance === undefined ? null : Math.round(r.distance),
       openNow: isOpenAt(normalizeHours(r.hours), now),
     };

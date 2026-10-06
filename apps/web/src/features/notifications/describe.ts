@@ -68,6 +68,8 @@ export type NotificationView =
       role: 'owner' | 'submitter';
       href: string | null;
     }
+  /* phase 10 (API.md §10) */
+  | { kind: 'purchase_paid'; pointName: string; total: number; method: 'coins' | 'google_pay'; href: string }
   | { kind: 'generic'; type: string; href: string | null };
 
 export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
@@ -278,6 +280,16 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
         role,
         // The owner sees it on the vehicle; a rejected submission is only in the submitter's own list.
         href: role === 'submitter' && payload.status === 'rejected' ? '/settings/violations' : vehicleId ? `/vehicles/${vehicleId}?tab=violations` : null,
+      };
+    }
+    case 'purchase_paid': {
+      const orderId = safeId(payload.orderId);
+      return {
+        kind: 'purchase_paid',
+        pointName: text(payload.pointName),
+        total: num(payload.total) ?? 0,
+        method: payload.method === 'google_pay' ? 'google_pay' : 'coins',
+        href: orderId ? `/pay/orders/${orderId}` : '/pay/orders',
       };
     }
     default:

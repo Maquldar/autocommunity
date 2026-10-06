@@ -14,3 +14,4 @@ export * from './tiers';
 export * from './wallet';
 export * from './votes';
 export * from './violations';
+export * from './pay';

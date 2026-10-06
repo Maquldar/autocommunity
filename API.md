@@ -981,3 +981,52 @@ type VoteSummaryDto = { ...; traits: VoteTraitsDto }
 - `@daniyar_almaty` (the driver with the approved violations): 9 downvotes from 9 different voters, 4 × `cuts_off` and 3 × `no_turn_signals`, plus 4 approved violations (penalties capped at −20). Rating ≈ 25 → "Злостный нарушитель", traits "подрезает · не включает поворотники".
 - Demo: 8 upvotes from 8 voters, including 3 × `lets_merge` and 2 × `careful_driver` → traits "хвалят: пропускает · аккуратно водит".
 - Ratings are still computed from the seeded data; `50 + Σ delta = users.rating` holds for every user.
+
+## 11. Phase 10 — "Оплата на точке" (payments at partner points)
+
+A driver pays a partner point (a gas station, an oil-change service) from the app: tap the phone on the NFC sticker at the counter, or scan its QR code. **Demo only:** coins are internal (SPEC §9.2) and Google Pay runs in its TEST environment, so no real money moves. Shared: `packages/shared/src/pay.ts`.
+
+### 11.0 Changes to shared objects (additive)
+
+- `ServiceCategory` gains `fuel` (АЗС). `ServiceDto` / `ServiceListItem` gain `acceptsPayments: boolean`; `ServiceDto` gains `canManagePay: boolean` (viewer is an admin or the point's owner).
+- `WalletTxKind` gains `purchase` (buyer, −total, `ref` = order id, `note` = point name) and `sale` (the point owner, +total, `counterparty` = buyer, `ref` = order id).
+- New `NotificationType` `purchase_paid` `{ orderId, serviceId, pointName, total, method }` (in-app + push, url `/pay/orders/{orderId}`; the web app doesn't toast it, the buyer is on the receipt).
+- New `ADMIN_ACTIONS`: `pay.partner`, `pay.items`, `pay.tag_rotate` (target type `service`).
+- New error codes: `POINT_UNAVAILABLE` (409), `INVALID_ITEM` (400), `INVALID_QTY` (400), `ORDER_LIMIT` (400), `SERVICE_NOT_VERIFIED` (409). Reused: `INSUFFICIENT_FUNDS`, `WALLET_FROZEN`, `PAYMENT_DECLINED` (402), `IDEMPOTENCY_KEY_REUSED`, `INVALID_TARGET`, `RATE_LIMITED`.
+
+```ts
+type PayUnit = 'l' | 'pcs' | 'service'            // liters (0.1 step) | pieces | one job
+type PayMethod = 'coins' | 'google_pay'
+type PayItemDto = { id; name; priceCoins: number; unit: PayUnit }
+type PayPointDto = { serviceId; name; category; address; logoUrl: string | null; items: PayItemDto[] }
+type PayPointManageDto = PayPointDto & { acceptsPayments; ownerId: string | null; ownerNickname: string | null;
+  payTag: string | null; payUrl: string | null /* <WEB_ORIGIN>/pay/t/<payTag> */; canRotate: boolean }
+type PayLineDto = { itemId: string | null; name: string | null; unit: PayUnit | null; qty: number; priceCoins: number; totalCoins: number }
+type PayReceiptDto = { orderId; point: { serviceId; name; category; address }; items: PayLineDto[]; total: number; method: PayMethod;
+  paidAt; balanceAfter: number | null /* coins only */; card: { network; last4 } | null /* google_pay */; demo: true }
+```
+
+### 11.1 Routes
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/pay/points/:serviceId` | — | `PayPointDto`. A verified service with `acceptsPayments`, else `404` |
+| GET | `/pay/t/:tag` | — | `PayPointDto` for the point whose `payTag` is `tag` (`400` if the tag isn't `[A-Za-z0-9_-]{16,64}`, `404` if unknown / not a partner). 60 lookups/min per user |
+| POST | `/pay/orders` | `{ serviceId, items?: [{ itemId, qty }] (1–10, each item once), amount?: int 1..200 000, method, googlePay?: { token, cardNetwork?, cardDetails? }, idempotencyKey }` | `201 PayReceiptDto`; a replay → `200` with the same receipt |
+| GET | `/pay/orders` | cursor, limit | page of my `PayReceiptDto`, newest first |
+| GET | `/pay/orders/:id` | — | `PayReceiptDto` (own only, else `404`) |
+| GET | `/pay/points/:serviceId/manage` | — | `PayPointManageDto`; admin or the owner, else `403` |
+| PUT | `/pay/points/:serviceId/items` | `{ items: [{ id?, name 2..80, priceCoins int 1..1 000 000, unit }] (≤ 30, order = display order), note? }` | `PayPointManageDto`. Admin or owner. Replaces the list (ids kept when given; an id not on this point → `400 INVALID_ITEM`). An admin who isn't the owner must give `note` (3–500) → audit `pay.items` |
+| PUT | `/admin/services/:id/partner` | `{ acceptsPayments, ownerId?: uuid \| null, note }` | `PayPointManageDto`. Only verified services can be enabled (`409 SERVICE_NOT_VERIFIED`); an unknown / deleted / un-onboarded owner → `404`. The first enable issues a `payTag`. Audit `pay.partner` |
+| POST | `/admin/services/:id/pay-tag/rotate` | `{ note }` | `PayPointManageDto` with a new `payTag`; the old sticker / QR stops resolving at once. Audit `pay.tag_rotate` |
+
+### 11.2 Rules
+
+- **payTag:** 128 random bits, base64url (22 chars), unique, never derived from the service id. NFC stickers (an NDEF URL record) and counter QR codes carry `https://<web origin>/pay/t/<payTag>`; the web route resolves it through `GET /pay/t/:tag`.
+- **Pricing is server-side.** Names, units and prices come from the point's list; any price the client sends is ignored. A line's total = `round(priceCoins × qty)` (half up). `qty`: liters 0.1–200 in 0.1 steps, pieces 1–20 whole, services 1–20 whole → else `400 INVALID_QTY`. Total 1..200 000 (`400 ORDER_LIMIT`). `amount` is a free sum (one line with `itemId: null`).
+- **Gates**, like transfers: blocked accounts get `403 ACCOUNT_BLOCKED`; a frozen buyer wallet → `403 WALLET_FROZEN`; buying from your own point → `400 INVALID_TARGET`; the owner's account blocked/deleted or wallet frozen → `409 POINT_UNAVAILABLE`; 10 orders/min per user → `429 RATE_LIMITED`.
+- **coins:** one transaction locks the buyer's (and the owner's) wallet rows in user-id order, re-checks the balance (`409 INSUFFICIENT_FUNDS`, details `{ balance, total }`), inserts the order, writes `purchase` (−total) and either `sale` (+total) to the owner or a `merchant_settlements` row (status `pending`) when the point has no owner. Ledger `seq`, `balance_after` and the DB guards of §9 apply.
+- **google_pay:** the token goes through the `PaymentProvider` adapter (`chargeGooglePay`). The demo provider accepts Google Pay TEST tokens only (`examplePaymentMethodToken` from the `example` gateway, or a TEST envelope with `protocolVersion` + `signedMessage`); anything else → `402 PAYMENT_DECLINED`, nothing written. Success = a demo top-up spent at once: a `topups` row (`succeeded`, provider `demo`), ledger `topup` (+total) then `purchase` (−total) — the coin balance doesn't change — plus `sale` / settlement as above. `balanceAfter` is null; `card` shows the TEST card from `paymentMethodData.info`.
+- **Idempotency:** `idempotencyKey` is unique per buyer (`pay_orders (user_id, idempotency_key)`). The same key with the same point, method and basket returns the original receipt (`200`), even if prices changed since; anything different → `409 IDEMPOTENCY_KEY_REUSED`. Concurrent requests with one key: the buyer's wallet lock serializes them, the later ones see the committed order and replay — coins move once.
+- **Web routes:** `/pay` (NFC scanner with QR and manual-code fallbacks; `?simulateTag=<payTag>` only in dev builds or with `NEXT_PUBLIC_DEMO_MODE=true`), `/pay/t/{payTag}`, `/pay/{serviceId}`, `/pay/orders`, `/pay/orders/{id}` (receipt).
+- **Seed (demo data):** RP (fuel, пр. Райымбека, 480; АИ-92 205, АИ-95 245, ДТ 290 per liter; no owner → settlements) and GT Oil Service (repair, ул. Жандосова, 140; "Замена масла 5W-30 (4 л)" 18 000, "Масляный фильтр" 3 500, "Замена масла + фильтр" 20 000; owned by a seeded driver). Deterministic tags `base64url(sha256("seed-paytag:<name>"))[0..22]`. The demo account keeps 2 000 coins, so 5 l of АИ-95 (1 225) works.
