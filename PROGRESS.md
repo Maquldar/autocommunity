@@ -226,3 +226,19 @@
 - **Seed:** `@daniyar_almaty` lands in "Злостный нарушитель" with "подрезает · не включает поворотники"; demo is praised for "пропускает · аккуратно водит". Rating ledger consistent.
 
 **Tested:** TypeScript 0 errors (shared, API, web). API 483/483 (incl. `vote-traits.int.spec.ts`: thresholds, window, distinct voters, max 3, DB enum + sign CHECK, anonymity). Web unit 504/504 (trait line, tier chip, legend, messages ↔ shared names). Shared 92/92 (tier names, reason signs, `computeVoteTraits`). Playwright not re-run; the votes e2e legend text was updated to "Road legend".
+
+## Phase 10 — verified (2026-10-06)
+
+**Built:** tier names (e.g. "Злостный нарушитель" … "Легенда дорог"), driving-specific vote reasons and the "Часто отмечают / Хвалят" traits line (≥ 3 distinct voters, anonymous); "Оплата на точке" — NFC sticker (Web NFC) / QR / code → price list → coins or Google Pay TEST → receipt; demo partners RP (АЗС) and GT Oil Service.
+
+**Tested on the final commit:**
+- TypeScript: 0 errors.
+- API tests: 497/497.
+- Web unit tests: 514/514.
+- Shared tests: 98/98.
+- Playwright e2e: 68 passed, 0 failed. The run used the exact Render scripts from a fresh clone, built with `DEMO_MODE=true` as on Render.
+
+**Fixed while verifying:** a live demo SOS alert, which by design sits above dialogs, intercepted clicks in specs that sign in seeded drivers. Those specs now dismiss it. Dialogs also reserve the scrollbar gutter.
+
+**Known:** the OTP limit of 5 codes per hour per phone means two full e2e runs within an hour hit it on the shared demo accounts.
+

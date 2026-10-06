@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import { apiAs, DEMO_PHONE, horizontalOverflow, signInViaApi, topUpViaApi, useEnglish, useTestIp } from './helpers';
+import { apiAs, DEMO_PHONE, horizontalOverflow, signInViaApi, topUpViaApi, useEnglish, useTestIp, dismissSosAlerts } from './helpers';
 
 /** The seed's deterministic payTag for the RP demo station (apps/api/prisma/seed/services.ts `seedPayTag`). */
 const RP_TAG = createHash('sha256').update('seed-paytag:RP').digest('base64url').slice(0, 22);
@@ -13,6 +13,7 @@ test('pay at a point: NFC tag → 5 l of АИ-95 with coins → receipt, the bal
   const page = await context.newPage();
   try {
     await useTestIp(page);
+    await dismissSosAlerts(page);
     const demo = await signInViaApi(page, DEMO_PHONE);
     let before = (await apiAs<{ balance: number }>(page, demo, 'GET', '/wallet')).balance;
     if (before < 1225) {

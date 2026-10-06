@@ -1,11 +1,12 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { DEMO_PHONE, horizontalOverflow, signInViaApi, signUpViaApi, useEnglish, useTestIp, waitForRealtime } from './helpers';
+import { DEMO_PHONE, horizontalOverflow, signInViaApi, signUpViaApi, useEnglish, useTestIp, waitForRealtime, dismissSosAlerts } from './helpers';
 
 async function newContext(browser: Browser) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await useEnglish(context);
   const page = await context.newPage();
   await useTestIp(page);
+  await dismissSosAlerts(page);
   return { context, page };
 }
 

@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import path from 'node:path';
-import { ADMIN_PHONE, apiAs, SEEDED_REPORTER_PHONE, horizontalOverflow, signInInUi, signInViaApi, signUpViaApi, useEnglish, useTestIp } from './helpers';
+import { ADMIN_PHONE, apiAs, SEEDED_REPORTER_PHONE, horizontalOverflow, signInInUi, signInViaApi, signUpViaApi, useEnglish, useTestIp, dismissSosAlerts } from './helpers';
 
 const PHOTO = path.join(__dirname, 'fixtures', 'avatar.png');
 
@@ -9,6 +9,7 @@ async function newContext(browser: Browser, width = 390) {
   await useEnglish(context);
   const page = await context.newPage();
   await useTestIp(page);
+  await dismissSosAlerts(page);
   return { context, page };
 }
 

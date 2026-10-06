@@ -181,3 +181,14 @@ export async function trackGeolocation(page: Page): Promise<void> {
 export async function geolocationWatchCalls(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as { __geoWatchCalls: number }).__geoWatchCalls);
 }
+
+/**
+ * Seeded drivers live near the demo SOS that the API keeps open in demo mode, so a live SOS alert can pop up
+ * over whatever a spec is doing (by design it sits above dialogs). Specs that don't test SOS dismiss it.
+ */
+export async function dismissSosAlerts(page: Page): Promise<void> {
+  const alert = page.getByTestId('sos-alert');
+  await page.addLocatorHandler(alert, async () => {
+    await alert.getByRole('button', { name: 'Dismiss SOS alert' }).click();
+  });
+}

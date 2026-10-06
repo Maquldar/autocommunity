@@ -42,6 +42,7 @@ Pilot city: Almaty, Kazakhstan. Mobile-first installable web app (PWA) with a Ne
 | **Events & feed** | Community events with routes and RSVP chats; a feed with photos, video and polls |
 | **Wallet & Premium** | Coin balance (1 coin = 1 ₸, demo card top-up, no cash-out), coin transfers between drivers, Premium for 1 490 coins a month with auto-renewal (badge, profile frame, doubled limits) |
 | **Driver trust** | +/− votes with reasons (anti-abuse limits, capped effect on the rating), rating tiers shown on every avatar and as a named chip (Repeat offender → Regular → Reliable → Respected → Exemplary driver → Road legend), a "what people say" line of frequent vote reasons on profiles, detailed vehicle cards, traffic violations (КоАП / УК) published only after admin review, with owner disputes |
+| **Pay at a point** | Tap the NFC sticker (or scan the QR) at a partner gas station or service, pick fuel liters or a service, pay with coins or Google Pay (TEST), get a receipt. Demo partners: RP, GT Oil Service |
 | **Admin** | Users (warn / block / SOS ban), reports queue, SOS review (mark fake), service and visit moderation, audit log, antifraud flags |
 | **Notifications** | In-app, live over Socket.IO, and Web Push for every event type |
 
@@ -102,10 +103,10 @@ Details: [ARCHITECTURE.md](ARCHITECTURE.md) · API contract: [API.md](API.md) ·
 | Check | Result (final combined run) |
 |---|---|
 | TypeScript strict typecheck (shared, API, web) | 0 errors |
-| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **476 / 476** |
-| Web unit tests | **495 / 495** |
-| Shared package tests | **72 / 72** |
-| Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **67 passed, 0 failed** (17 skipped by design: journeys that run in one project only) |
+| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **497 / 497** |
+| Web unit tests | **514 / 514** |
+| Shared package tests | **98 / 98** |
+| Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **68 passed, 0 failed** (18 skipped by design: journeys that run in one project only) |
 | Load test (k6, 4 vCPU, single API process) | 50 VUs: p95 197 ms, 0 % errors · 200 VUs: p95 1.64 s, 0 % errors ([load/RESULTS.md](load/RESULTS.md)) |
 
 
