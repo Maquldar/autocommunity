@@ -908,7 +908,7 @@ All additive; no field or route of §9.0–9.6 changed.
   - `POST /violations/:id/dispute` by someone who can see the violation but isn't the owner (the public for approved ones, the submitter) → `403 FORBIDDEN`; everyone else → `404`.
   - `GET /admin/violations` without `status` is newest first. Approving or upholding applies the −5 penalty only if this violation has none yet; `remove` writes `penalty_reversed` only if a penalty exists.
 - **Seed:**
-  - Wallets for the demo user and 8 others, all with succeeded demo top-ups and transfers. The demo user has premium (renews in about 20 days) and about 23 000 coins; a friend of theirs has a cancelled premium.
+  - Wallets for the demo user and 8 others, all with succeeded demo top-ups and transfers. The demo user has premium (renews in about 20 days) and 2 000 coins; a friend of theirs has a cancelled premium.
   - 7 driver votes (3 up on demo), a detailed demo car with 2 photos and details on 12 other cars.
   - 5 violations: 2 approved with penalties on one driver, 1 pending, 1 disputed, 1 rejected.
   - Wallet ledgers and the rating ledger are consistent.

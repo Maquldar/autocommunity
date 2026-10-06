@@ -81,8 +81,9 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
     L.add(to.id, 'transfer_in', amount, at(daysAgo), { id: inId, counterpartyId: from.id, ref: outId, note });
   };
 
-  await topup(demo!.id, 20_000, 40);
-  await topup(demo!.id, 5_000, 12);
+  // Demo ends at exactly 2 000 coins: 3 000 + 990 + 1 500 (gift) − 2 000 (sent) − 1 490 (premium).
+  await topup(demo!.id, 3_000, 40);
+  await topup(demo!.id, 990, 12);
   const funded = others.slice(0, 8);
   for (const [i, u] of funded.entries()) await topup(u.id, [3000, 10_000, 1500, 7500, 2000, 50_000, 5000, 1000][i]!, 30 - i * 2);
   transfer(funded[0]!, demo!, 1500, 9, 'Спасибо за прикурку!');

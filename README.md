@@ -72,7 +72,7 @@ pnpm dev                    # API on http://localhost:4000, website on http://lo
 ```
 
 Open **http://localhost:3000** and sign in:
-- Demo user `+7 700 000 00 02`, admin `+7 700 000 00 01`, or any `+7` number for a new account.
+- Demo user `+7 700 000 00 02` (Premium, 2 000 coins), admin `+7 700 000 00 01`, or any `+7` number for a new account.
 - No SMS is sent locally: **the code is shown on the login screen**.
 
 Troubleshooting (Windows, ARM, ports): see the [Troubleshooting](#troubleshooting) section below.
