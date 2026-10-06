@@ -22,7 +22,7 @@ import { IdParam, ZBody, ZParam, ZQuery } from '../../common/validation/zod.pipe
 import { AdminRateLimitGuard } from '../admin/admin-rate-limit.guard';
 import { PayService } from './pay.service';
 
-/** API.md §10 — "Оплата на точке". */
+/** API.md §11 — "Оплата на точке". */
 @Controller('pay')
 export class PayController {
   constructor(private readonly pay: PayService) {}
@@ -66,7 +66,7 @@ export class PayController {
   }
 }
 
-/** API.md §10 admin routes — role=admin, rate limited like the rest of /admin, audited with a note. */
+/** API.md §11 admin routes — role=admin, rate limited like the rest of /admin, audited with a note. */
 @Controller('admin/services')
 @Roles('admin')
 @UseGuards(AdminRateLimitGuard)

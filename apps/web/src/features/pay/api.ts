@@ -9,7 +9,7 @@ import { invalidateWallet, walletKeys } from '@/features/wallet/api';
 const { request } = apiClient;
 const enc = encodeURIComponent;
 
-/** API.md §10. */
+/** API.md §11. */
 export const payApi = {
   point: (serviceId: string) => request<PayPointDto>(`/pay/points/${enc(serviceId)}`),
   byTag: (tag: string) => request<PayPointDto>(`/pay/t/${enc(tag)}`),

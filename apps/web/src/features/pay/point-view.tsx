@@ -31,7 +31,7 @@ import type { GooglePayResult } from './google-pay';
 /** The action bar stays above the phone tab bar (and its raised SOS button) while the list scrolls. */
 const STICKY = 'sticky z-raised bottom-[calc(var(--nav-height)+var(--safe-bottom)+1.75rem)] lg:bottom-4';
 
-/** /pay/t/[tag] and /pay/[serviceId]: a partner point's checkout (API.md §10). */
+/** /pay/t/[tag] and /pay/[serviceId]: a partner point's checkout (API.md §11). */
 export function PayPointView({ by, value }: { by: 'id' | 'tag'; value: string }) {
   const t = useTranslations('pay');
   const query = usePayPoint(by, value);

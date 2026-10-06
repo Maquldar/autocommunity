@@ -70,7 +70,7 @@ class ReplayRace extends Error {}
 /** An order outcome plus whether it replays an earlier request (→ 200 instead of 201). */
 export type OrderOutcome = { receipt: PayReceiptDto; replay: boolean };
 
-/** Phase 10 — "Оплата на точке" (API.md §10): partner points, price lists, orders, payTags. */
+/** Phase 10 — "Оплата на точке" (API.md §11): partner points, price lists, orders, payTags. */
 @Injectable()
 export class PayService {
   constructor(

@@ -34,7 +34,7 @@ function rowError(r: Row): 'name' | 'price' | null {
 }
 
 /**
- * On the service page for admins and the point's owner (API.md §10): the partner switch (admin), the price
+ * On the service page for admins and the point's owner (API.md §11): the partner switch (admin), the price
  * list editor, and the sticker: the payTag QR code, the "NFC link" to write onto a sticker, and rotation.
  */
 export function PartnerPanel({ serviceId }: { serviceId: string }) {

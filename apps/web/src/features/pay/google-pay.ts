@@ -1,7 +1,7 @@
 import { GOOGLE_PAY_TEST } from '@autoc/shared';
 
 /**
- * Google Pay API for Web, TEST environment only (API.md §10). TEST never charges a card: Google returns the
+ * Google Pay API for Web, TEST environment only (API.md §11). TEST never charges a card: Google returns the
  * example gateway's token, which the API's demo provider accepts.
  */
 

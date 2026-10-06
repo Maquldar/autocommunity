@@ -241,7 +241,7 @@ Contract: API.md §9. These decisions are final; they replace Q-2 for the items 
 
 ## 10. Phase 10 — "Оплата на точке" (demo)
 
-Contract: API.md §10.
+Contract: API.md §11.
 
 - **F-50 Pay at a partner point.** A service center can be a payment partner (`acceptsPayments`) with a small price list in coins (name, price, unit: liter / piece / service). The driver opens the point by tapping the NFC sticker at the counter (Web NFC, Chrome on Android), scanning its QR code (BarcodeDetector) or typing the code; picks an item and a quantity (fuel: 10 / 20 / 30 l or "полный бак" ≈ 50 l, decimal liters); pays with the coin balance or Google Pay (TEST); gets a receipt. Admins (audited with a note) and the point's owner manage the price list; admins switch partners on/off, see the sticker QR / "NFC-ссылка" and rotate the opaque `payTag`.
 - **F-51 Sales.** Coin payments go to the owner's wallet as `sale`; a point without an owner account gets a merchant settlement record instead.

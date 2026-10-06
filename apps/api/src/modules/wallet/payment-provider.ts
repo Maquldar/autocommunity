@@ -14,7 +14,7 @@ export abstract class PaymentProvider {
   abstract readonly name: PaymentProviderName;
   abstract createPayment(input: CreatePaymentInput): Promise<CreatedPayment>;
   /**
-   * Phase 10 (API.md §10): charges a Google Pay token for a point order in one step (a top-up that is
+   * Phase 10 (API.md §11): charges a Google Pay token for a point order in one step (a top-up that is
    * spent on the purchase straight away). A real provider sends the token to its gateway.
    */
   abstract chargeGooglePay(input: GooglePayChargeInput): Promise<GooglePayCharge>;
