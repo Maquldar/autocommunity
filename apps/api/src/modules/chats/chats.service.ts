@@ -144,11 +144,24 @@ export class ChatsService {
       throw Errors.forbidden('Only the sender or a moderator can delete this message');
     }
     if (message.deletedAt) return;
+    await this.softDelete(message);
+  }
+
+  /** Moderation (admin panel): deletes any non-system message. Returns false when it was already gone. */
+  async removeMessage(messageId: string): Promise<boolean> {
+    const message = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!message || message.deletedAt || message.type === 'system') return false;
+    return this.softDelete(message);
+  }
+
+  private async softDelete(message: { id: string; chatId: string; uploadId: string | null }): Promise<boolean> {
+    const { id: messageId, chatId } = message;
     const { count } = await this.prisma.message.updateMany({ where: { id: messageId, deletedAt: null }, data: { deletedAt: new Date() } });
-    if (!count) return;
+    if (!count) return false;
     // The content is gone for everyone: drop the attached file too.
     if (message.uploadId) await this.uploads.remove(message.uploadId).catch((err: unknown) => this.logger.warn({ err }, 'Failed to remove message upload'));
     this.realtime.emitToChat(chatId, 'message:deleted', { chatId, messageId });
+    return true;
   }
 
   /** Get or create the direct chat with another active, onboarded user. */

@@ -95,6 +95,7 @@ model User {
 
   @@index([city])
   @@index([status])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -586,15 +587,17 @@ model Report {
 
 model FraudFlag {
   id        String   @id @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  /// null for flags about something without an account yet (otp_abuse: details.phoneMasked)
+  userId    String?  @map("user_id") @db.Uuid
   kind      String
   details   Json     @default("{}")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([userId])
+  @@index([kind, createdAt])
   @@map("fraud_flags")
 }
 
@@ -613,6 +616,7 @@ model AdminAction {
 
   @@index([createdAt])
   @@index([targetUserId])
+  @@index([adminId, createdAt])
   @@map("admin_actions")
 }
 

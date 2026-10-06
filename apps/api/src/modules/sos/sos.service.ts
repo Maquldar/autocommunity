@@ -21,6 +21,8 @@ import { ENV, type Env } from '../../config/env';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { AccountDeletionHooks } from '../../infra/tasks/account-deletion-hooks';
+import { AntifraudService } from '../antifraud/antifraud.service';
+import { SYSTEM_CANCEL_PREFIX } from '../antifraud/sanctions.service';
 import { ChatsService } from '../chats/chats.service';
 import { LocationService, trustedFreshLocation } from '../location/location.service';
 import { MAP_MAX_BBOX_DEG, MAP_MAX_USERS } from '../map/map.service';
@@ -65,10 +67,12 @@ export class SosService implements OnModuleInit {
     private readonly rating: RatingService,
     private readonly dispatch: SosDispatchService,
     private readonly deletionHooks: AccountDeletionHooks,
+    private readonly antifraud: AntifraudService,
   ) {}
 
   onModuleInit(): void {
     this.deletionHooks.register('sos', (userId) => this.onAccountDeleted(userId));
+    this.antifraud.registerSosCanceller((userId, sosId, reason) => this.cancel(userId, sosId, reason, { system: true }));
   }
 
   /**
@@ -129,6 +133,7 @@ export class SosService implements OnModuleInit {
     }
     await this.location.storeNow(userId, input);
     await this.queue.scheduleNew(id, expiresAt);
+    this.antifraud.sosCreated(userId, id, photoIds);
     this.broadcast.update(id); // the requester's other devices; joins their sockets to sos:{id}
     return this.view.toDto(userId, id);
   }
@@ -384,8 +389,12 @@ export class SosService implements OnModuleInit {
     return this.finish(requesterId, id, 'close');
   }
 
-  async cancel(requesterId: string, id: string, reason?: string): Promise<SosDto> {
-    return this.finish(requesterId, id, 'cancel', reason);
+  /** `system`: cancelled by the platform (block, fake, deletion), not counted as the user's own cancel. */
+  async cancel(requesterId: string, id: string, reason?: string, opts: { system?: boolean } = {}): Promise<SosDto> {
+    const stored = opts.system ? `${SYSTEM_CANCEL_PREFIX}${reason ?? ''}` : reason?.replace(/^system:/i, '');
+    const dto = await this.finish(requesterId, id, 'cancel', stored);
+    if (!opts.system) this.antifraud.sosCancelled(requesterId, id);
+    return dto;
   }
 
   private async finish(requesterId: string, id: string, action: 'close' | 'cancel', reason?: string): Promise<SosDto> {

@@ -8,6 +8,7 @@ import { newId } from '../../common/ids';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService, type RateRule } from '../../infra/rate-limit/rate-limiter.service';
 import { SmsSender } from '../../infra/sms/sms-sender';
+import { AntifraudService } from '../antifraud/antifraud.service';
 
 const HOUR = 3600;
 const PHONE_PER_HOUR = 5;
@@ -43,6 +44,7 @@ export class OtpService {
     private readonly prisma: PrismaService,
     private readonly rateLimiter: RateLimiterService,
     private readonly sms: SmsSender,
+    private readonly antifraud: AntifraudService,
   ) {}
 
   /** Throws PHONE_NOT_SUPPORTED for numbers outside OTP_ALLOWED_PREFIXES (SMS toll-fraud protection). */
@@ -95,6 +97,9 @@ export class OtpService {
       throw codeExpired();
     }
     if (!safeEqual(hashOtp(this.env.OTP_SECRET, phone, code), otp.codeHash)) {
+      // This wrong guess may have used up a failure rule: that's a lockout (antifraud otp_abuse).
+      const after = await this.rateLimiter.check(failureRules(phone, ip));
+      if (!after.allowed) this.antifraud.otpLockout(phone, ip, after.retryAfterSec);
       throw Errors.badRequest('OTP_INVALID', 'Wrong code', { attemptsLeft: Math.max(0, LIMITS.otpMaxAttempts - otp.attempts) });
     }
     await this.rateLimiter.refund(failureSlot);
