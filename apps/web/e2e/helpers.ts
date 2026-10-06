@@ -67,7 +67,7 @@ export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<Sig
 export async function apiAs<T = unknown>(
   page: Page,
   user: Pick<SignedUp, 'accessToken'>,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   data?: unknown,
 ): Promise<T> {

@@ -4,6 +4,7 @@ import type { SosDto } from '@autoc/shared';
 import { History, MapPinOff, Settings2, ShieldCheck, Siren } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -78,8 +79,15 @@ export function NearbySosView() {
   const errorMessage = useErrorMessage();
   const { position, status, enable } = useLocationSharing();
   const sharing = status !== 'off' && status !== 'denied' && status !== 'unavailable';
-  const query = useNearbySos(position ? { lat: position.lat, lng: position.lng } : null, Boolean(position));
-  const locationRequired = !position || hasErrorCode(query.error, 'LOCATION_REQUIRED');
+  // The API uses the stored location (409 LOCATION_REQUIRED without a fresh one); our live fix is only a hint.
+  const query = useNearbySos(position ? { lat: position.lat, lng: position.lng } : null);
+  const locationRequired = hasErrorCode(query.error, 'LOCATION_REQUIRED');
+
+  // Sharing just started: ask again once the first fix has been stored.
+  const refetch = query.refetch;
+  useEffect(() => {
+    if (position && locationRequired) void refetch();
+  }, [position, locationRequired, refetch]);
 
   let body;
   if (locationRequired) {

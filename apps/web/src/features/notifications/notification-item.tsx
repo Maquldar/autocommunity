@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, ShieldCheck, Siren, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, Check, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -22,6 +22,7 @@ type TitleSpec =
   | { key: 'types.sosNearby'; values: { name: string; type: string; distance: string } }
   | { key: 'types.sosResponse' | 'types.sosAccepted'; values: { name: string } }
   | { key: 'types.sosStatus'; values: { name: string; event: string } }
+  | { key: 'types.reviewReceived'; values: { name: string; stars: number } }
   | { key: 'types.generic'; values: Record<string, never> };
 
 type TitleContext = {
@@ -36,6 +37,8 @@ function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
   switch (view.kind) {
     case 'sos_nearby':
       return { key: 'types.sosNearby', values: { name: displayName(view.user) ?? someone, type: ctx.sosType(view.sosType), distance: ctx.distance(view.distanceM) } };
+    case 'review_received':
+      return { key: 'types.reviewReceived', values: { name: displayName(view.user) ?? someone, stars: view.stars } };
     case 'sos_response':
       return { key: 'types.sosResponse', values: { name: displayName(view.user) ?? someone } };
     case 'sos_accepted':
@@ -94,6 +97,13 @@ function Title({ view }: { view: NotificationView }) {
 const SOS_KINDS = new Set<NotificationView['kind']>(['sos_nearby', 'sos_response', 'sos_accepted', 'sos_status']);
 
 function Leading({ view }: { view: NotificationView }) {
+  if (view.kind === 'review_received') {
+    return (
+      <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-warning-soft text-warning-soft-foreground">
+        <Star className="size-5" />
+      </span>
+    );
+  }
   if (SOS_KINDS.has(view.kind)) {
     // SOS events get the SOS tile: red marks an emergency, never "unread".
     return (

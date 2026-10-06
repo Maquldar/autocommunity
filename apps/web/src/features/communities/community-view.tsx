@@ -18,6 +18,7 @@ import { hasErrorCode } from '@/lib/api/errors';
 import { useCityName } from '@/features/profile/city';
 import { CommunityChatPreview } from './community-chat-preview';
 import { PrivacyBadge } from './community-row';
+import { ReportButton } from '@/features/reports/report-dialog';
 import { CommunitySettingsSheet } from './community-settings';
 import { MembersList, RequestsList } from './members-panel';
 import { MembershipButton } from './membership-button';
@@ -114,6 +115,12 @@ function CommunityPage({ community, initialTab }: { community: CommunityDto; ini
             </TabsContent>
           ) : null}
         </Tabs>
+      )}
+
+      {community.myMembership?.role === 'owner' ? null : (
+        <div className="flex justify-center">
+          <ReportButton target={{ type: 'community', id: community.id }} label={t('report')} size="sm" />
+        </div>
       )}
 
       {permissions.isModerator ? (

@@ -103,7 +103,18 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@autoc/shared'],
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      // Public SOS share links (/s/<token>) carry live positions: never index, never leak the token as a referrer.
+      {
+        source: '/s/:token*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+    ];
   },
   turbopack: {
     resolveAlias: { 'next-intl/config': I18N_REQUEST_CONFIG },

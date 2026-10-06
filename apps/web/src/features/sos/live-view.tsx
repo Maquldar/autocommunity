@@ -38,6 +38,8 @@ import { hasErrorCode } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
 import { notify } from '@/lib/toast';
 import { useOpenDirectChat } from '@/features/chats/queries';
+import { ReviewSheet } from '@/features/rating/review-sheet';
+import { ReportButton } from '@/features/reports/report-dialog';
 import {
   useAcceptResponse,
   useArrivedSos,
@@ -240,6 +242,7 @@ function RequesterLive({ sos }: { sos: SosDto }) {
       <SosHero sos={sos}>{view.searching ? <SearchStatus sos={sos} /> : null}</SosHero>
 
       {view.open ? null : <EndedPanel sos={sos} />}
+      <ReviewPrompt sos={sos} />
 
       <Card className="p-4 sm:p-5">
         <SosTimeline steps={timelineSteps(sos)} />
@@ -268,7 +271,7 @@ function RequesterLive({ sos }: { sos: SosDto }) {
           <ul className="flex flex-col gap-3">
             {view.liveResponses.map((response) => (
               <li key={response.id}>
-                <ResponseCard sosId={sos.id} response={response} actions={view.responseActions(response)} onError={setActionError} />
+                <ResponseCard sosId={sos.id} open={view.open} response={response} actions={view.responseActions(response)} onError={setActionError} />
               </li>
             ))}
           </ul>
@@ -373,11 +376,13 @@ function RequesterLive({ sos }: { sos: SosDto }) {
 
 function ResponseCard({
   sosId,
+  open,
   response,
   actions,
   onError,
 }: {
   sosId: string;
+  open: boolean;
   response: SosResponseDto;
   actions: ReturnType<ReturnType<typeof requesterView>['responseActions']>;
   onError: (error: unknown) => void;
@@ -424,7 +429,7 @@ function ResponseCard({
       </PersonSummary>
       {actions.phone ? <PhoneLink phone={actions.phone} label={t('callLabel', { name })} /> : null}
       {actions.canAccept || actions.canDecline ? (
-        <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
           {actions.canAccept ? (
             <Button
               size="lg"
@@ -450,7 +455,7 @@ function ResponseCard({
             </Button>
           ) : null}
         </div>
-      ) : response.status === 'offered' ? (
+      ) : response.status === 'offered' && open ? (
         <p className="text-sm text-muted-foreground">{t('helperLimitHint', { max: SOS_LIMITS.maxAcceptedHelpers })}</p>
       ) : null}
     </Card>
@@ -514,13 +519,15 @@ function ShareControl({ sosId }: { sosId: string }) {
 
 function EndedPanel({ sos }: { sos: SosDto }) {
   const t = useTranslations('sos.live.ended');
-  const status = sos.status === 'closed' || sos.status === 'cancelled' || sos.status === 'expired' ? sos.status : 'closed';
+  const base = sos.status === 'closed' || sos.status === 'cancelled' || sos.status === 'expired' ? sos.status : 'closed';
+  // Expired after a helper had accepted = the 24 h timeout, not "nobody came".
+  const status = base === 'expired' && sos.responses.some((r) => r.status === 'accepted' || r.status === 'arrived') ? 'timedOut' : base;
   return (
     <div className="flex flex-col gap-3 rounded-2xl border bg-card p-4 sm:p-5" data-testid="sos-ended" role="status">
       <p className="text-lg font-semibold">{t(`${status}.title`)}</p>
       <p className="text-[0.9375rem] text-muted-foreground text-pretty">{t(`${status}.body`)}</p>
       <div className="flex flex-wrap gap-2">
-        {status !== 'closed' ? (
+        {status === 'cancelled' || status === 'expired' ? (
           <Button asChild>
             <Link href="/sos">{t('again')}</Link>
           </Button>
@@ -612,7 +619,7 @@ function HelperLive({ sos, onReload }: { sos: SosDto; onReload: () => void }) {
             {t('helper.help')}
           </Button>
           <p className="text-center text-sm text-muted-foreground">{t('helper.helpHint')}</p>
-          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
             {callButton}
             {messageButton}
           </div>
@@ -624,7 +631,7 @@ function HelperLive({ sos, onReload }: { sos: SosDto; onReload: () => void }) {
       panel = (
         <div className="flex flex-col gap-3" data-testid="sos-helper-panel" data-state={view.state}>
           <StatePanel tone="info" title={t('helper.offered.title')} body={t('helper.offered.body', { name: firstName })} />
-          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
             {callButton}
             {messageButton}
           </div>
@@ -662,7 +669,7 @@ function HelperLive({ sos, onReload }: { sos: SosDto; onReload: () => void }) {
               {t('helper.arrived')}
             </Button>
           ) : null}
-          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
             {navigateButton}
             {messageButton}
           </div>
@@ -723,6 +730,7 @@ function HelperLive({ sos, onReload }: { sos: SosDto; onReload: () => void }) {
       ) : null}
 
       {panel}
+      <ReviewPrompt sos={sos} />
 
       <Section title={t('card.location')}>
         <SosMap value={{ lat: sos.lat, lng: sos.lng }} label={t('card.mapLabel')} className="h-48 sm:h-56" zoom={15} />
@@ -737,6 +745,10 @@ function HelperLive({ sos, onReload }: { sos: SosDto; onReload: () => void }) {
       </Card>
 
       <SosEmergencyFooter />
+
+      <div className="flex justify-center">
+        <ReportButton target={{ type: 'sos', id: sos.id }} label={t('helper.report')} size="sm" />
+      </div>
 
       <ConfirmDialog
         open={confirmWithdraw}
@@ -782,5 +794,60 @@ function StatePanel({
       <p className="font-semibold">{title}</p>
       {body ? <p className={cn('text-sm text-pretty', tone === 'muted' && 'text-muted-foreground')}>{body}</p> : null}
     </div>
+  );
+}
+
+/**
+ * After a closed SOS: "How did it go?" with one button per person the viewer can still review
+ * (`reviewTargets`). The sheet opens by itself once per SOS per tab, so both sides get the prompt.
+ */
+function ReviewPrompt({ sos }: { sos: SosDto }) {
+  const t = useTranslations('rating.review');
+  const [target, setTarget] = useState<SosDto['reviewTargets'][number] | null>(null);
+  const targets = sos.canReview ? (sos.reviewTargets ?? []) : [];
+  const first = targets[0] ?? null;
+
+  const key = `autoc:review-prompted:${sos.id}`;
+  const firstId = first?.id ?? null;
+  useEffect(() => {
+    if (!firstId) return;
+    try {
+      if (window.sessionStorage.getItem(key)) return;
+    } catch {
+      // Storage blocked: prompt anyway (the card stays as the fallback).
+    }
+    setTarget(targets.find((u) => u.id === firstId) ?? null);
+    // Only when the first target changes; `targets` is a fresh array on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstId, key]);
+  /** Remembered once the driver closed the sheet (sent or "Later"), so it doesn't pop up again in this tab. */
+  const closeSheet = () => {
+    try {
+      window.sessionStorage.setItem(key, '1');
+    } catch {
+      // ignore
+    }
+    setTarget(null);
+  };
+
+  if (targets.length === 0) return null;
+  const role = sos.myRole === 'requester' ? 'helper' : 'requester';
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary-soft p-4 text-primary-soft-foreground" data-testid="review-prompt">
+      <div className="flex flex-col gap-1">
+        <p className="font-semibold">{t('promptTitle')}</p>
+        <p className="text-sm text-pretty">{role === 'helper' ? t('promptHelpers') : t('promptRequester')}</p>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {targets.map((user) => (
+          <li key={user.id}>
+            <Button variant="outline" className="bg-card" fullWidth onClick={() => setTarget(user)}>
+              {t('rate', { name: user.name || `@${user.nickname}` })}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <ReviewSheet sosId={sos.id} target={target} role={role} open={target !== null} onOpenChange={(open) => (open ? undefined : closeSheet())} />
+    </section>
   );
 }

@@ -16,6 +16,8 @@ import { useCurrentUser } from '@/lib/auth/guards';
 import { MessageButton } from '@/features/chats/message-button';
 import { FriendButton } from '@/features/friends/friend-button';
 import { HOME_ROUTE } from '@/lib/routes';
+import { RatingSummary, ReviewsList } from '@/features/rating/rating-views';
+import { ReportButton } from '@/features/reports/report-dialog';
 import { ProfileHeader, ProfileHeaderSkeleton } from './profile-header';
 import { useUser, useUserVehicles } from './queries';
 import { VehicleRow } from './vehicle-row';
@@ -75,6 +77,7 @@ export function UserProfileView({ userId }: { userId: string }) {
           ) : null
         }
       />
+      <RatingSummary userId={user.data.id} self={false} name={user.data.name} />
       <section aria-labelledby="user-vehicles-heading" className="flex flex-col gap-3">
         <h2 id="user-vehicles-heading" className="text-xl font-semibold tracking-tight">
           {tv('title')}
@@ -98,6 +101,10 @@ export function UserProfileView({ userId }: { userId: string }) {
           </ListGroup>
         )}
       </section>
+      <ReviewsList userId={user.data.id} self={false} />
+      <div className="flex justify-center">
+        <ReportButton target={{ type: 'user', id: user.data.id }} label={t('report')} size="sm" />
+      </div>
     </div>
   );
 }

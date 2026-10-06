@@ -1,7 +1,7 @@
 'use client';
 
 import type { Locale, UpdateSettingsInput } from '@autoc/shared';
-import { BadgeCheck, FileText, LogOut, MonitorSmartphone, Phone, ShieldCheck, Trash2 } from 'lucide-react';
+import { BadgeCheck, FileText, Flag, LogOut, MonitorSmartphone, Phone, ShieldCheck, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
 import { LanguageSwitcher } from '@/components/shell/language-switcher';
@@ -86,6 +86,17 @@ export function SettingsView() {
 
       <PhoneSection />
       <SessionsSection />
+
+      <Section id="settings-reports" title={t('reports.title')}>
+        <ListGroup>
+          <ListItem
+            href="/settings/reports"
+            leading={<Flag aria-hidden="true" className="size-5 text-muted-foreground" />}
+            title={t('reports.mine')}
+            description={t('reports.hint')}
+          />
+        </ListGroup>
+      </Section>
 
       <Section id="settings-legal" title={t('legal.title')}>
         <ListGroup>

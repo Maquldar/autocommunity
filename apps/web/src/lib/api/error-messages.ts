@@ -40,7 +40,9 @@ export type ErrorMessageKey =
   | 'communityLimit'
   | 'membershipLimit'
   | 'alreadyMember'
-  | 'ownerCannotLeave';
+  | 'ownerCannotLeave'
+  | 'chatReadOnly'
+  | 'locationRequired';
 
 export type ErrorMessage = { key: ErrorMessageKey; values?: Record<string, number> };
 
@@ -77,6 +79,8 @@ const BY_CODE: Partial<Record<string, ErrorMessageKey>> = {
   COMMUNITY_NAME_TAKEN: 'communityNameTaken',
   ALREADY_MEMBER: 'alreadyMember',
   OWNER_CANNOT_LEAVE: 'ownerCannotLeave',
+  CHAT_READ_ONLY: 'chatReadOnly',
+  LOCATION_REQUIRED: 'locationRequired',
 };
 
 /** Maps any thrown value to a localized message descriptor (pure, so it is unit-testable). */
