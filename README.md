@@ -3,7 +3,24 @@
 **A social platform for drivers: a live map, communities, SOS roadside help, service centers and a trust rating.**
 Pilot city: Almaty, Kazakhstan. Mobile-first installable web app (PWA) with a NestJS + PostgreSQL/PostGIS API.
 
-<!-- SCREENSHOTS -->
+<p align="center">
+  <img src="docs/screenshots/01-map.png" width="200" alt="Live map: drivers, clusters, an SOS nearby">
+  <img src="docs/screenshots/02-sos.png" width="200" alt="SOS card seen by a nearby driver">
+  <img src="docs/screenshots/03-chat.png" width="200" alt="Community chat">
+  <img src="docs/screenshots/05-services.png" width="200" alt="Service centers">
+</p>
+<p align="center">
+  <img src="docs/screenshots/04-communities.png" width="200" alt="Communities">
+  <img src="docs/screenshots/06-feed.png" width="200" alt="Feed">
+  <img src="docs/screenshots/07-events.png" width="200" alt="Events">
+  <img src="docs/screenshots/08-profile.png" width="200" alt="Profile with trust rating">
+</p>
+<p align="center">
+  <img src="docs/screenshots/09-admin.png" width="820" alt="Admin dashboard (dark theme)">
+</p>
+
+<sub>Screenshots from the seeded Almaty demo (Russian UI; English is one tap away). The map screenshot uses the OpenStreetMap raster fallback, because the build sandbox has no GPU for vector tiles.</sub>
+
 
 ## What it does
 
@@ -75,7 +92,15 @@ Details: [ARCHITECTURE.md](ARCHITECTURE.md) · API contract: [API.md](API.md) ·
 
 ## Quality
 
-<!-- QUALITY -->
+| Check | Result (final combined run) |
+|---|---|
+| TypeScript strict typecheck (shared, API, web) | 0 errors |
+| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **390 / 390** |
+| Web unit tests | **385 / 385** |
+| Shared package tests | **42 / 42** |
+| Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **62 passed, 0 failed** (14 skipped by design: journeys that run in one project only) |
+| Load test (k6, 4 vCPU, single API process) | 50 VUs: p95 197 ms, 0 % errors · 200 VUs: p95 1.64 s, 0 % errors ([load/RESULTS.md](load/RESULTS.md)) |
+
 
 Each phase went through an adversarial review: an agent tried to break the code with real requests. All findings were fixed with regression tests. The history is in [PROGRESS.md](PROGRESS.md).
 
