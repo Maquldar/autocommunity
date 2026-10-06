@@ -1,11 +1,11 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, CalendarClock, CalendarDays, CalendarX, Check, ShieldAlert, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, CalendarX, CarFront, Check, Crown, ShieldAlert, ShieldCheck, Siren, Star, ThumbsDown, UserCheck, UsersRound, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { useOnlineStatus } from '@/hooks/use-online-status';
 import { hasErrorCode } from '@/lib/api/errors';
@@ -29,6 +29,14 @@ type TitleSpec =
   | { key: 'types.eventReminder'; values: { title: string; when: string } }
   | { key: 'types.postComment'; values: { name: string; preview: string } }
   | { key: 'types.postLike'; values: { name: string } }
+  | { key: 'types.walletReceived'; values: { name: string; amount: number } }
+  | { key: 'types.walletAdmin'; values: { action: string; amount: number; sign: string; balance: number } }
+  | { key: 'types.premiumReminder'; values: { variant: string; date: string; price: number } }
+  | { key: 'types.premiumRenewed'; values: { date: string; price: number } }
+  | { key: 'types.premiumExpired'; values: { reason: string } }
+  | { key: 'types.voteReceived'; values: { reason: string } }
+  | { key: 'types.violationReported'; values: { category: string; vehicle: string } }
+  | { key: 'types.violationStatus'; values: { status: string; role: string; category: string } }
   | { key: 'types.generic'; values: Record<string, never> };
 
 type TitleContext = {
@@ -38,6 +46,11 @@ type TitleContext = {
   distance: (meters: number | null) => string;
   /** Event times in notifications: Almaty wall-clock time (the app's time zone). */
   when: (iso: string) => string;
+  /** A day ("12 Oct 2026") for premium periods. */
+  day: (iso: string | null) => string;
+  voteReason: (reason: string | null) => string;
+  category: (category: string | null) => string;
+  someCar: string;
 };
 
 function eventWhen(iso: string | null, format: (iso: string) => string): string {
@@ -81,6 +94,28 @@ function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
       return { key: 'types.postComment', values: { name: displayName(view.user) ?? someone, preview: view.preview } };
     case 'post_like':
       return { key: 'types.postLike', values: { name: displayName(view.user) ?? someone } };
+    case 'wallet_received':
+      return { key: 'types.walletReceived', values: { name: displayName(view.user) ?? someone, amount: view.amount } };
+    case 'wallet_admin':
+      return {
+        key: 'types.walletAdmin',
+        values: { action: view.action, amount: Math.abs(view.amount ?? 0), sign: (view.amount ?? 0) < 0 ? 'minus' : 'plus', balance: view.balance ?? 0 },
+      };
+    case 'premium_reminder':
+      return {
+        key: 'types.premiumReminder',
+        values: { variant: !view.autoRenew ? 'ends' : view.lowBalance ? 'low' : 'renews', date: ctx.day(view.periodEnd), price: view.price },
+      };
+    case 'premium_renewed':
+      return { key: 'types.premiumRenewed', values: { date: ctx.day(view.periodEnd), price: view.price } };
+    case 'premium_expired':
+      return { key: 'types.premiumExpired', values: { reason: view.reason } };
+    case 'vote_received':
+      return { key: 'types.voteReceived', values: { reason: ctx.voteReason(view.reason) } };
+    case 'violation_reported':
+      return { key: 'types.violationReported', values: { category: ctx.category(view.category), vehicle: view.vehicle || ctx.someCar } };
+    case 'violation_status':
+      return { key: 'types.violationStatus', values: { status: view.status, role: view.role, category: ctx.category(view.category) } };
     default:
       return { key: 'types.generic', values: {} };
   }
@@ -95,11 +130,17 @@ function useWhen(): (iso: string) => string {
 function useTitleContext(): TitleContext {
   const t = useTranslations('notifications');
   const ts = useTranslations('sos.types');
+  const tv = useTranslations('votes.reasons');
+  const tc = useTranslations('violations.categories');
   const format = useFormatter();
   const when = useWhen();
   return {
     someone: t('someone'),
     when,
+    day: (iso) => (iso ? format.dateTime(new Date(iso), { dateStyle: 'medium' }) : ''),
+    voteReason: (reason) => (reason ? tv(reason as 'other') : t('someReason')),
+    category: (category) => (category ? tc(category as 'other') : t('someViolation')),
+    someCar: t('someCar'),
     someCommunity: t('someCommunity'),
     sosType: (type) => ts(type),
     distance: (meters) => {
@@ -150,32 +191,58 @@ function Leading({ view }: { view: NotificationView }) {
       view.kind === 'friend_accepted' ||
       view.kind === 'community_request' ||
       view.kind === 'post_comment' ||
-      view.kind === 'post_like') &&
+      view.kind === 'post_like' ||
+      view.kind === 'wallet_received') &&
     view.user
   ) {
-    return <Avatar id={view.user.id} name={view.user.name || view.user.nickname} src={view.user.avatarUrl} size="md" decorative />;
+    return <UserAvatar user={{ ...view.user, name: view.user.name || view.user.nickname }} size="md" decorative />;
   }
-  const Icon =
-    view.kind === 'friend_accepted'
-      ? UserCheck
-      : view.kind === 'community_approved' || view.kind === 'community_request'
-        ? UsersRound
-        : view.kind === 'community_role'
-          ? ShieldCheck
-          : view.kind === 'moderation'
-            ? ShieldAlert
-            : view.kind === 'event_new'
-              ? view.change === 'cancelled'
-                ? CalendarX
-                : CalendarDays
-              : view.kind === 'event_reminder'
-                ? CalendarClock
-                : Bell;
+  if (view.kind === 'premium_reminder' || view.kind === 'premium_renewed' || view.kind === 'premium_expired') {
+    return (
+      <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-premium-soft text-premium-soft-foreground">
+        <Crown className="size-5" />
+      </span>
+    );
+  }
+  if (view.kind === 'vote_received' || view.kind === 'violation_reported' || (view.kind === 'violation_status' && view.status === 'approved' && view.role === 'owner')) {
+    return (
+      <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-warning-soft text-warning-soft-foreground">
+        {view.kind === 'vote_received' ? <ThumbsDown className="size-5" /> : <CarFront className="size-5" />}
+      </span>
+    );
+  }
+  const Icon = iconFor(view);
   return (
     <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
       <Icon className="size-5" />
     </span>
   );
+}
+
+function iconFor(view: NotificationView): typeof Bell {
+  switch (view.kind) {
+    case 'wallet_received':
+    case 'wallet_admin':
+      return Wallet;
+    case 'violation_status':
+    case 'violation_reported':
+      return CarFront;
+    case 'friend_accepted':
+      return UserCheck;
+    case 'community_approved':
+    case 'community_request':
+      return UsersRound;
+    case 'community_role':
+      return ShieldCheck;
+    case 'moderation':
+      return ShieldAlert;
+    case 'event_new':
+      return view.change === 'cancelled' ? CalendarX : CalendarDays;
+    case 'event_reminder':
+      return CalendarClock;
+    default:
+      return Bell;
+  }
 }
 
 type RequestState = 'idle' | 'accepted' | 'declined' | 'gone';
@@ -258,6 +325,11 @@ export function NotificationItem({ notification, onRead }: { notification: Notif
           {unread ? <span className="sr-only">{t('unread')}: </span> : null}
           <Title view={view} />
         </span>
+        {(view.kind === 'wallet_admin' && view.note) || (view.kind === 'wallet_received' && view.message) ? (
+          <span className="break-words text-sm text-foreground" data-testid="notification-note">
+            «{view.kind === 'wallet_admin' ? view.note : view.kind === 'wallet_received' ? view.message : ''}»
+          </span>
+        ) : null}
         {view.kind === 'moderation' && (view.note || view.until) ? (
           <span className="break-words text-sm text-foreground" data-testid="notification-note">
             {view.note}

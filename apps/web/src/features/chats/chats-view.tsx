@@ -5,6 +5,7 @@ import { MessageCircle, UsersRound, Siren } from 'lucide-react';
 import Link from 'next/link';
 import { useNow, useTranslations } from 'next-intl';
 import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { CountBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -76,6 +77,8 @@ export function ChatRow({ chat }: { chat: ChatDto }) {
     >
       {chat.type === 'sos' ? (
         <SosChatAvatar size="lg" />
+      ) : chat.type === 'direct' && chat.peer ? (
+        <UserAvatar user={{ ...chat.peer, name: chat.title, avatarUrl: chat.avatarUrl ?? chat.peer.avatarUrl }} size="lg" decorative />
       ) : (
         <Avatar id={chat.peer?.id ?? chat.refId ?? chat.id} name={chat.title} src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null} shape={chat.type === 'direct' ? 'circle' : 'square'} size="lg" decorative />
       )}
@@ -84,6 +87,7 @@ export function ChatRow({ chat }: { chat: ChatDto }) {
           <span className={cn('min-w-0 flex-1 truncate text-[0.9375rem]', unread ? 'font-semibold text-foreground' : 'font-medium text-foreground')}>
             {chat.title}
           </span>
+          {chat.type === 'direct' && chat.peer?.isPremium ? <PremiumBadge compact /> : null}
           {last ? (
             <time dateTime={last.createdAt} className={cn('shrink-0 text-xs tabular-nums', unread ? 'font-semibold text-primary' : 'text-muted-foreground')}>
               {time(last.createdAt, now)}

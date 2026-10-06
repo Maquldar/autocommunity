@@ -63,6 +63,47 @@ export async function signUpViaApi(page: Page, name = 'E2E Driver'): Promise<Sig
   return { phone, nickname, id: user.id, accessToken };
 }
 
+/** Seeded accounts (apps/api/prisma/seed): the demo driver is 200 days old, has a wallet with coins and premium. */
+export const DEMO_PHONE = '+77000000002';
+export const ADMIN_PHONE = '+77000000001';
+/**
+ * Other seeded drivers (the seed is deterministic): months old, rating ≥ 50. Specs that only need a trusted
+ * account use these instead of the demo driver, so a run stays under the per-number hourly OTP limit.
+ */
+export const SEEDED_VOTER_PHONE = '+77011015838'; // ruslan02
+export const SEEDED_REPORTER_PHONE = '+77011047514'; // anna_4x4
+
+/**
+ * Signs an existing (seeded) account in through the API with the page's cookie jar, like signUpViaApi.
+ * A code for the same number can be requested once a minute (and a few times an hour): on 429 it waits for
+ * `retryAfterSec` and tries again, so parallel specs that share the demo account don't fail.
+ */
+export async function signInViaApi(page: Page, phone: string): Promise<SignedUp> {
+  const headers = { 'x-forwarded-for': testIp(), origin: WEB_URL };
+  for (let attempt = 0; ; attempt += 1) {
+    const requested = await page.request.post(`${API}/auth/otp/request`, { data: { phone }, headers });
+    if (requested.status() === 429 && attempt < 3) {
+      const body = (await requested.json().catch(() => ({}))) as { error?: { details?: { retryAfterSec?: number } } };
+      const wait = Math.min(75, Math.max(5, body.error?.details?.retryAfterSec ?? Number(requested.headers()['retry-after'] ?? 60)));
+      await page.waitForTimeout(wait * 1000);
+      continue;
+    }
+    expect(requested.ok(), await requested.text()).toBeTruthy();
+    const { devCode } = (await requested.json()) as { devCode?: string };
+    expect(devCode, 'API must run with SMS_PROVIDER=console and AUTH_EXPOSE_DEV_CODE=true').toBeTruthy();
+    const verified = await page.request.post(`${API}/auth/otp/verify`, { data: { phone, code: devCode }, headers });
+    expect(verified.ok(), await verified.text()).toBeTruthy();
+    const { accessToken, user } = (await verified.json()) as { accessToken: string; user: { id: string; nickname: string } };
+    return { phone, nickname: user.nickname, id: user.id, accessToken };
+  }
+}
+
+/** Tops up a user's wallet through the demo provider (POST /wallet/topups + demo-confirm with the test card). */
+export async function topUpViaApi(page: Page, user: Pick<SignedUp, 'accessToken'>, amount: number): Promise<void> {
+  const { topup } = await apiAs<{ topup: { id: string } }>(page, user, 'POST', '/wallet/topups', { amount });
+  await apiAs(page, user, 'POST', `/wallet/topups/${topup.id}/demo-confirm`, { cardNumber: '4242 4242 4242 4242' });
+}
+
 /** Calls the API as a signed-up user (the access token from signUpViaApi; valid for 15 minutes). */
 export async function apiAs<T = unknown>(
   page: Page,

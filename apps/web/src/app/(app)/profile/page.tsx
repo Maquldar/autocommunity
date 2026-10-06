@@ -7,6 +7,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('metaTitle') };
 }
 
-export default function ProfilePage() {
-  return <OwnProfileView />;
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
+  return <OwnProfileView initialTab={tab === 'votes' ? 'votes' : 'overview'} />;
 }

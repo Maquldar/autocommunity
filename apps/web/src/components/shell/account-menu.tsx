@@ -3,7 +3,8 @@
 import { LogOut, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Avatar } from '@/components/ui/avatar';
+import type { RatingTier } from '@autoc/shared';
+import { UserAvatar, UserName } from '@/components/ui/user-avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,9 +16,18 @@ import {
 import { RatingBadge } from '@/components/ui/rating-badge';
 import { NAV_ITEMS } from './nav-config';
 
-export type AccountMenuUser = { id: string; name: string; nickname: string | null; avatarUrl: string | null; rating: number; role?: 'user' | 'admin' };
+export type AccountMenuUser = {
+  id: string;
+  name: string;
+  nickname: string | null;
+  avatarUrl: string | null;
+  rating: number;
+  role?: 'user' | 'admin';
+  isPremium?: boolean;
+  tier?: RatingTier;
+};
 
-const MENU_KEYS = ['profile', 'friends', 'settings'] as const;
+const MENU_KEYS = ['profile', 'wallet', 'friends', 'settings'] as const;
 
 /** Avatar-triggered menu for the top bar `accountSlot`. Links come from nav-config so disabled pages never show. */
 export function AccountMenu({ user, onLogout }: { user: AccountMenuUser; onLogout: () => void }) {
@@ -30,13 +40,13 @@ export function AccountMenu({ user, onLogout }: { user: AccountMenuUser; onLogou
         aria-label={t('shell.accountMenu')}
         className="ms-1 inline-flex size-11 items-center justify-center rounded-full focus-ring"
       >
-        <Avatar id={user.id} name={user.name} src={user.avatarUrl} size="sm" decorative />
+        <UserAvatar user={user} size="sm" decorative />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex items-center gap-3 py-2 normal-case tracking-normal">
-          <Avatar id={user.id} name={user.name} src={user.avatarUrl} size="md" decorative />
+          <UserAvatar user={user} size="md" decorative />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm font-semibold text-foreground">{user.name}</span>
+            <UserName user={user} className="text-sm font-semibold text-foreground" />
             {user.nickname ? <span className="truncate text-xs font-normal">@{user.nickname}</span> : null}
           </span>
           <RatingBadge rating={user.rating} size="sm" />

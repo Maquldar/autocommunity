@@ -1,6 +1,6 @@
 'use client';
 
-import { FEED_LIMITS, LIMITS, type PostDto } from '@autoc/shared';
+import { FEED_LIMITS, LIMITS, perkLimit, type PostDto } from '@autoc/shared';
 import { Film, ImagePlus, ListChecks, Plus, Send, Trash2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -17,6 +17,8 @@ import { ApiError } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
 import { notify } from '@/lib/toast';
 import { useMyCommunities } from '@/features/communities/queries';
+import { PremiumLimitHint } from '@/features/premium/limit-hint';
+import { useCurrentUser } from '@/lib/auth/guards';
 import { useCreatePost } from './api';
 import { useFeedErrorMessage } from './errors';
 import { uploadWithProgress, videoDuration } from './upload';
@@ -57,6 +59,10 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
   const [multiple, setMultiple] = useState(false);
   const [target, setTarget] = useState<string>(EVERYONE);
   const [error, setError] = useState<string | null>(null);
+  const [limitError, setLimitError] = useState<unknown>(null);
+  const me = useCurrentUser();
+  // Premium authors may attach twice as many photos (API.md §9.2).
+  const mediaMax = perkLimit('postMedia', me.isPremium === true);
   const mine = useMyCommunities(!communityId);
   const memberOf = mine.data?.filter((c) => c.myMembership?.status === 'active') ?? [];
 
@@ -82,9 +88,9 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
 
   const addPhotos = (files: FileList | null) => {
     setError(null);
-    const room = FEED_LIMITS.mediaMax - attachments.length;
+    const room = mediaMax - attachments.length;
     const list = Array.from(files ?? []);
-    if (list.length > room) setError(t('tooManyPhotos', { max: FEED_LIMITS.mediaMax }));
+    if (list.length > room) setError(t('tooManyPhotos', { max: mediaMax }));
     for (const file of list.slice(0, room)) {
       if (file.type && !IMAGE_TYPES.includes(file.type)) {
         setError(errorMessage(new ApiError({ status: 415, code: 'UNSUPPORTED_FILE_TYPE', message: '' })));
@@ -160,7 +166,10 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
           notify.success(t('posted'));
           onPosted?.(post);
         },
-        onError: (e) => setError(errorMessage(e)),
+        onError: (e) => {
+          setError(errorMessage(e));
+          setLimitError(e);
+        },
       },
     );
   };
@@ -276,12 +285,13 @@ export function Composer({ communityId, onPosted }: { communityId?: string; onPo
       ) : null}
 
       <FormError>{error}</FormError>
+      <PremiumLimitHint error={error ? limitError : null} />
 
       <div className="flex flex-wrap items-center gap-1">
         <IconButton
-          aria-label={t('addPhotos', { max: FEED_LIMITS.mediaMax })}
+          aria-label={t('addPhotos', { max: mediaMax })}
           variant="ghost"
-          disabled={hasVideo || attachments.length >= FEED_LIMITS.mediaMax}
+          disabled={hasVideo || attachments.length >= mediaMax}
           onClick={() => photoInput.current?.click()}
         >
           <ImagePlus />

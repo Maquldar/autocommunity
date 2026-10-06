@@ -1,11 +1,10 @@
 'use client';
 
-import type { RatingEventDto, ReviewDto } from '@autoc/shared';
+import { tierForRating, type RatingEventDto, type ReviewDto } from '@autoc/shared';
 import { Check, ChevronRight, History, Lock, MessageSquareQuote, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { Avatar } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { InfiniteList } from '@/components/ui/infinite-list';
@@ -13,6 +12,8 @@ import { RatingBadge } from '@/components/ui/rating-badge';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
+import { tierRanges } from '@/lib/tier';
+import { TierBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { useRating, useRatingEvents, useReviews } from './api';
 import { breakdownRows, formatPoints, unlocks } from './breakdown';
 
@@ -61,7 +62,7 @@ function RatingSheetBody({ userId, self, name }: { userId: string; self: boolean
       {query.isPending ? (
         <div aria-busy="true" className="flex flex-col gap-3">
           <Skeleton className="h-10 w-32" />
-          {Array.from({ length: 6 }, (_, i) => (
+          {Array.from({ length: 7 }, (_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
         </div>
@@ -100,6 +101,7 @@ function RatingSheetBody({ userId, self, name }: { userId: string; self: boolean
               </li>
             ))}
           </ul>
+          <TierLegend rating={query.data.rating} />
           <section className="flex flex-col gap-2 rounded-2xl border bg-card p-4" aria-label={t('unlocksLabel')}>
             <p className="font-medium">{self ? t('unlocksSelf') : t('unlocksOther')}</p>
             <ul className="flex flex-col gap-2">
@@ -124,11 +126,43 @@ function RatingSheetBody({ userId, self, name }: { userId: string; self: boolean
   );
 }
 
+/** The rating tiers with their ranges; the current one is marked (word + check, not colour alone). */
+export function TierLegend({ rating }: { rating: number }) {
+  const t = useTranslations('tiers');
+  const current = tierForRating(rating);
+  return (
+    <section className="flex flex-col gap-2 rounded-2xl border bg-card p-4" aria-labelledby="tier-legend-heading" data-testid="tier-legend">
+      <h3 id="tier-legend-heading" className="font-medium">
+        {t('legendTitle')}
+      </h3>
+      <p className="text-sm text-muted-foreground">{t('legendHint')}</p>
+      <ul className="flex flex-col gap-1.5">
+        {tierRanges()
+          .slice()
+          .reverse()
+          .map((r) => (
+            <li key={r.tier} className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm', r.tier === current && 'bg-muted')} data-tier={r.tier} data-current={r.tier === current || undefined}>
+              {r.tier === 'none' ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-semibold text-muted-foreground">—</span> : <TierBadge tier={r.tier} />}
+              <span className="text-muted-foreground tabular-nums">{t('range', { min: r.min, max: r.max })}</span>
+              {r.tier === 'none' ? <span className="text-muted-foreground">{t('name.none')}</span> : null}
+              {r.tier === current ? (
+                <span className="ms-auto inline-flex items-center gap-1 font-medium">
+                  <Check aria-hidden="true" className="size-4 text-success" />
+                  {t('current')}
+                </span>
+              ) : null}
+            </li>
+          ))}
+      </ul>
+    </section>
+  );
+}
+
 function EventRow({ event }: { event: RatingEventDto }) {
   const t = useTranslations('rating.history');
   const format = useFormatter();
   const locale = useLocale();
-  const href = event.refId && (event.reason === 'help_confirmed') ? `/sos/${event.refId}` : null;
+  const href = event.refId && event.reason === 'help_confirmed' ? `/sos/${event.refId}` : null;
   const body = (
     <>
       <span className="flex min-w-0 flex-1 flex-col">
@@ -195,7 +229,7 @@ function ReviewRow({ review }: { review: ReviewDto }) {
   return (
     <article className="flex gap-3 px-4 py-3" data-testid="review">
       <Link href={`/u/${review.author.id}`} tabIndex={-1} aria-hidden="true">
-        <Avatar id={review.author.id} name={name} src={review.author.avatarUrl} size="md" decorative />
+        <UserAvatar user={{ ...review.author, name: name }} size="md" decorative />
       </Link>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

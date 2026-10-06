@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useId, type ReactNode, type TdHTMLAttributes, type ThHTMLAttributes } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -116,7 +116,7 @@ export function UserCell({ user, href = true, sub }: { user: (Pick<UserMini, 'id
   const label = user.name || (user.nickname ? `@${user.nickname}` : t('common.noName'));
   const content = (
     <>
-      <Avatar id={user.id} name={label} src={user.avatarUrl} size="sm" decorative />
+      <UserAvatar user={{ ...user, name: label }} size="sm" decorative />
       <span className="flex min-w-0 flex-col">
         <span className="truncate font-medium text-foreground">{label}</span>
         {user.nickname ? <span className="truncate text-xs text-muted-foreground">@{user.nickname}</span> : null}

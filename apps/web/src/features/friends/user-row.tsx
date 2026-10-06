@@ -3,11 +3,11 @@
 import type { UserPublic } from '@autoc/shared';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { RatingBadge } from '@/components/ui/rating-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type RowUser = Pick<UserPublic, 'id' | 'name' | 'nickname' | 'avatarUrl' | 'rating' | 'primaryVehicle'>;
+type RowUser = Pick<UserPublic, 'id' | 'name' | 'nickname' | 'avatarUrl' | 'rating' | 'primaryVehicle'> & Partial<Pick<UserPublic, 'isPremium' | 'tier'>>;
 
 /**
  * A driver in a list: the identity part links to the profile; actions sit beside it (not inside the
@@ -21,10 +21,11 @@ export function UserRow({ user, meta, action }: { user: RowUser; meta?: ReactNod
         href={`/u/${user.id}`}
         className="-m-1 flex min-w-0 flex-1 basis-56 items-center gap-3 rounded-xl p-1 hover:bg-accent focus-ring"
       >
-        <Avatar id={user.id} name={user.name} src={user.avatarUrl} size="md" decorative />
+        <UserAvatar user={{ ...user, name: user.name }} size="md" decorative />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[0.9375rem] font-medium text-foreground">{user.name}</span>
+            {user.isPremium ? <PremiumBadge compact /> : null}
             <RatingBadge rating={user.rating} size="sm" className="shrink-0" />
           </span>
           <span className="truncate text-sm text-muted-foreground">

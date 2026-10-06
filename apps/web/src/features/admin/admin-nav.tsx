@@ -13,6 +13,7 @@ export const ADMIN_SECTIONS = [
   { key: 'communities', href: '/admin/communities' },
   { key: 'services', href: '/admin/services' },
   { key: 'visits', href: '/admin/visits' },
+  { key: 'violations', href: '/admin/violations' },
   { key: 'fraud', href: '/admin/fraud' },
   { key: 'audit', href: '/admin/audit' },
 ] as const;

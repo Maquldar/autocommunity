@@ -37,7 +37,8 @@
     "events": "Events",
     "notifications": "Notifications",
     "settings": "Settings",
-    "friends": "Friends"
+    "friends": "Friends",
+    "wallet": "Wallet"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -101,7 +102,25 @@
     "alreadyMember": "You're already a member or your request is pending",
     "ownerCannotLeave": "The owner can't leave. Transfer ownership or delete the community first.",
     "chatReadOnly": "This SOS chat is closed. It became read-only 24 hours after the SOS ended.",
-    "locationRequired": "Share your location first."
+    "locationRequired": "Share your location first.",
+    "insufficientFunds": "Not enough coins on your balance.",
+    "walletFrozen": "Your wallet is frozen. Coin operations are suspended for now.",
+    "recipientUnavailable": "This driver can't receive coins right now.",
+    "transferDailyCap": "Daily transfer limit reached. You can still send {remaining, number} coins today.",
+    "idempotencyKeyReused": "This transfer was already sent with other details. Open the dialog again.",
+    "accountTooNew": "Your account is too new for this yet.",
+    "topupNotPending": "This top-up is already finished. Start a new one.",
+    "topupExpired": "This top-up has expired. Start a new one.",
+    "paymentDeclined": "The card was declined.",
+    "alreadyPremium": "Premium is already active.",
+    "notPremium": "You don't have premium.",
+    "walletAlreadyFrozen": "The wallet is already frozen.",
+    "walletNotFrozen": "The wallet isn't frozen.",
+    "alreadyVoted": "You've already voted for this driver recently.",
+    "mediaLimit": "You can attach up to {max} photos.",
+    "violationInvalidState": "This violation has already been decided. Refresh the page.",
+    "alreadyDisputed": "This violation is already disputed.",
+    "ratingTooLow": "You need a trust rating of at least {min} for this."
   },
   "form": {
     "required": "Required field",
@@ -506,7 +525,21 @@
     "friendsLinkHint": "Your friends and friend requests",
     "sosHistoryLink": "SOS history",
     "sosHistoryHint": "Help you asked for and drivers you helped",
-    "report": "Report driver"
+    "report": "Report driver",
+    "transfer": "Send coins",
+    "tabs": {
+      "label": "Profile sections",
+      "overview": "Profile",
+      "votes": "Votes"
+    },
+    "premiumLink": "Premium",
+    "premiumActive": "Active",
+    "premiumHint": "Badge, frame and doubled limits",
+    "violationsLink": "My violation reports",
+    "violationsHint": "Reports you sent and their status",
+    "walletLink": "Wallet",
+    "walletHint": "Balance, top-up and transfers",
+    "walletFrozen": "Frozen"
   },
   "vehicles": {
     "title": "My cars",
@@ -542,7 +575,104 @@
       "yearRange": "Enter a year from {min} to {max}",
       "plate": "Licence plate (optional)",
       "plateHint": "Never shown on the map. Only you and your friends see it.",
-      "plateFormat": "Use latin letters and digits only"
+      "plateFormat": "Use latin letters and digits only",
+      "vin": "VIN",
+      "vinHint": "17 characters. Only you see it.",
+      "vinLetters": "A VIN has no I, O or Q.",
+      "vinFormat": "17 latin letters and digits (no I, O, Q).",
+      "engineVolume": "Engine, l",
+      "engineVolumeHint": "For example 2.5",
+      "engineRange": "From {min} to {max} l.",
+      "mileage": "Mileage, km",
+      "mileageHint": "Whole kilometres",
+      "mileageRange": "From 0 to {max, number} km.",
+      "fuel": "Fuel",
+      "transmission": "Transmission",
+      "drive": "Drive",
+      "bodyType": "Body",
+      "color": "Colour",
+      "description": "About the car",
+      "descriptionHint": "Tuning, condition, anything worth knowing.",
+      "notSet": "Not specified"
+    },
+    "detailsTitle": "Details",
+    "detailsHint": "All optional. The VIN is visible only to you.",
+    "photosTitle": "Photos",
+    "photosHint": "Up to {max} photos of your car.",
+    "premiumMore": "With premium — up to {max}.",
+    "enums": {
+      "fuel": {
+        "petrol": "Petrol",
+        "diesel": "Diesel",
+        "gas": "Gas",
+        "hybrid": "Hybrid",
+        "electric": "Electric"
+      },
+      "transmission": {
+        "manual": "Manual",
+        "automatic": "Automatic",
+        "robot": "Robotised",
+        "cvt": "CVT"
+      },
+      "drive": {
+        "fwd": "Front-wheel",
+        "rwd": "Rear-wheel",
+        "awd": "All-wheel"
+      },
+      "bodyType": {
+        "sedan": "Sedan",
+        "hatchback": "Hatchback",
+        "wagon": "Estate",
+        "suv": "SUV",
+        "crossover": "Crossover",
+        "coupe": "Coupé",
+        "minivan": "Minivan",
+        "pickup": "Pickup",
+        "van": "Van"
+      },
+      "color": {
+        "white": "White",
+        "black": "Black",
+        "silver": "Silver",
+        "gray": "Grey",
+        "red": "Red",
+        "blue": "Blue",
+        "green": "Green",
+        "brown": "Brown",
+        "beige": "Beige",
+        "yellow": "Yellow",
+        "orange": "Orange",
+        "other": "Other"
+      }
+    },
+    "page": {
+      "metaTitle": "Car",
+      "loading": "Loading car…",
+      "notFound": "Car not found",
+      "notFoundHint": "It was deleted or the link is wrong.",
+      "backToProfile": "Go to my profile",
+      "subtitle": "{year} model year",
+      "owner": "Owner",
+      "tabsLabel": "Car sections",
+      "tabs": {
+        "details": "Details",
+        "violations": "Violations"
+      },
+      "ownerViolationsHint": "Reports about your car appear here while moderators review them. You can dispute a report.",
+      "report": "Report a violation",
+      "engineValue": "{value} l",
+      "mileageValue": "{value, number} km",
+      "noDetails": "The owner hasn't added details yet.",
+      "facts": {
+        "plate": "Licence plate",
+        "engineVolume": "Engine",
+        "fuel": "Fuel",
+        "transmission": "Transmission",
+        "drive": "Drive",
+        "bodyType": "Body",
+        "color": "Colour",
+        "mileage": "Mileage"
+      }
     }
   },
   "onboarding": {
@@ -651,7 +781,9 @@
     "reports": {
       "title": "Reports",
       "mine": "My reports",
-      "hint": "What you reported and what moderators decided"
+      "hint": "What you reported and what moderators decided",
+      "violations": "My violation reports",
+      "violationsHint": "Violations you reported on cars"
     }
   },
   "legal": {
@@ -921,7 +1053,15 @@
       "eventCancelled": "<b>{title}</b> was cancelled",
       "eventReminder": "Starting soon: <b>{title}</b>, {when}",
       "postComment": "<b>{name}</b> commented on your post: {preview}",
-      "postLike": "<b>{name}</b> liked your post"
+      "postLike": "<b>{name}</b> liked your post",
+      "walletReceived": "<b>{name}</b> sent you {amount, plural, one {# coin} other {# coins}}",
+      "walletAdmin": "{action, select, freeze {Your wallet was frozen by a moderator} unfreeze {Your wallet was unfrozen} other {A moderator {sign, select, minus {took away} other {credited you}} {amount, plural, one {# coin} other {# coins}}. Balance: {balance, number}}}",
+      "premiumReminder": "{variant, select, ends {Premium ends on {date}} low {Premium renews on {date} for {price, number} coins, but your balance is too low} other {Premium renews on {date}: {price, number} coins will be charged}}",
+      "premiumRenewed": "Premium renewed until {date}: {price, number} coins charged",
+      "premiumExpired": "{reason, select, insufficient_funds {Premium ended: not enough coins to renew} wallet_frozen {Premium ended: your wallet is frozen} other {Premium ended}}",
+      "voteReceived": "A driver gave you a thumbs down: {reason}",
+      "violationReported": "Violation reported on your <b>{vehicle}</b>: {category}. Moderators will review it",
+      "violationStatus": "{status, select, approved {{role, select, submitter {Your report was confirmed: {category}} other {A violation on your car was confirmed: {category}}}} rejected {Your report was rejected: {category}} removed {A violation on your car was removed: {category}} other {Violation updated: {category}}}"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
@@ -930,7 +1070,10 @@
     "open": "Open",
     "someCommunity": "a community",
     "distanceUnknown": "nearby",
-    "until": "until {date}"
+    "until": "until {date}",
+    "someReason": "no reason given",
+    "someViolation": "a violation",
+    "someCar": "car"
   },
   "communities": {
     "metaTitle": "Communities",
@@ -1915,7 +2058,8 @@
       "services": "Services",
       "visits": "Photo visits",
       "fraud": "Fraud flags",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "violations": "Violations"
     },
     "notFound": {
       "title": "Page not found",
@@ -2136,7 +2280,11 @@
         "matches": "matches",
         "phone": "phone",
         "lockouts": "lockouts",
-        "helps": "mutual helps, 7 days"
+        "helps": "mutual helps, 7 days",
+        "senders": "new-account senders",
+        "total": "coins",
+        "downvotes": "downvotes",
+        "rejected": "rejected reports"
       }
     },
     "audit": {
@@ -2367,6 +2515,97 @@
       "rejectDescription": "The driver is notified; no review is possible for this visit.",
       "approved": "Visit approved",
       "rejected": "Visit rejected"
+    },
+    "violations": {
+      "title": "Violations",
+      "description": "Reports about cars. Approve only with clear evidence; the owner loses 5 rating points.",
+      "status": "Status",
+      "empty": "The queue is empty",
+      "emptyHint": "New reports appear here.",
+      "penaltyApplied": "Penalty applied",
+      "occurred": "happened {date}",
+      "evidence": "Evidence",
+      "dispute": "Owner's dispute",
+      "owner": "Owner",
+      "submitter": "Reported by",
+      "rejectedCount": "{count, plural, one {# rejected report} other {# rejected reports}}",
+      "decisionNote": "Decision note",
+      "reject": "Reject",
+      "approve": "Approve",
+      "remove": "Remove",
+      "uphold": "Keep (reject dispute)",
+      "dialogs": {
+        "approve": {
+          "title": "Approve this violation?",
+          "description": "It becomes public on the car and the owner gets a −5 penalty.",
+          "done": "Violation approved"
+        },
+        "reject": {
+          "title": "Reject this report?",
+          "description": "It stays hidden. Repeated false reports flag the reporter.",
+          "done": "Report rejected"
+        },
+        "uphold": {
+          "title": "Keep the violation?",
+          "description": "The dispute is rejected and the violation stays public with its penalty.",
+          "done": "Violation kept"
+        },
+        "remove": {
+          "title": "Remove the violation?",
+          "description": "It disappears from the car and the penalty is reversed.",
+          "done": "Violation removed"
+        }
+      }
+    },
+    "wallet": {
+      "title": "Wallet",
+      "adjust": "Adjust balance",
+      "unfreeze": "Unfreeze",
+      "freeze": "Freeze wallet",
+      "balance": "Balance",
+      "state": "State",
+      "frozen": "Frozen",
+      "active": "Active",
+      "premium": "Premium",
+      "premiumCancelled": "Active, auto-renew off",
+      "premiumActive": "Active",
+      "premiumNone": "None",
+      "sentLast24h": "Sent in 24 h",
+      "kind": "Operation",
+      "noTransactions": "No operations",
+      "ledger": "Wallet operations",
+      "balanceAfter": "balance {balance}",
+      "adjustTitle": "Adjust {name}'s balance",
+      "adjustDescription": "Positive credits, negative debits. The user sees the note.",
+      "adjusted": "Balance adjusted",
+      "amount": "Amount, coins",
+      "amountHint": "For example +500 or −200, at most {max}",
+      "amountErrors": {
+        "required": "Enter an amount.",
+        "zero": "The amount can't be 0.",
+        "notWhole": "Whole coins with an optional sign.",
+        "tooLarge": "Too large.",
+        "belowZero": "The balance ({balance}) can't go below 0."
+      },
+      "unfreezeTitle": "Unfreeze {name}'s wallet?",
+      "freezeTitle": "Freeze {name}'s wallet?",
+      "unfreezeDescription": "Top-ups, transfers and premium payments work again.",
+      "freezeDescription": "Top-ups, transfers in and out, subscribing and renewals stop. The balance stays.",
+      "unfrozen": "Wallet unfrozen",
+      "frozenDone": "Wallet frozen"
+    },
+    "votes": {
+      "title": "Votes received",
+      "filter": "Votes",
+      "all": "All",
+      "up": "Up",
+      "down": "Down",
+      "empty": "No votes",
+      "removeTitle": "Remove this vote?",
+      "removeDescription": "The vote is deleted and the user's rating is recalculated.",
+      "remove": "Remove",
+      "removed": "Vote removed",
+      "weight": "weight {weight}"
     }
   },
   "events": {
@@ -2619,6 +2858,400 @@
       "invalidOption": "This option no longer exists. Reload the post.",
       "alreadyReported": "You've already reported this; moderators are on it.",
       "rateLimited": "Too many posts or comments for now (limits: {posts} posts a day, {comments} comments an hour). Try again later."
+    }
+  },
+  "tiers": {
+    "premium": "Premium",
+    "name": {
+      "warning": "Low trust",
+      "none": "No tier",
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "platinum": "Platinum"
+    },
+    "legendTitle": "Rating tiers",
+    "legendHint": "The tier shows as a ring around the avatar. Below 30 drivers get a red “low trust” mark.",
+    "range": "{min}–{max}",
+    "current": "Now"
+  },
+  "photos": {
+    "photoAlt": "Photo {index}",
+    "remove": "Remove photo {index}",
+    "uploading": "Uploading photo…",
+    "add": "Add photo",
+    "count": "{count} of {max}"
+  },
+  "wallet": {
+    "title": "Wallet",
+    "description": "Coins for premium and gifts to other drivers.",
+    "loading": "Loading wallet…",
+    "balance": "Balance",
+    "coins": "{amount, plural, one {# coin} other {# coins}}",
+    "rate": "1 coin = 1 ₸",
+    "noCashOut": "Coins can't be cashed out or exchanged back for money.",
+    "frozen": "Your wallet is frozen by a moderator: top-ups, transfers and premium payments are paused. Your balance is safe.",
+    "topupAction": "Top up",
+    "transferAction": "Send coins",
+    "premiumRow": "Premium",
+    "premiumEnds": "Active, ends on {date}",
+    "premiumRenews": "Active, renews on {date}",
+    "premiumOffer": "{price, plural, one {# coin} other {# coins}} a month: badge, frame and doubled limits",
+    "topup": {
+      "title": "Top up",
+      "description": "Choose an amount. You'll pay on the next screen.",
+      "presets": "Amount",
+      "amount": "Other amount, coins",
+      "amountHint": "From {min, number} to {max, number} coins",
+      "amountErrors": {
+        "required": "Enter an amount.",
+        "notWhole": "Enter a whole number of coins.",
+        "tooSmall": "At least {min, number} coins.",
+        "tooLarge": "At most {max, number} coins.",
+        "overBalance": "More than your balance.",
+        "overDaily": "More than today's limit."
+      },
+      "cancel": "Cancel",
+      "continue": "Continue",
+      "continueAmount": "Pay {amount, number} ₸"
+    },
+    "checkout": {
+      "title": "Payment",
+      "description": "Top up your coin balance.",
+      "loading": "Loading payment…",
+      "notFound": "Payment not found",
+      "notFoundHint": "The link is wrong or the payment belongs to another account.",
+      "backToWallet": "Back to wallet",
+      "toPay": "To pay",
+      "tenge": "{amount, number} ₸",
+      "youGet": "You get {coins}",
+      "demoNotice": "Demo payment: no real money is charged. Use the test card below.",
+      "succeeded": "Payment successful",
+      "succeededHint": "{coins} were added to your balance.",
+      "declined": "Card declined",
+      "declinedHint": "The bank declined the card. Try again with another card (in the demo, the test card).",
+      "expired": "Payment expired",
+      "expiredHint": "A payment must be completed within 30 minutes. Start a new one.",
+      "tryAgain": "Try again",
+      "toast": "Balance topped up: +{coins}",
+      "formLabel": "Card details",
+      "cardNumber": "Card number",
+      "cardErrors": {
+        "number": {
+          "required": "Enter the card number.",
+          "invalid": "A card number has 12 to 19 digits."
+        },
+        "expiry": {
+          "invalid": "Use MM/YY.",
+          "past": "The card has expired."
+        },
+        "cvc": "3 or 4 digits."
+      },
+      "testCard": "Test card {card}",
+      "useTestCard": "Use it",
+      "expiry": "Expiry (optional)",
+      "expiryPlaceholder": "MM/YY",
+      "cvc": "CVC (optional)",
+      "pay": "Pay {amount, number} ₸"
+    },
+    "transfer": {
+      "title": "Send coins",
+      "description": "A gift to another driver. Coins can't be returned or cashed out.",
+      "sent": "{coins} sent to {name}",
+      "amountErrors": {
+        "required": "Enter an amount.",
+        "notWhole": "Enter a whole number of coins.",
+        "tooSmall": "At least {min, number} coins.",
+        "tooLarge": "At most {max, number} coins per transfer.",
+        "overBalance": "That's more than your balance ({balance, number}).",
+        "overDaily": "Today you can send {remaining, number} more coins."
+      },
+      "confirmTitle": "Check the transfer",
+      "confirmDescription": "Make sure this is the right driver.",
+      "final": "Transfers are final: coins can't be returned.",
+      "back": "Back",
+      "send": "Send {coins}",
+      "presets": "Quick amounts",
+      "amount": "Amount, coins",
+      "amountHint": "Balance {balance, number} · today you can send {remaining, number} more",
+      "message": "Message (optional)",
+      "messageHint": "The recipient sees it with the transfer.",
+      "cancel": "Cancel",
+      "next": "Next",
+      "recipient": "Recipient",
+      "change": "Change",
+      "searchHint": "Search by nickname or name (at least 2 characters).",
+      "recipientRequired": "Choose who gets the coins.",
+      "searchPlaceholder": "@nickname",
+      "searching": "Searching…",
+      "noResults": "No drivers found.",
+      "results": "Drivers found"
+    },
+    "history": {
+      "title": "History",
+      "filterLabel": "Show",
+      "filters": {
+        "all": "All",
+        "topup": "Top-ups",
+        "transfer_in": "Received",
+        "transfer_out": "Sent",
+        "subscription": "Premium",
+        "admin_adjust": "Corrections"
+      },
+      "emptyTitle": "No operations yet",
+      "emptyHint": "Top up your balance to send coins or pay for premium.",
+      "emptyFiltered": "Nothing of this kind yet.",
+      "someone": "a driver",
+      "kinds": {
+        "topup": "Top-up",
+        "transfer_in": "From {name}",
+        "transfer_out": "To {name}",
+        "subscription": "Premium for 30 days",
+        "admin_adjust": "Correction by a moderator",
+        "refund": "Refund"
+      },
+      "kindNames": {
+        "topup": "Top-up",
+        "transfer_in": "Transfer received",
+        "transfer_out": "Transfer sent",
+        "subscription": "Premium",
+        "admin_adjust": "Admin adjustment",
+        "refund": "Refund"
+      },
+      "balanceAfter": "balance {balance}",
+      "credit": "credit",
+      "debit": "debit"
+    },
+    "errors": {
+      "insufficientFunds": "Not enough coins: your balance is {balance, number}.",
+      "walletFrozen": "Your wallet is frozen. Coin operations are paused.",
+      "recipientUnavailable": "This driver can't receive coins right now.",
+      "recipientNotFound": "Driver not found.",
+      "self": "You can't send coins to yourself.",
+      "dailyCap": "Daily limit is {cap, number} coins. Today you can send {remaining, number} more.",
+      "keyReused": "This transfer was already sent with other details. Close the dialog and start again.",
+      "accountTooNew": "New accounts can send coins after 24 hours. Try again in {hours, plural, one {# hour} other {# hours}}.",
+      "ratingTooLow": "You need a trust rating of at least {min} to send coins.",
+      "rateLimited": "Too many operations. Try again in {minutes, plural, one {# minute} other {# minutes}}.",
+      "declined": "The card was declined. In the demo only the test card goes through.",
+      "topupNotPending": "This payment is already finished. Start a new top-up.",
+      "topupExpired": "This payment has expired. Start a new top-up.",
+      "alreadyPremium": "Premium is already active.",
+      "notPremium": "You don't have premium. Subscribe instead.",
+      "validation": "Check the amount and try again."
+    }
+  },
+  "premium": {
+    "title": "Premium",
+    "description": "Support AutoCommunity and get more room for your cars, posts and clubs.",
+    "loading": "Loading premium…",
+    "price": "{price, plural, one {# coin} other {# coins}} for {days} days",
+    "inactive": "Not active",
+    "endsOn": "Ends on",
+    "renewsOn": "Renews on",
+    "autoRenew": "Auto-renew",
+    "autoRenewOn": "On",
+    "autoRenewOff": "Off",
+    "balance": "Your balance: {coins}",
+    "lowForRenewal": "Not enough coins to renew: top up {coins} before the period ends.",
+    "insufficient": "You need {coins} more to subscribe.",
+    "topup": "Top up",
+    "cancel": "Turn off auto-renew",
+    "resume": "Turn auto-renew back on",
+    "subscribe": "Subscribe for {price, number} coins",
+    "subscribeTitle": "Subscribe to premium?",
+    "subscribeDescription": "{price, number} coins will be charged now for {days} days. It renews automatically; you can turn that off any time.",
+    "subscribeConfirm": "Pay {price, number} coins",
+    "cancelTitle": "Turn off auto-renew?",
+    "cancelDescription": "Premium stays active until {date}, then ends. Nothing is refunded.",
+    "cancelConfirm": "Turn off",
+    "done": {
+      "subscribe": "Premium is active",
+      "cancel": "Auto-renew is off",
+      "resume": "Auto-renew is on"
+    },
+    "perks": {
+      "title": "What you get",
+      "badge": "Premium badge and profile frame",
+      "badgeHint": "A crown next to your name and a frame around your avatar everywhere.",
+      "vehicles": {
+        "title": "Up to {premium} cars instead of {base}"
+      },
+      "postMedia": {
+        "title": "Up to {premium} photos in a post instead of {base}"
+      },
+      "communitiesOwned": {
+        "title": "Create up to {premium} communities instead of {base}"
+      },
+      "communityMemberships": {
+        "title": "Join up to {premium} communities instead of {base}"
+      },
+      "now": "Your limit now: {value}",
+      "sosFree": "SOS is free for everyone",
+      "sosFreeHint": "Help on the road never depends on premium.",
+      "keepData": "If premium ends, nothing is deleted: you just can't add more above the basic limits."
+    },
+    "limitHint": {
+      "VEHICLE_LIMIT": "With premium you can add up to {premiumLimit} cars (now {limit}).",
+      "MEDIA_LIMIT": "With premium you can attach up to {premiumLimit} photos (now {limit}).",
+      "COMMUNITY_LIMIT": "With premium you can own up to {premiumLimit} communities (now {limit}).",
+      "MEMBERSHIP_LIMIT": "With premium you can be in up to {premiumLimit} communities (now {limit}).",
+      "link": "Premium"
+    }
+  },
+  "votes": {
+    "title": "Driver votes",
+    "loading": "Loading votes…",
+    "up": "{count, plural, one {# up} other {# up}}",
+    "down": "{count, plural, one {# down} other {# down}}",
+    "reasonsLabel": "Reasons",
+    "reasons": {
+      "helped_on_road": "Helped on the road",
+      "polite": "Polite",
+      "good_driver": "Good driver",
+      "rude": "Rude",
+      "dangerous_driving": "Dangerous driving",
+      "scam": "Scam",
+      "other": "Other"
+    },
+    "anonymous": "Votes are anonymous. You can vote for the same driver once every {days} days; trusted drivers' votes weigh more.",
+    "myVote": "You voted {value, select, up {thumbs up} other {thumbs down}}: {reason}",
+    "againIn": "You can vote again in {days, plural, one {# day} other {# days}}",
+    "againNow": "You can vote again",
+    "notice": {
+      "self": "This is you.",
+      "accountTooNew": "You can vote once your account is {days} days old.",
+      "ratingTooLow": "You need a trust rating of at least {min} to vote.",
+      "alreadyVoted": "You've voted for this driver. You can vote again in {days, plural, one {# day} other {# days}}.",
+      "dailyLimit": "You've used today's votes. Come back tomorrow."
+    },
+    "voteUp": "Thumbs up",
+    "voteDown": "Thumbs down",
+    "voteFor": "Vote for {name}",
+    "errors": {
+      "alreadyVoted": "You've already voted. You can vote again in {days, plural, one {# day} other {# days}}.",
+      "accountTooNew": "You can vote once your account is {days} days old.",
+      "accountTooNewIn": "You can vote in {days, plural, one {# day} other {# days}}.",
+      "ratingTooLow": "You need a trust rating of at least {min} to vote.",
+      "dailyLimit": "That's {max} votes in 24 hours. Try again tomorrow.",
+      "self": "You can't vote for yourself.",
+      "reasonMismatch": "Choose a reason that matches your vote."
+    },
+    "sent": "Thanks, your vote counts",
+    "dialog": {
+      "titleUp": "Thumbs up for {name}",
+      "titleDown": "Thumbs down for {name}",
+      "description": "Votes are final and anonymous. One vote per driver every {days} days.",
+      "reason": "Why?",
+      "reasonRequired": "Choose a reason.",
+      "comment": "Comment (optional)",
+      "commentHint": "Only moderators see who wrote it.",
+      "cancel": "Cancel",
+      "submit": "Vote"
+    },
+    "receivedTitle": "Votes about you",
+    "receivedHint": "What other drivers think. Voters stay anonymous.",
+    "emptyTitle": "No votes yet",
+    "emptyHint": "Drivers you meet on the road can vote for you here."
+  },
+  "violations": {
+    "categories": {
+      "speeding": "Speeding",
+      "red_light": "Running a red light",
+      "drunk_driving": "Drunk driving",
+      "wrong_lane": "Wrong lane / oncoming lane",
+      "no_license": "Driving without a licence",
+      "accident_fled": "Leaving the scene of an accident",
+      "dangerous_driving": "Dangerous driving",
+      "parking": "Parking violation",
+      "other": "Other violation"
+    },
+    "statuses": {
+      "pending": "Under review",
+      "approved": "Confirmed",
+      "rejected": "Rejected",
+      "disputed": "Disputed",
+      "removed": "Removed"
+    },
+    "codeTypes": {
+      "koap": "Administrative Code",
+      "uk": "Criminal Code"
+    },
+    "code": "Code",
+    "occurredAt": "Date",
+    "vehicle": "Car",
+    "photos": "Evidence photos",
+    "listLabel": "Violations",
+    "emptyTitle": "No confirmed violations",
+    "emptyHint": "Only violations confirmed by moderators are shown.",
+    "emptyOwner": "Nothing here. You'll see reports about your car here while they are reviewed.",
+    "pendingOwnerHint": "Moderators are reviewing this report. It isn't public until it's confirmed.",
+    "disputedHint": "Moderators are reviewing your dispute.",
+    "dispute": {
+      "yours": "Your dispute",
+      "action": "Dispute",
+      "title": "Dispute this violation",
+      "description": "Explain why the report is wrong. A moderator will review it.",
+      "descriptionApproved": "Explain why it's wrong. The penalty stays while the dispute is reviewed.",
+      "text": "Your explanation",
+      "textHint": "At least {min} characters.",
+      "textErrors": {
+        "short": "At least {min} characters.",
+        "long": "At most {max} characters.",
+        "invalid": "Remove invisible characters."
+      },
+      "sent": "Dispute sent",
+      "cancel": "Cancel",
+      "submit": "Send dispute"
+    },
+    "errors": {
+      "accountTooNew": "You can report violations once your account is at least {days, plural, one {# day} other {# days}} old.",
+      "ratingTooLow": "You need a trust rating of at least {min} to report violations.",
+      "rateLimited": "That's {max} reports in 24 hours. Try again tomorrow.",
+      "invalidUpload": "A photo can't be used. Upload it again.",
+      "alreadyDisputed": "You've already disputed this violation.",
+      "invalidState": "This violation can't be disputed any more.",
+      "notOwner": "Only the car's owner can dispute.",
+      "notFound": "The car or the violation was not found."
+    },
+    "form": {
+      "title": "Report a violation",
+      "description": "{name}: what happened, when, and photo evidence.",
+      "moderationNote": "It's published only after a moderator approves it. The owner may dispute it.",
+      "falseReportNote": "False reports lower your trust rating.",
+      "category": "Violation",
+      "categoryPlaceholder": "Choose",
+      "codeType": "Code",
+      "codeTypeHint": "Most traffic offences fall under the Administrative Code; serious ones under the Criminal Code.",
+      "article": "Article (optional)",
+      "articleHint": "If you know it, e.g. “Art. 610”.",
+      "articlePlaceholder": "Art. 610",
+      "date": "Date",
+      "text": "What happened",
+      "textHint": "At least {min} characters: where, when, what you saw.",
+      "photos": "Evidence photos",
+      "photosHint": "{min} to {max} photos. Don't show faces of bystanders.",
+      "cancel": "Cancel",
+      "submit": "Send for review",
+      "sent": "Report sent for review",
+      "close": "Close",
+      "errors": {
+        "categoryRequired": "Choose the violation.",
+        "dateRequired": "Choose the date.",
+        "dateRange": "The date can't be in the future or more than 3 years ago.",
+        "descriptionShort": "At least {min} characters.",
+        "descriptionLong": "At most {max} characters.",
+        "invalidChars": "Remove invisible characters.",
+        "photosRequired": "Add at least {photosMin} photo.",
+        "photosTooMany": "At most {photosMax} photos.",
+        "articleLong": "At most {article} characters."
+      }
+    },
+    "mine": {
+      "title": "My violation reports",
+      "description": "Violations you reported and what moderators decided.",
+      "emptyTitle": "No reports yet",
+      "emptyHint": "Report a violation from a car's page, on the Violations tab."
     }
   }
 }

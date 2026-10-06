@@ -20,6 +20,7 @@ import { RadioCard, RadioGroup } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useErrorMessage } from '@/hooks/use-error-message';
 import { applyApiError } from '@/lib/forms/apply-api-error';
+import { PremiumLimitHint } from '@/features/premium/limit-hint';
 import { fieldErrorText } from '@/lib/forms/field-error';
 import { useZodErrorMap } from '@/lib/forms/zod-error-map';
 import { AvatarPicker, type AvatarValue } from '@/features/profile/avatar-picker';
@@ -58,6 +59,7 @@ export function CommunityForm({ avatarId, initial, mode, onSubmit, footer, formI
   const privacyId = useId();
   const [avatar, setAvatar] = useState<AvatarValue>({ url: initial?.avatarUrl ?? null });
   const [uploading, setUploading] = useState(false);
+  const [submitError, setSubmitError] = useState<unknown>(null);
   const onBusyChange = useCallback((busy: boolean) => setUploading(busy), []);
   const ownerFields = mode !== 'moderator';
 
@@ -81,6 +83,7 @@ export function CommunityForm({ avatarId, initial, mode, onSubmit, footer, formI
         { ...dirtyFields, avatar: avatar.uploadId !== undefined } as Partial<Record<keyof CommunityFormInput | 'avatar', boolean>>,
       );
     } catch (error) {
+      setSubmitError(error);
       applyApiError(form, error, errorMessage(error), { fieldByCode: { COMMUNITY_NAME_TAKEN: 'name' } });
     }
   });
@@ -167,6 +170,7 @@ export function CommunityForm({ avatarId, initial, mode, onSubmit, footer, formI
           {errors.root.server.message}
         </p>
       ) : null}
+      {errors.root?.server ? <PremiumLimitHint error={submitError} /> : null}
 
       {footer({ busy: uploading, submitting: isSubmitting })}
     </form>

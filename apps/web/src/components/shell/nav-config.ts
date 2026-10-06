@@ -9,6 +9,7 @@ import {
   Siren,
   UserRound,
   UsersRound,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'services', href: '/services', icon: Wrench, labelKey: 'services', enabled: true, placement: 'secondary' },
   { key: 'events', href: '/events', icon: CalendarDays, labelKey: 'events', enabled: true, placement: 'secondary' },
   { key: 'friends', href: '/friends', icon: Handshake, labelKey: 'friends', enabled: true, placement: 'secondary' },
+  { key: 'wallet', href: '/wallet', icon: Wallet, labelKey: 'wallet', enabled: true, placement: 'secondary' },
   { key: 'notifications', href: '/notifications', icon: Bell, labelKey: 'notifications', enabled: true, placement: 'secondary' },
   { key: 'settings', href: '/settings', icon: Settings, labelKey: 'settings', enabled: true, placement: 'secondary' },
 ];

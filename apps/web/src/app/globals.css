@@ -74,6 +74,25 @@
   --trust-high-soft: #e6f5eb;
   --trust-high-foreground: #14622f;
 
+  /* Phase 9: rating tiers (avatar rings + tier badges) and premium (frame + badge). Decorative rings sit next
+     to a number or a word, never colour alone. */
+  --tier-bronze: #a0522d;
+  --tier-bronze-soft: #f8ece3;
+  --tier-bronze-foreground: #7a3d1c;
+  --tier-silver: #6b7686;
+  --tier-silver-soft: #eef0f3;
+  --tier-silver-foreground: #46505d;
+  --tier-gold: #b7860b;
+  --tier-gold-soft: #fbf3d6;
+  --tier-gold-foreground: #6f5005;
+  --tier-platinum: #4f6d8f;
+  --tier-platinum-soft: #e8eef6;
+  --tier-platinum-foreground: #2f4a69;
+  --premium: #7c3aed;
+  --premium-foreground: #ffffff;
+  --premium-soft: #f1eafd;
+  --premium-soft-foreground: #5b21b6;
+
   /* Avatar fallback palette (same in both themes; white initials on each) */
   --avatar-1: #1f5ae0;
   --avatar-2: #0f766e;
@@ -172,6 +191,23 @@
   --trust-high-soft: #12291b;
   --trust-high-foreground: #8ee0ae;
 
+  --tier-bronze: #e09a6a;
+  --tier-bronze-soft: #33221a;
+  --tier-bronze-foreground: #f2c4a3;
+  --tier-silver: #b8c1cd;
+  --tier-silver-soft: #252a31;
+  --tier-silver-foreground: #d9dee5;
+  --tier-gold: #f2c94c;
+  --tier-gold-soft: #2f2812;
+  --tier-gold-foreground: #f7dc8a;
+  --tier-platinum: #9ec3e6;
+  --tier-platinum-soft: #1b2633;
+  --tier-platinum-foreground: #c7defa;
+  --premium: #b794f6;
+  --premium-foreground: #1d0f3a;
+  --premium-soft: #2a1f40;
+  --premium-soft-foreground: #d6c2ff;
+
   --shadow-color: 220 40% 2%;
   --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.4);
   --shadow-md: 0 2px 4px hsl(var(--shadow-color) / 0.3), 0 6px 16px hsl(var(--shadow-color) / 0.4);
@@ -239,6 +275,22 @@
   --color-trust-high: var(--trust-high);
   --color-trust-high-soft: var(--trust-high-soft);
   --color-trust-high-foreground: var(--trust-high-foreground);
+  --color-tier-bronze: var(--tier-bronze);
+  --color-tier-bronze-soft: var(--tier-bronze-soft);
+  --color-tier-bronze-foreground: var(--tier-bronze-foreground);
+  --color-tier-silver: var(--tier-silver);
+  --color-tier-silver-soft: var(--tier-silver-soft);
+  --color-tier-silver-foreground: var(--tier-silver-foreground);
+  --color-tier-gold: var(--tier-gold);
+  --color-tier-gold-soft: var(--tier-gold-soft);
+  --color-tier-gold-foreground: var(--tier-gold-foreground);
+  --color-tier-platinum: var(--tier-platinum);
+  --color-tier-platinum-soft: var(--tier-platinum-soft);
+  --color-tier-platinum-foreground: var(--tier-platinum-foreground);
+  --color-premium: var(--premium);
+  --color-premium-foreground: var(--premium-foreground);
+  --color-premium-soft: var(--premium-soft);
+  --color-premium-soft-foreground: var(--premium-soft-foreground);
 
   --color-avatar-1: var(--avatar-1);
   --color-avatar-2: var(--avatar-2);

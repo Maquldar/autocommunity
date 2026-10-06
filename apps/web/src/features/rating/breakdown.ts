@@ -23,12 +23,13 @@ const RANGES: Record<BreakdownKey, [number, number]> = {
   penalties: [-100, 0],
 };
 
-const ORDER: BreakdownKey[] = ['base', 'help', 'reviews', 'activity', 'tenure', 'penalties'];
+const ORDER: BreakdownKey[] = ['base', 'help', 'reviews', 'activity', 'tenure', 'votes', 'penalties'];
 
 /** The breakdown as display rows in a fixed order, with bar fill relative to each component's cap. */
 export function breakdownRows(breakdown: RatingBreakdown): BreakdownRow[] {
   return ORDER.map((key) => {
-    const value = breakdown[key];
+    // Older API builds have no `votes` component yet: treat it as 0.
+    const value = breakdown[key] ?? 0;
     const [min, max] = RANGES[key];
     const span = value < 0 ? Math.abs(min) : max;
     return {

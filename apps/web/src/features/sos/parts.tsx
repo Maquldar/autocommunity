@@ -5,7 +5,7 @@ import { CarFront, Check, ChevronLeft, ChevronRight, CircleAlert, Info, Triangle
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useState, type ReactNode } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { EmergencyCallButton } from '@/components/ui/emergency-call-button';
@@ -96,7 +96,7 @@ export function PersonSummary({ user, children, href = true }: { user: UserPubli
   const car = user.primaryVehicle;
   const identity = (
     <>
-      <Avatar id={user.id} name={name} src={user.avatarUrl} size="lg" decorative />
+      <UserAvatar user={{ ...user, name: name }} size="lg" decorative />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="break-words text-base font-semibold leading-6">{name}</span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">

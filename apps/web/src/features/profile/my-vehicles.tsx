@@ -1,6 +1,6 @@
 'use client';
 
-import { LIMITS, type VehicleDto } from '@autoc/shared';
+import { perkLimit, PREMIUM_PERK_LIMITS, type OwnVehicleDto } from '@autoc/shared';
 import { CarFront, EllipsisVertical, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -19,6 +19,8 @@ import { IconButton } from '@/components/ui/icon-button';
 import { ListGroup } from '@/components/ui/list-item';
 import { ListItemSkeleton } from '@/components/ui/skeleton';
 import { useErrorMessage } from '@/hooks/use-error-message';
+import { useCurrentUser } from '@/lib/auth/guards';
+import Link from 'next/link';
 import { notify } from '@/lib/toast';
 import { useDeleteVehicle, useMyVehicles, useUpdateVehicle } from './queries';
 import { VehicleDialog } from './vehicle-dialog';
@@ -31,19 +33,23 @@ export function MyVehicles() {
   const vehicles = useMyVehicles();
   const update = useUpdateVehicle();
   const remove = useDeleteVehicle();
-  const [editing, setEditing] = useState<VehicleDto | null>(null);
+  const [editing, setEditing] = useState<OwnVehicleDto | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState<VehicleDto | null>(null);
+  const [deleting, setDeleting] = useState<OwnVehicleDto | null>(null);
 
+  const me = useCurrentUser();
+  const isPremium = me.isPremium === true;
+  // Premium doubles the vehicle limit (API.md §9.2); existing vehicles are kept when it ends.
+  const max = perkLimit('vehicles', isPremium);
   const count = vehicles.data?.length ?? 0;
-  const atLimit = count >= LIMITS.vehiclesPerUser;
+  const atLimit = count >= max;
 
-  function openDialog(vehicle: VehicleDto | null) {
+  function openDialog(vehicle: OwnVehicleDto | null) {
     setEditing(vehicle);
     setDialogOpen(true);
   }
 
-  async function makePrimary(vehicle: VehicleDto) {
+  async function makePrimary(vehicle: OwnVehicleDto) {
     try {
       await update.mutateAsync({ id: vehicle.id, input: { isPrimary: true } });
       notify.success(t('primarySet', { name: `${vehicle.brand} ${vehicle.model}` }));
@@ -136,7 +142,15 @@ export function MyVehicles() {
             ))}
           </ListGroup>
           <p className="px-1 text-sm text-muted-foreground">
-            {atLimit ? t('limitReached', { max: LIMITS.vehiclesPerUser }) : t('count', { count, max: LIMITS.vehiclesPerUser })}
+            {atLimit ? t('limitReached', { max }) : t('count', { count, max })}
+            {atLimit && !isPremium ? (
+              <>
+                {' '}
+                <Link href="/premium" className="rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-ring" data-testid="vehicle-premium-link">
+                  {t('premiumMore', { max: PREMIUM_PERK_LIMITS.vehicles.premium })}
+                </Link>
+              </>
+            ) : null}
           </p>
         </>
       )}

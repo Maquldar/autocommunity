@@ -1,4 +1,15 @@
-import { SOS_STATUSES, SOS_TYPES, type NotificationDto, type SosStatus, type SosType, type UserMini } from '@autoc/shared';
+import {
+  SOS_STATUSES,
+  SOS_TYPES,
+  VIOLATION_CATEGORIES,
+  VOTE_REASONS,
+  type NotificationDto,
+  type SosStatus,
+  type SosType,
+  type UserMini,
+  type ViolationCategory,
+  type VoteReason,
+} from '@autoc/shared';
 
 /**
  * Turns a NotificationDto (free-form `payload`) into what the UI renders. Phase 2 types have their own
@@ -42,6 +53,21 @@ export type NotificationView =
   | { kind: 'event_reminder'; title: string; startsAt: string | null; href: string | null }
   | { kind: 'post_comment'; user: UserMini | null; preview: string; href: string | null }
   | { kind: 'post_like'; user: UserMini | null; preview: string; href: string | null }
+  /* phase 9 (API.md §9) */
+  | { kind: 'wallet_received'; user: UserMini | null; amount: number; message: string | null; href: string }
+  | { kind: 'wallet_admin'; action: 'adjust' | 'freeze' | 'unfreeze'; amount: number | null; balance: number | null; note: string | null; href: string }
+  | { kind: 'premium_reminder'; periodEnd: string | null; autoRenew: boolean; lowBalance: boolean; price: number; href: string }
+  | { kind: 'premium_renewed'; periodEnd: string | null; price: number; balance: number | null; href: string }
+  | { kind: 'premium_expired'; reason: 'cancelled' | 'insufficient_funds' | 'wallet_frozen' | 'other'; href: string }
+  | { kind: 'vote_received'; reason: VoteReason | null; href: string }
+  | { kind: 'violation_reported'; category: ViolationCategory | null; vehicle: string; href: string | null }
+  | {
+      kind: 'violation_status';
+      category: ViolationCategory | null;
+      status: 'approved' | 'rejected' | 'removed' | 'other';
+      role: 'owner' | 'submitter';
+      href: string | null;
+    }
   | { kind: 'generic'; type: string; href: string | null };
 
 export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
@@ -96,6 +122,14 @@ function isoDate(value: unknown): string | null {
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function num(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;
 }
 
 function sosStatusEvent(event: unknown, status: SosStatus | null): SosStatusEvent {
@@ -194,6 +228,57 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
     case 'post_like': {
       const postId = safeId(payload.postId);
       return { kind: notification.type, user: parseUserMini(payload.user), preview: text(payload.preview), href: postId ? `/posts/${postId}` : null };
+    }
+    case 'wallet_received':
+      return { kind: 'wallet_received', user: parseUserMini(payload.user), amount: num(payload.amount) ?? 0, message: text(payload.message) || null, href: '/wallet' };
+    case 'wallet_admin':
+      return {
+        kind: 'wallet_admin',
+        action: oneOf(payload.action, ['adjust', 'freeze', 'unfreeze'] as const) ?? 'adjust',
+        amount: num(payload.amount),
+        balance: num(payload.balance),
+        note: text(payload.note) || null,
+        href: '/wallet',
+      };
+    case 'premium_reminder': {
+      const lowBalance = payload.lowBalance === true;
+      const autoRenew = payload.autoRenew === true;
+      return {
+        kind: 'premium_reminder',
+        periodEnd: isoDate(payload.periodEnd),
+        autoRenew,
+        lowBalance,
+        price: num(payload.priceCoins) ?? 0,
+        // A low balance before an automatic renewal sends the user to top up (same as the push).
+        href: autoRenew && lowBalance ? '/wallet' : '/premium',
+      };
+    }
+    case 'premium_renewed':
+      return { kind: 'premium_renewed', periodEnd: isoDate(payload.periodEnd), price: num(payload.priceCoins) ?? 0, balance: num(payload.balance), href: '/premium' };
+    case 'premium_expired':
+      return { kind: 'premium_expired', reason: oneOf(payload.reason, ['cancelled', 'insufficient_funds', 'wallet_frozen'] as const) ?? 'other', href: '/premium' };
+    case 'vote_received':
+      return { kind: 'vote_received', reason: oneOf(payload.reason, VOTE_REASONS), href: '/profile?tab=votes' };
+    case 'violation_reported': {
+      const vehicleId = safeId(payload.vehicleId);
+      return {
+        kind: 'violation_reported',
+        category: oneOf(payload.category, VIOLATION_CATEGORIES),
+        vehicle: text(payload.vehicle),
+        href: vehicleId ? `/vehicles/${vehicleId}?tab=violations` : null,
+      };
+    }
+    case 'violation_status': {
+      const vehicleId = safeId(payload.vehicleId);
+      const role = payload.role === 'submitter' ? 'submitter' : 'owner';
+      return {
+        kind: 'violation_status',
+        category: oneOf(payload.category, VIOLATION_CATEGORIES),
+        status: oneOf(payload.status, ['approved', 'rejected', 'removed'] as const) ?? 'other',
+        role,
+        // The owner sees it on the vehicle; a rejected submission is only in the submitter's own list.
+        href: role === 'submitter' && payload.status === 'rejected' ? '/settings/violations' : vehicleId ? `/vehicles/${vehicleId}?tab=violations` : null,
+      };
     }
     default:
       return { kind: 'generic', type: String(notification.type), href: safePath(payload.url) };

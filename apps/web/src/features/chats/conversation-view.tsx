@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useNow, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -241,6 +242,8 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
     <>
       {chat.type === 'sos' ? (
         <SosChatAvatar size="md" />
+      ) : chat.type === 'direct' && chat.peer ? (
+        <UserAvatar user={{ ...chat.peer, name: chat.title, avatarUrl: chat.avatarUrl ?? chat.peer.avatarUrl }} size="md" decorative />
       ) : (
         <Avatar
           id={chat.peer?.id ?? chat.refId ?? chat.id}
@@ -252,7 +255,10 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
         />
       )}
       <span className="flex min-w-0 flex-col">
-        <h1 className="truncate text-base font-semibold leading-6">{chat.title}</h1>
+        <h1 className="flex min-w-0 items-center gap-1 text-base font-semibold leading-6">
+          <span className="truncate">{chat.title}</span>
+          {chat.type === 'direct' && chat.peer?.isPremium ? <PremiumBadge compact /> : null}
+        </h1>
         {subtitle ? (
           <span className={typing ? 'truncate text-sm text-primary' : 'truncate text-sm text-muted-foreground'}>{subtitle}</span>
         ) : null}

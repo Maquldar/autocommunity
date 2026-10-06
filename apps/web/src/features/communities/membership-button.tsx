@@ -2,6 +2,7 @@
 
 import type { CommunityDto } from '@autoc/shared';
 import { Clock, Crown, LogOut, UserPlus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -11,12 +12,15 @@ import { useErrorMessage } from '@/hooks/use-error-message';
 import { useOnlineStatus } from '@/hooks/use-online-status';
 import { cn } from '@/lib/cn';
 import { notify } from '@/lib/toast';
+import { premiumToastAction } from '@/features/premium/limit-hint';
 import { actionFor, communityButtonState, type MembershipAction } from './membership-state';
 import { useMembershipAction } from './queries';
 
 /** Join / Request to join / Request sent (cancel) / Leave; the owner sees why they can't leave. */
 export function MembershipButton({ community, className }: { community: CommunityDto; className?: string }) {
   const t = useTranslations('communities');
+  const tp = useTranslations('premium.limitHint');
+  const router = useRouter();
   const online = useOnlineStatus();
   const errorMessage = useErrorMessage();
   const mutation = useMembershipAction(community.id);
@@ -32,7 +36,8 @@ export function MembershipButton({ community, className }: { community: Communit
       } else if (next === 'cancel') notify.success(t('toasts.cancelled'));
       else notify.success(t('toasts.left', { name: community.name }));
     } catch (error) {
-      notify.error(errorMessage(error));
+      // MEMBERSHIP_LIMIT carries the premium limit: offer the upgrade right in the toast.
+      notify.error(errorMessage(error), { action: premiumToastAction(error, tp('link'), (href) => router.push(href)) });
       throw error;
     }
   };

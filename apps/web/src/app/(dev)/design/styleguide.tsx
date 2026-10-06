@@ -70,6 +70,7 @@ import { CardSkeleton, ListItemSkeleton, Skeleton } from '@/components/ui/skelet
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PremiumBadge, TierBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
 import { notify } from '@/lib/toast';
@@ -384,6 +385,20 @@ function AvatarsSection() {
         <Avatar id="user-1" name="Asset" src={AVATAR_IMAGE} size="lg" />
         <Avatar id="community-4x4" name="Almaty 4x4 Club" size="lg" shape="square" />
         <Avatar id="community-toyota" name="Toyota Club" src={AVATAR_IMAGE} size="lg" shape="square" />
+      </Demo>
+      <Demo label="UserAvatar: rating tiers (ring) · premium (frame + crown)">
+        {[12, 40, 55, 70, 85, 95].map((rating, index) => (
+          <UserAvatar key={rating} user={{ id: `user-${index * 5 + 2}`, name: names[index]!, rating }} size="lg" />
+        ))}
+        <UserAvatar user={{ id: 'user-9', name: 'Aidana K.', rating: 85, isPremium: true }} size="lg" />
+        <UserAvatar user={{ id: 'user-1', name: 'Asset', avatarUrl: AVATAR_IMAGE, rating: 92, isPremium: true }} size="xl" />
+      </Demo>
+      <Demo label="TierBadge · PremiumBadge">
+        {(['warning', 'bronze', 'silver', 'gold', 'platinum'] as const).map((tier) => (
+          <TierBadge key={tier} tier={tier} />
+        ))}
+        <PremiumBadge />
+        <PremiumBadge compact />
       </Demo>
     </Section>
   );

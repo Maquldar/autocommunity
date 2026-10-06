@@ -4,7 +4,7 @@ import type { CommunityDto } from '@autoc/shared';
 import { MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useNow, useTranslations } from 'next-intl';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,7 +53,7 @@ export function CommunityChatPreview({ community }: { community: CommunityDto })
         <ol aria-label={t('recent')} className="flex flex-col gap-3">
           {latest.map((message) => (
             <li key={message.id} className="flex items-start gap-2.5">
-              <Avatar id={message.sender.id} name={message.sender.name || message.sender.nickname} src={message.sender.avatarUrl} size="sm" decorative />
+              <UserAvatar user={{ ...message.sender, name: message.sender.name || message.sender.nickname }} size="sm" decorative />
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="truncate text-sm font-medium">{message.sender.name || `@${message.sender.nickname}`}</span>

@@ -237,6 +237,17 @@ export function flagFacts(flag: Pick<FraudFlagDto, 'kind' | 'details'>): Record<
       put('phone', str(d.phoneMasked));
       put('lockouts', num(d.lockouts));
       break;
+    /* phase 9 (API.md §9.1, §9.3, §9.4) */
+    case 'wallet_funnel':
+      put('senders', Array.isArray(d.senderIds) ? d.senderIds.length : null);
+      put('total', num(d.total));
+      break;
+    case 'vote_burst':
+      put('downvotes', num(d.count) ?? (Array.isArray(d.voterIds) ? d.voterIds.length : null));
+      break;
+    case 'violation_rejections':
+      put('rejected', num(d.count) ?? (Array.isArray(d.violationIds) ? d.violationIds.length : null));
+      break;
   }
   return out;
 }
@@ -258,4 +269,27 @@ export function flatten<T>(data: { pages: { items: T[] }[] } | undefined): T[] {
 /** Parses an enum-like search param (unknown values → undefined). */
 export function pickParam<T extends string>(value: string | null | undefined, allowed: readonly T[]): T | undefined {
   return value && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+/* ---------- violations (phase 9) ---------- */
+
+/** Which decisions an admin can take on a violation in its current state (API.md §9.4). */
+export function violationActions(v: { status: string }): { approve: boolean; reject: boolean; resolve: boolean } {
+  return { approve: v.status === 'pending', reject: v.status === 'pending', resolve: v.status === 'disputed' };
+}
+
+/* ---------- wallet (phase 9) ---------- */
+
+export type AdjustCheck = { ok: true; amount: number } | { ok: false; error: 'required' | 'zero' | 'notWhole' | 'tooLarge' | 'belowZero' };
+
+/** The signed adjustment amount: non-zero whole coins, |amount| ≤ 1 000 000, never taking the balance below 0. */
+export function checkAdjust(text: string, balance: number, maxAbs = 1_000_000): AdjustCheck {
+  const cleaned = text.replace(/[\s\u00a0\u202f]/g, '').replace('−', '-');
+  if (!cleaned || cleaned === '-' || cleaned === '+') return { ok: false, error: 'required' };
+  if (!/^[+-]?\d+$/.test(cleaned)) return { ok: false, error: 'notWhole' };
+  const amount = Number(cleaned);
+  if (amount === 0) return { ok: false, error: 'zero' };
+  if (Math.abs(amount) > maxAbs) return { ok: false, error: 'tooLarge' };
+  if (balance + amount < 0) return { ok: false, error: 'belowZero' };
+  return { ok: true, amount };
 }

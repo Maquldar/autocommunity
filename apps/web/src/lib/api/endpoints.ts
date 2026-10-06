@@ -21,13 +21,15 @@ import type {
   UploadDto,
   UploadPurpose,
   UserPublic,
+  OwnVehicleDto,
+  VehicleDetailDto,
   VehicleDto,
   VehicleInput,
 } from '@autoc/shared';
 import type { ApiClient } from './client';
 
 /** Wire types: what the client sends. Server-side zod applies the same schemas again. */
-export type VehicleBody = Omit<VehicleInput, 'plate'> & { plate?: string | null };
+export type VehicleBody = Omit<VehicleInput, 'plate' | 'description'> & { plate?: string | null; description?: string | null };
 
 export type PageParams = { cursor?: string | null; limit?: number };
 export type MapUsersParams = { bbox: string; friends?: boolean; brand?: string; communityIds?: string[] };
@@ -73,11 +75,14 @@ export function createEndpoints({ request }: ApiClient) {
       remove: () => request<void>('/me', { method: 'DELETE', json: { confirm: 'DELETE' } }),
     },
     vehicles: {
-      list: () => request<VehicleDto[]>('/me/vehicles'),
-      create: (input: VehicleBody) => request<VehicleDto>('/me/vehicles', { method: 'POST', json: input }),
+      /** Own vehicles carry the VIN (API.md §9.5); nobody else ever gets it. */
+      list: () => request<OwnVehicleDto[]>('/me/vehicles'),
+      create: (input: VehicleBody) => request<OwnVehicleDto>('/me/vehicles', { method: 'POST', json: input }),
       update: (id: string, input: Partial<VehicleBody>) =>
-        request<VehicleDto>(`/me/vehicles/${encodeURIComponent(id)}`, { method: 'PATCH', json: input }),
+        request<OwnVehicleDto>(`/me/vehicles/${encodeURIComponent(id)}`, { method: 'PATCH', json: input }),
       remove: (id: string) => request<void>(`/me/vehicles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      /** Any vehicle with its owner (Phase 9; plate per the usual rule, never the VIN). */
+      get: (id: string) => request<VehicleDetailDto>(`/vehicles/${encodeURIComponent(id)}`),
     },
     users: {
       get: (id: string) => request<UserPublic>(`/users/${encodeURIComponent(id)}`),

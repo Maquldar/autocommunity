@@ -25,6 +25,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -327,7 +328,7 @@ function Participants({ event }: { event: EventDto }) {
         empty={<EmptyState icon={CalendarDays} title={t('participants.emptyTitle')} description={t('participants.emptyDescription')} />}
         renderItem={(p) => (
           <Link href={`/u/${p.user.id}`} className="flex min-h-14 items-center gap-3 px-4 py-2 hover:bg-accent focus-ring focus-visible:-outline-offset-2">
-            <Avatar id={p.user.id} name={p.user.name || p.user.nickname} src={p.user.avatarUrl} size="sm" decorative />
+            <UserAvatar user={{ ...p.user, name: p.user.name || p.user.nickname }} size="sm" decorative />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate font-medium">{p.user.name || `@${p.user.nickname}`}</span>
               {p.user.nickname ? <span className="truncate text-sm text-muted-foreground">@{p.user.nickname}</span> : null}

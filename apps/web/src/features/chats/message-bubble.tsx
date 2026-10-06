@@ -4,7 +4,7 @@ import { AlertCircle, Ban, Check, CheckCheck, Clock, Flag, MoreHorizontal, Rotat
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { memo } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { IconButton } from '@/components/ui/icon-button';
@@ -102,7 +102,7 @@ export const MessageBubble = memo(function MessageBubble({
         <span className="w-8 shrink-0 self-end">
           {showAvatar ? (
             <Link href={`/u/${message.sender.id}`} tabIndex={-1} aria-hidden="true">
-              <Avatar id={message.sender.id} name={senderName} src={message.sender.avatarUrl} size="sm" decorative />
+              <UserAvatar user={{ ...message.sender, name: senderName }} size="sm" decorative />
             </Link>
           ) : null}
         </span>
@@ -125,9 +125,12 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         >
           {showSender && !mine ? (
-            <Link href={`/u/${message.sender.id}`} className={cn('truncate text-sm font-semibold text-primary hover:underline focus-ring rounded-sm', media && 'px-1.5 pt-0.5')}>
-              {senderName}
-            </Link>
+            <span className={cn('flex min-w-0 items-center gap-1', media && 'px-1.5 pt-0.5')}>
+              <Link href={`/u/${message.sender.id}`} className="truncate text-sm font-semibold text-primary hover:underline focus-ring rounded-sm">
+                {senderName}
+              </Link>
+              {message.sender.isPremium ? <PremiumBadge compact /> : null}
+            </span>
           ) : null}
 
           {deleted ? (

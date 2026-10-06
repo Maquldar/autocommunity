@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useId, useState, type FormEvent } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -111,12 +111,13 @@ function CommentItem({ comment }: { comment: PostCommentDto }) {
   const name = comment.author.name || `@${comment.author.nickname}`;
   return (
     <div className="flex items-start gap-3 px-4 py-3" data-testid="comment" data-comment-id={comment.id}>
-      <Avatar id={comment.author.id} name={name} src={comment.author.avatarUrl} size="sm" decorative />
+      <UserAvatar user={{ ...comment.author, name: name }} size="sm" decorative />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
           <Link href={`/u/${comment.author.id}`} className="font-semibold underline-offset-4 hover:underline focus-ring rounded-sm">
             {name}
           </Link>
+          {comment.author.isPremium ? <PremiumBadge compact className="self-center" /> : null}
           <time dateTime={comment.createdAt} className="text-muted-foreground">
             {format.relativeTime(new Date(comment.createdAt), now)}
           </time>

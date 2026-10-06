@@ -4,7 +4,7 @@ import type { ServiceReviewDto } from '@autoc/shared';
 import { BadgeCheck, MessageSquareText } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InfiniteList } from '@/components/ui/infinite-list';
 import { ListItemSkeleton } from '@/components/ui/skeleton';
@@ -17,7 +17,7 @@ function ReviewItem({ review }: { review: ServiceReviewDto }) {
   const name = review.author.nickname ? review.author.name : t('reviews.deletedUser');
   return (
     <article className="flex gap-3 py-4">
-      <Avatar id={review.author.id} name={name} src={review.author.avatarUrl} size="md" decorative />
+      <UserAvatar user={{ ...review.author, name: name }} size="md" decorative />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-2">
           {review.author.nickname ? (

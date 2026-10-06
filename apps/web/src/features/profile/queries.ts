@@ -53,7 +53,12 @@ export function useUpdateSettings() {
 /** Vehicle writes change the list and Me.primaryVehicle. */
 function useInvalidateVehicles() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
+      // Vehicle pages (`/vehicles/[id]`) show the same details and photos.
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] }),
+    ]);
 }
 
 export function useCreateVehicle() {

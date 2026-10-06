@@ -1,10 +1,10 @@
 'use client';
 
-import { UserX } from 'lucide-react';
+import { Coins, UserX } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
@@ -18,6 +18,8 @@ import { FriendButton } from '@/features/friends/friend-button';
 import { HOME_ROUTE } from '@/lib/routes';
 import { RatingSummary, ReviewsList } from '@/features/rating/rating-views';
 import { ReportButton } from '@/features/reports/report-dialog';
+import { VotePanel } from '@/features/votes/vote-panel';
+import { TransferDialog } from '@/features/wallet/transfer-dialog';
 import { ProfileHeader, ProfileHeaderSkeleton } from './profile-header';
 import { useUser, useUserVehicles } from './queries';
 import { VehicleRow } from './vehicle-row';
@@ -32,6 +34,7 @@ export function UserProfileView({ userId }: { userId: string }) {
   const isSelf = userId === me.id;
   const user = useUser(userId);
   const vehicles = useUserVehicles(userId, user.isSuccess && !isSelf);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     if (isSelf) router.replace('/profile');
@@ -73,11 +76,15 @@ export function UserProfileView({ userId }: { userId: string }) {
             <>
               <FriendButton user={{ id: user.data.id, name: user.data.name, relation: user.data.relation }} />
               <MessageButton userId={user.data.id} />
+              <Button variant="outline" leadingIcon={<Coins aria-hidden="true" />} onClick={() => setTransferOpen(true)} data-testid="profile-transfer">
+                {t('transfer')}
+              </Button>
             </>
           ) : null
         }
       />
       <RatingSummary userId={user.data.id} self={false} name={user.data.name} />
+      <VotePanel userId={user.data.id} name={user.data.name} />
       <section aria-labelledby="user-vehicles-heading" className="flex flex-col gap-3">
         <h2 id="user-vehicles-heading" className="text-xl font-semibold tracking-tight">
           {tv('title')}
@@ -105,6 +112,19 @@ export function UserProfileView({ userId }: { userId: string }) {
       <div className="flex justify-center">
         <ReportButton target={{ type: 'user', id: user.data.id }} label={t('report')} size="sm" />
       </div>
+      <TransferDialog
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        recipient={{
+          id: user.data.id,
+          name: user.data.name,
+          nickname: user.data.nickname,
+          avatarUrl: user.data.avatarUrl,
+          rating: user.data.rating,
+          isPremium: user.data.isPremium,
+          tier: user.data.tier,
+        }}
+      />
     </div>
   );
 }

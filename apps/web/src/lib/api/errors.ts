@@ -34,6 +34,25 @@ export const KNOWN_ERROR_CODES = [
   'MEMBERSHIP_LIMIT',
   'ALREADY_MEMBER',
   'OWNER_CANNOT_LEAVE',
+  /* phase 9 (API.md §9.0) */
+  'INSUFFICIENT_FUNDS',
+  'WALLET_FROZEN',
+  'RECIPIENT_UNAVAILABLE',
+  'TRANSFER_DAILY_CAP',
+  'IDEMPOTENCY_KEY_REUSED',
+  'ACCOUNT_TOO_NEW',
+  'TOPUP_NOT_PENDING',
+  'TOPUP_EXPIRED',
+  'PAYMENT_DECLINED',
+  'ALREADY_PREMIUM',
+  'NOT_PREMIUM',
+  'WALLET_ALREADY_FROZEN',
+  'WALLET_NOT_FROZEN',
+  'ALREADY_VOTED',
+  'MEDIA_LIMIT',
+  'VIOLATION_INVALID_STATE',
+  'ALREADY_DISPUTED',
+  'RATING_TOO_LOW',
   'NETWORK_ERROR',
 ] as const;
 
@@ -108,7 +127,8 @@ export async function parseApiError(response: Response): Promise<ApiError> {
   return new ApiError({ status: response.status, code, message, details });
 }
 
-function numberDetail(error: unknown, key: string): number | null {
+/** A numeric `details[key]` of an ApiError (null when missing or not a finite number). */
+export function numberDetail(error: unknown, key: string): number | null {
   if (!isApiError(error) || !isRecord(error.details)) return null;
   const value = error.details[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -117,6 +137,13 @@ function numberDetail(error: unknown, key: string): number | null {
 /** Seconds until a RATE_LIMITED action may be retried. */
 export function getRetryAfterSec(error: unknown): number | null {
   return numberDetail(error, 'retryAfterSec');
+}
+
+/** A string `details[key]` of an ApiError (null when missing). */
+export function stringDetail(error: unknown, key: string): string | null {
+  if (!isApiError(error) || !isRecord(error.details)) return null;
+  const value = error.details[key];
+  return typeof value === 'string' ? value : null;
 }
 
 /** Remaining tries for OTP_INVALID. */

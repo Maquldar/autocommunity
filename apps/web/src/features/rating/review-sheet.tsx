@@ -4,7 +4,7 @@ import { REVIEW_LIMITS, type UserMini } from '@autoc/shared';
 import { CircleAlert, Star } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useId, useState } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -124,7 +124,7 @@ export function ReviewSheet({
     <Sheet open={open} onOpenChange={(next) => (create.isPending ? undefined : onOpenChange(next))}>
       <SheetContent data-testid="review-sheet">
         <SheetHeader className="flex-row items-center gap-3">
-          <Avatar id={target.id} name={name} src={target.avatarUrl} size="lg" decorative />
+          <UserAvatar user={{ ...target, name: name }} size="lg" decorative />
           <div className="flex min-w-0 flex-col gap-0.5">
             <SheetTitle className="break-words">{role === 'helper' ? t('titleHelper', { name }) : t('titleRequester', { name })}</SheetTitle>
             <SheetDescription>{t('description')}</SheetDescription>

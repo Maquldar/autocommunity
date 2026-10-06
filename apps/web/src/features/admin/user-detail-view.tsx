@@ -5,7 +5,7 @@ import { Ban, Flag, MessageSquareWarning, ShieldCheck, Siren, SirenIcon } from '
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -20,6 +20,7 @@ import { Facts, Section, TimeCell, ToneBadge } from './ui';
 import { BLOCK_PRESETS, isSosBanned, SOS_BAN_PRESETS, untilFromPreset, USER_STATUS_TONE, userActions, type BlockPreset, type SosBanPreset } from './view-models';
 import { FlagList } from './fraud-view';
 import { ActionList } from './audit-view';
+import { AdminVotesPanel, AdminWalletPanel } from './user-phase9-panels';
 
 type Dialog = 'warn' | 'block' | 'unblock' | 'sosBan' | 'sosUnban' | null;
 
@@ -67,7 +68,7 @@ function Detail({ data }: { data: AdminUserDetail }) {
       <PageHeader back="/admin/users" title={t('title')} />
 
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4">
-        <Avatar id={user.id} name={name} src={user.avatarUrl} size="lg" decorative />
+        <UserAvatar user={{ ...user, name: name }} size="lg" decorative />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="truncate text-lg font-semibold" data-testid="admin-user-name">
             {name}
@@ -142,6 +143,9 @@ function Detail({ data }: { data: AdminUserDetail }) {
           ))}
         </ul>
       </Section>
+
+      <AdminWalletPanel userId={user.id} name={name} protectedTarget={actions.protectedTarget} />
+      <AdminVotesPanel userId={user.id} protectedTarget={actions.protectedTarget} />
 
       <Section title={t('ratingEvents')}>
         {data.recentRatingEvents.length ? (

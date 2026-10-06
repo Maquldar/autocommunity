@@ -4,7 +4,7 @@ import type { MapUser } from '@autoc/shared';
 import { CarFront, CircleDashed, Clock, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
-import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RatingBadge } from '@/components/ui/rating-badge';
@@ -34,9 +34,16 @@ function DriverCardBody({ driver }: { driver: MapUser }) {
   return (
     <>
       <SheetHeader className="flex-row items-center gap-3">
-        <Avatar id={driver.userId} name={name} src={driver.avatarUrl} size="lg" decorative />
+        <UserAvatar
+          user={{ id: driver.userId, name, avatarUrl: driver.avatarUrl, rating: driver.rating, isPremium: profile.data?.isPremium, tier: profile.data?.tier }}
+          size="lg"
+          decorative
+        />
         <div className="flex min-w-0 flex-col gap-1">
-          <SheetTitle className="break-words">{profile.data?.name ?? `@${driver.nickname}`}</SheetTitle>
+          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-1.5 break-words">
+            {profile.data?.name ?? `@${driver.nickname}`}
+            {profile.data?.isPremium ? <PremiumBadge compact /> : null}
+          </SheetTitle>
           <SheetDescription className="break-all">@{driver.nickname}</SheetDescription>
           <div className="flex flex-wrap items-center gap-2">
             <RatingBadge rating={driver.rating} showLabel size="sm" />

@@ -14,6 +14,10 @@ import type {
   AdminUserRow,
   AdminUserStatus,
   AdminVisitDto,
+  AdminViolationDto,
+  AdminVoteDto,
+  AdminWalletDto,
+  AdminWalletTransactionDto,
   FraudFlagDto,
   FraudFlagKind,
   Paginated,
@@ -21,6 +25,8 @@ import type {
   ReportTargetType,
   ServiceStatus,
   SosStatus,
+  ViolationStatus,
+  WalletTxKind,
 } from '@autoc/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
@@ -36,6 +42,9 @@ export type ServicesFilter = { status?: ServiceStatus; q?: string };
 export type CommunitiesFilter = { q?: string };
 export type FlagsFilter = { kind?: FraudFlagKind; userId?: string };
 export type AuditFilter = { adminId?: string; targetUserId?: string };
+export type ViolationsFilter = { status?: ViolationStatus };
+export type WalletTxFilter = { kind?: WalletTxKind };
+export type VotesFilter = { value?: 1 | -1 };
 
 type Page = { cursor?: string | null };
 const page = (p: Page) => ({ cursor: p.cursor ?? undefined, limit: 25 });
@@ -71,6 +80,22 @@ export const adminApi = {
   visits: (f: Page) => request<Paginated<AdminVisitDto>>(`/admin/visits${queryString({ status: 'pending', ...page(f) })}`),
   setVisitStatus: (id: string, action: 'approve' | 'reject', note: string) =>
     request<AdminVisitDto>(`/admin/visits/${enc(id)}/${action}`, { method: 'POST', json: { note } }),
+  /* phase 9 (API.md §9.1, §9.3, §9.4) */
+  violations: (f: ViolationsFilter & Page) => request<Paginated<AdminViolationDto>>(`/admin/violations${queryString({ status: f.status, ...page(f) })}`),
+  decideViolation: (id: string, action: 'approve' | 'reject', note: string) =>
+    request<AdminViolationDto>(`/admin/violations/${enc(id)}/${action}`, { method: 'POST', json: { note } }),
+  resolveDispute: (id: string, decision: 'uphold' | 'remove', note: string) =>
+    request<AdminViolationDto>(`/admin/violations/${enc(id)}/resolve-dispute`, { method: 'POST', json: { decision, note } }),
+  wallet: (userId: string) => request<AdminWalletDto>(`/admin/users/${enc(userId)}/wallet`),
+  walletTransactions: (userId: string, f: WalletTxFilter & Page) =>
+    request<Paginated<AdminWalletTransactionDto>>(`/admin/users/${enc(userId)}/wallet/transactions${queryString({ kind: f.kind, ...page(f) })}`),
+  adjustWallet: (userId: string, amount: number, note: string) =>
+    request<AdminWalletDto>(`/admin/users/${enc(userId)}/wallet/adjust`, { method: 'POST', json: { amount, note } }),
+  freezeWallet: (userId: string, note: string) => request<AdminWalletDto>(`/admin/users/${enc(userId)}/wallet/freeze`, { method: 'POST', json: { note } }),
+  unfreezeWallet: (userId: string, note: string) => request<AdminWalletDto>(`/admin/users/${enc(userId)}/wallet/unfreeze`, { method: 'POST', json: { note } }),
+  votes: (userId: string, f: VotesFilter & Page) =>
+    request<Paginated<AdminVoteDto>>(`/admin/users/${enc(userId)}/votes${queryString({ value: f.value, ...page(f) })}`),
+  removeVote: (voteId: string, note: string) => request<void>(`/admin/votes/${enc(voteId)}`, { method: 'DELETE', json: { note } }),
 };
 
 export const adminKeys = {
@@ -87,6 +112,10 @@ export const adminKeys = {
   services: (f: ServicesFilter) => ['admin', 'services', f] as const,
   qr: (id: string) => ['admin', 'qr', id] as const,
   visits: ['admin', 'visits'] as const,
+  violations: (f: ViolationsFilter) => ['admin', 'violations', f] as const,
+  wallet: (userId: string) => ['admin', 'wallet', userId] as const,
+  walletTransactions: (userId: string, f: WalletTxFilter) => ['admin', 'wallet', userId, 'transactions', f] as const,
+  votes: (userId: string, f: VotesFilter) => ['admin', 'votes', userId, f] as const,
 };
 
 const pageOptions = {
@@ -116,6 +145,18 @@ export const useAdminServices = (f: ServicesFilter) =>
   useInfiniteQuery({ queryKey: adminKeys.services(f), queryFn: ({ pageParam }) => adminApi.services({ ...f, cursor: pageParam }), ...pageOptions });
 export const useAdminVisits = () =>
   useInfiniteQuery({ queryKey: adminKeys.visits, queryFn: ({ pageParam }) => adminApi.visits({ cursor: pageParam }), ...pageOptions });
+
+export const useAdminViolations = (f: ViolationsFilter) =>
+  useInfiniteQuery({ queryKey: adminKeys.violations(f), queryFn: ({ pageParam }) => adminApi.violations({ ...f, cursor: pageParam }), ...pageOptions });
+export const useAdminWallet = (userId: string) => useQuery({ queryKey: adminKeys.wallet(userId), queryFn: () => adminApi.wallet(userId) });
+export const useAdminWalletTransactions = (userId: string, f: WalletTxFilter) =>
+  useInfiniteQuery({
+    queryKey: adminKeys.walletTransactions(userId, f),
+    queryFn: ({ pageParam }) => adminApi.walletTransactions(userId, { ...f, cursor: pageParam }),
+    ...pageOptions,
+  });
+export const useAdminVotes = (userId: string, f: VotesFilter) =>
+  useInfiniteQuery({ queryKey: adminKeys.votes(userId, f), queryFn: ({ pageParam }) => adminApi.votes(userId, { ...f, cursor: pageParam }), ...pageOptions });
 
 /** Any admin mutation: refreshes every admin query afterwards (lists, counters, the audit log). */
 export function useAdminMutation<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>) {

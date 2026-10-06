@@ -4,25 +4,29 @@ import type { Me, UserPublic } from '@autoc/shared';
 import { CalendarDays, MapPin } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
-import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { RatingBadge } from '@/components/ui/rating-badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PremiumBadge, TierBadge, UserAvatar } from '@/components/ui/user-avatar';
+import { hasPremium, resolveTier } from '@/lib/tier';
 import { useCityName } from './city';
 
-type Profile = Pick<UserPublic | Me, 'id' | 'name' | 'nickname' | 'avatarUrl' | 'city' | 'bio' | 'rating' | 'createdAt' | 'status'>;
+type Profile = Pick<UserPublic | Me, 'id' | 'name' | 'nickname' | 'avatarUrl' | 'city' | 'bio' | 'rating' | 'createdAt' | 'status'> &
+  Partial<Pick<UserPublic, 'isPremium' | 'profileFrame' | 'tier'>>;
 
-/** Avatar, name, @nickname, city, trust rating, member since and bio. Own and public profiles. */
+/** Avatar (tier ring + premium frame), name, @nickname, premium and tier badges, city, trust rating, member since and bio. */
 export function ProfileHeader({ user, actions }: { user: Profile; actions?: ReactNode }) {
   const t = useTranslations('profile');
   const format = useFormatter();
   const cityName = useCityName();
+  const tier = resolveTier(user);
+  const premium = hasPremium(user);
 
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:text-start">
-        <Avatar id={user.id} name={user.name} src={user.avatarUrl} size="xl" />
+        <UserAvatar user={user} size="xl" />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 sm:items-start">
           <h1 className="max-w-full text-2xl font-semibold leading-8 tracking-tight break-words">{user.name}</h1>
           {user.nickname ? <p className="max-w-full break-all text-[0.9375rem] text-muted-foreground">@{user.nickname}</p> : null}
@@ -30,6 +34,8 @@ export function ProfileHeader({ user, actions }: { user: Profile; actions?: Reac
             <span data-testid="profile-rating" data-rating={user.rating} className="inline-flex">
               <RatingBadge rating={user.rating} showLabel />
             </span>
+            {premium ? <PremiumBadge /> : null}
+            <TierBadge tier={tier} />
             {user.status === 'blocked' ? <Badge variant="danger">{t('blocked')}</Badge> : null}
             {user.city ? (
               <span className="inline-flex items-center gap-1">

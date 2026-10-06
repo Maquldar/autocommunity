@@ -23,13 +23,15 @@ export type NoteDialogProps = {
   successMessage: ReactNode;
   /** Extra fields above the note (duration, "remove content"). */
   children?: ReactNode;
+  /** Extra fields are invalid (e.g. the adjustment amount): keeps Confirm disabled. */
+  blocked?: boolean;
 };
 
 /**
  * Every admin action goes through this: a confirmation with a required note (3–500 characters, audited).
  * Built on ConfirmDialog, so focus starts on Cancel and Enter never confirms by accident.
  */
-export function NoteDialog({ open, onOpenChange, title, description, confirmLabel, tone = 'default', onConfirm, successMessage, children }: NoteDialogProps) {
+export function NoteDialog({ open, onOpenChange, title, description, confirmLabel, tone = 'default', onConfirm, successMessage, children, blocked = false }: NoteDialogProps) {
   const t = useTranslations('admin.note');
   const errorMessage = useErrorMessage();
   const [note, setNote] = useState('');
@@ -52,7 +54,7 @@ export function NoteDialog({ open, onOpenChange, title, description, confirmLabe
       description={description}
       confirmLabel={confirmLabel}
       tone={tone}
-      confirmDisabled={error !== null}
+      confirmDisabled={error !== null || blocked}
       onConfirm={async () => {
         try {
           await onConfirm(note.trim());

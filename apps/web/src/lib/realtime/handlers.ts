@@ -8,6 +8,9 @@ import { notificationKeys, prependNotification, setUnreadCount } from '@/feature
 import { alertFromNotification, alertFromSos, sosAlertStore } from '@/features/sos/alerts';
 import { applySosToCache, sosKeys } from '@/features/sos/cache';
 import { isSosOpen } from '@/features/sos/view-model';
+import { voteKeys } from '@/features/votes/api';
+import { violationKeys } from '@/features/violations/api';
+import { invalidateWallet } from '@/features/wallet/api';
 import type { RealtimeHandlers } from './client';
 
 export type AppHandlerDeps = {
@@ -27,6 +30,9 @@ const COMMUNITY_TYPES = new Set(['community_request', 'community_approved', 'com
 const SOS_TYPES = new Set(['sos_nearby', 'sos_response', 'sos_accepted', 'sos_status']);
 const EVENT_TYPES = new Set(['event_new', 'event_reminder']);
 const POST_TYPES = new Set(['post_comment', 'post_like']);
+/* phase 9: coins and premium change the wallet (and Me.isPremium); votes and violations move the rating. */
+const WALLET_TYPES = new Set(['wallet_received', 'wallet_admin', 'premium_reminder', 'premium_renewed', 'premium_expired']);
+const VIOLATION_TYPES = new Set(['violation_reported', 'violation_status']);
 
 /** What the app does with each server event. Pure wiring over the query cache, unit-tested with a fake socket. */
 export function createAppRealtimeHandlers({
@@ -52,6 +58,18 @@ export function createAppRealtimeHandlers({
       // New / changed / cancelled events and new comments or likes on the viewer's posts.
       if (EVENT_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['events'] });
       if (POST_TYPES.has(notification.type)) void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      if (WALLET_TYPES.has(notification.type)) invalidateWallet(queryClient);
+      if (notification.type === 'vote_received') {
+        void queryClient.invalidateQueries({ queryKey: voteKeys.all });
+        void queryClient.invalidateQueries({ queryKey: ['rating'] });
+        void queryClient.invalidateQueries({ queryKey: ['me'], exact: true });
+      }
+      if (VIOLATION_TYPES.has(notification.type)) {
+        void queryClient.invalidateQueries({ queryKey: violationKeys.all });
+        void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+        void queryClient.invalidateQueries({ queryKey: ['rating'] });
+        void queryClient.invalidateQueries({ queryKey: ['me'], exact: true });
+      }
       // "Someone nearby needs help" gets the urgent SOS banner instead of an ordinary toast.
       const alert = alertFromNotification(notification);
       if (alert) alerts.push(alert);

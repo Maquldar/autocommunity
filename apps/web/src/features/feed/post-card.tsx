@@ -5,7 +5,7 @@ import { Flag, Heart, MessageCircle, MoreHorizontal, Trash2, UsersRound } from '
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { Avatar } from '@/components/ui/avatar';
+import { PremiumBadge, UserAvatar } from '@/components/ui/user-avatar';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DropdownMenu,
@@ -47,12 +47,15 @@ export function PostCard({ post, onDeleted, inThread = false }: { post: PostDto;
     <article aria-labelledby={headingId} className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-sm" data-testid="post-card" data-post-id={post.id}>
       <header className="flex items-start gap-3">
         <Link href={`/u/${post.author.id}`} className="shrink-0 rounded-full focus-ring" tabIndex={-1} aria-hidden="true">
-          <Avatar id={post.author.id} name={authorName} src={post.author.avatarUrl} size="md" decorative />
+          <UserAvatar user={{ ...post.author, name: authorName }} size="md" decorative />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col">
-          <Link id={headingId} href={`/u/${post.author.id}`} className="truncate font-semibold underline-offset-4 hover:underline focus-ring rounded-sm">
-            {authorName}
-          </Link>
+          <span className="flex min-w-0 items-center gap-1">
+            <Link id={headingId} href={`/u/${post.author.id}`} className="truncate font-semibold underline-offset-4 hover:underline focus-ring rounded-sm">
+              {authorName}
+            </Link>
+            {post.author.isPremium ? <PremiumBadge compact /> : null}
+          </span>
           <span className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
             {post.author.nickname ? <span className="truncate">@{post.author.nickname}</span> : null}
             <span aria-hidden="true">·</span>
