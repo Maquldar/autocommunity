@@ -17,11 +17,14 @@ export const UPLOAD_PURPOSES = [
   'video',
   'service',
   'order',
+  /* phase 9 */
+  'vehicle',
+  'violation',
 ] as const;
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 
 /** Purposes whose files are images (re-encoded to WebP, EXIF stripped). */
-export const IMAGE_PURPOSES: readonly UploadPurpose[] = ['avatar', 'community', 'sos', 'message', 'post', 'service', 'order'];
+export const IMAGE_PURPOSES: readonly UploadPurpose[] = ['avatar', 'community', 'sos', 'message', 'post', 'service', 'order', 'vehicle', 'violation'];
 
 /** Nicknames nobody can claim through the API (impersonation of staff / the platform). */
 export const RESERVED_NICKNAMES: readonly string[] = ['admin', 'support', 'moderator', 'autocommunity', 'system', 'root', 'help'];
@@ -31,7 +34,14 @@ export const LIMITS = {
   nicknameMax: 24,
   nameMax: 60,
   bioMax: 300,
+  /** Premium doubles it (PREMIUM_PERK_LIMITS). */
   vehiclesPerUser: 5,
+  vehiclePhotosMax: 5,
+  vehicleDescriptionMax: 500,
+  vinLength: 17,
+  engineVolumeMinL: 0.6,
+  engineVolumeMaxL: 8,
+  mileageMaxKm: 2_000_000,
   plateMax: 12,
   vehicleTextMax: 40,
   minVehicleYear: 1950,

@@ -12,6 +12,7 @@
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ✅ done |
 | Final release gate (DoD) | ✅ done (2026-10-06) |
+| 9. Wallet, premium, votes, violations, vehicle details, tiers | 🚧 Step A (contract) done; Step B (API) next |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
 
@@ -156,4 +157,8 @@
 - Web unit: 390/390 tests.
 - Shared: 44/44 tests.
 - Playwright e2e: 62 passed, 0 failed (14 skipped by design). This ran against the exact Render build and start scripts from a fresh clone (production mode, demo mode, Postgres file storage, no `.env`).
+
+## Phase 9 — Monetization and trust (2026-10-06, in progress)
+
+**Step A — contract (done):** API.md §9 and SPEC.md §9 written; `packages/shared` has the zod schemas and DTOs (`wallet.ts`, `votes.ts`, `violations.ts`, `tiers.ts`, vehicle details in `schemas.ts`), the `votes` rating component and the capped `violation` penalty in `computeRating`, 8 notification types with ru/en push texts, upload purposes `vehicle` / `violation`, 3 fraud flag kinds and 8 admin actions. Shared tests 72/72; API and web typecheck clean; web unit 390/390; API unit 86/86. The API returns placeholder values for the new DTO fields (`isPremium: false`, empty vehicle details) until Step B.
 

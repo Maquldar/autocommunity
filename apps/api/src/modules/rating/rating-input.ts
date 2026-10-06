@@ -57,8 +57,8 @@ export async function loadRatingInput(db: Db, userId: string, now: Date): Promis
         SELECT ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Almaty')::date FROM reviews
           WHERE author_id = ${userId}::uuid AND created_at > ${since30} AND created_at <= ${now}
       ) x`,
-    db.$queryRaw<{ points: number; createdAt: Date }[]>`
-      SELECT penalty_points AS points, created_at AS "createdAt" FROM rating_events
+    db.$queryRaw<{ points: number; createdAt: Date; kind: string | null }[]>`
+      SELECT penalty_points AS points, created_at AS "createdAt", penalty_kind AS kind FROM rating_events
       WHERE user_id = ${userId}::uuid AND penalty_points IS NOT NULL AND created_at <= ${now}`,
   ]);
   return {
@@ -67,5 +67,7 @@ export async function loadRatingInput(db: Db, userId: string, now: Date): Promis
     reviewStars: oncePerCounterpart(reviews.map((r) => ({ ...r, at: r.createdAt }))).map((r) => r.stars),
     activeDays30: activity[0]?.days ?? 0,
     penalties,
+    // Phase 9 step B: driver votes.
+    votes: [],
   };
 }

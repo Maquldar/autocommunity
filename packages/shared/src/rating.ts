@@ -12,14 +12,37 @@ export const RATING_FORMULA = {
   activity: { windowDays: 30, daysPerPoint: 4, cap: 5 },
   /** A "month" is 30 days. */
   tenure: { pointsPerMonth: 0.5, cap: 5, daysPerMonth: 30 },
-  penalties: { windowDays: 365 },
+  /**
+   * Phase 9 driver votes: each vote of the last `windowDays` is worth `value × weight × 0.5^(ageDays/halfLifeDays)`;
+   * the sum is clamped to ±cap.
+   */
+  votes: { windowDays: 180, halfLifeDays: 180, cap: 15 },
+  /** Violation penalties (kind `violation`) count at most `violationCap` in total. */
+  penalties: { windowDays: 365, violationCap: -20 },
 } as const;
 
-/** Penalty amounts Phase 6 records (negative). */
-export const RATING_PENALTIES = { report_confirmed: -10, fake_sos: -50 } as const;
+/** Penalty amounts (negative). Phase 6: reports and fake SOS; Phase 9: approved vehicle violations. */
+export const RATING_PENALTIES = { report_confirmed: -10, fake_sos: -50, violation: -5 } as const;
 export type RatingPenaltyKind = keyof typeof RATING_PENALTIES;
 
-export const RATING_EVENT_REASONS = ['help_confirmed', 'review_received', 'penalty', 'recalc_daily', 'recalc'] as const;
+/**
+ * Vote weight from the voter's rating at the time of voting (stored on the vote, so later changes to the
+ * voter's rating don't move old votes). Voters need ≥ 40 to vote at all.
+ */
+export const VOTE_WEIGHTS = [
+  { minRating: 80, weight: 1.5 },
+  { minRating: 60, weight: 1 },
+  { minRating: 0, weight: 0.5 },
+] as const;
+export function voteWeight(voterRating: number): number {
+  return VOTE_WEIGHTS.find((w) => voterRating >= w.minRating)?.weight ?? 0.5;
+}
+
+/**
+ * `vote_received`: a vote changed the target's rating (refId = vote id). `penalty_reversed`: a penalty no
+ * longer counts (Phase 9: a removed violation; refId = the violation id).
+ */
+export const RATING_EVENT_REASONS = ['help_confirmed', 'review_received', 'penalty', 'recalc_daily', 'recalc', 'vote_received', 'penalty_reversed'] as const;
 export type RatingEventReason = (typeof RATING_EVENT_REASONS)[number];
 
 export type RatingInput = {
@@ -31,11 +54,16 @@ export type RatingInput = {
   reviewStars: number[];
   /** Distinct days in the last 30 with a message sent, an SOS response, an SOS created or a review written. */
   activeDays30: number;
-  /** Penalty points (negative) with their time; only the last 365 days count. */
-  penalties: { points: number; createdAt: Date }[];
+  /**
+   * Penalty points (negative) with their time; only the last 365 days count. Reversed penalties are left out
+   * by the caller. `kind: 'violation'` penalties are capped at RATING_FORMULA.penalties.violationCap in total.
+   */
+  penalties: { points: number; createdAt: Date; kind?: RatingPenaltyKind | string | null }[];
+  /** Driver votes received (Phase 9); weight from `voteWeight` at voting time. Older than 180 days are ignored. */
+  votes: { value: number; weight: number; createdAt: Date }[];
 };
 
-export type RatingBreakdown = { base: number; help: number; reviews: number; activity: number; tenure: number; penalties: number };
+export type RatingBreakdown = { base: number; help: number; reviews: number; activity: number; tenure: number; votes: number; penalties: number };
 export type RatingResult = { rating: number; breakdown: RatingBreakdown };
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -70,11 +98,26 @@ export function computeRating(input: RatingInput, now: Date): RatingResult {
   const months = input.onboardedAt ? Math.max(0, (t - input.onboardedAt.getTime()) / DAY_MS / F.tenure.daysPerMonth) : 0;
   const tenure = Math.min(F.tenure.cap, months * F.tenure.pointsPerMonth);
 
-  const since = t - F.penalties.windowDays * DAY_MS;
-  const penalties = input.penalties.filter((p) => p.points < 0 && p.createdAt.getTime() > since).reduce((s, p) => s + p.points, 0);
+  const voteSince = t - F.votes.windowDays * DAY_MS;
+  const votesRaw = input.votes
+    .filter((v) => v.createdAt.getTime() > voteSince)
+    .reduce((sum, v) => {
+      const ageDays = Math.max(0, (t - v.createdAt.getTime()) / DAY_MS);
+      return sum + Math.sign(v.value) * Math.max(0, v.weight) * 0.5 ** (ageDays / F.votes.halfLifeDays);
+    }, 0);
+  const votes = clamp(-F.votes.cap, F.votes.cap, votesRaw);
 
-  const rating = clamp(F.min, F.max, Math.round(F.base + help + reviews + activity + tenure + penalties));
-  return { rating, breakdown: { base: F.base, help: r2(help), reviews: r2(reviews), activity: r2(activity), tenure: r2(tenure), penalties: r2(penalties) } };
+  const since = t - F.penalties.windowDays * DAY_MS;
+  const live = input.penalties.filter((p) => p.points < 0 && p.createdAt.getTime() > since);
+  const violationPoints = live.filter((p) => p.kind === 'violation').reduce((s, p) => s + p.points, 0);
+  const otherPoints = live.filter((p) => p.kind !== 'violation').reduce((s, p) => s + p.points, 0);
+  const penalties = otherPoints + Math.max(F.penalties.violationCap, violationPoints);
+
+  const rating = clamp(F.min, F.max, Math.round(F.base + help + reviews + activity + tenure + votes + penalties));
+  return {
+    rating,
+    breakdown: { base: F.base, help: r2(help), reviews: r2(reviews), activity: r2(activity), tenure: r2(tenure), votes: r2(votes), penalties: r2(penalties) },
+  };
 }
 
 /* ---------- API DTOs ---------- */

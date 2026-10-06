@@ -133,6 +133,56 @@ export const deleteAccountSchema = z.object({ confirm: z.literal('DELETE') });
 
 const currentYear = () => new Date().getUTCFullYear();
 
+/* Phase 9 vehicle details (all optional; `null` clears on PATCH). */
+export const VEHICLE_FUELS = ['petrol', 'diesel', 'gas', 'hybrid', 'electric'] as const;
+export type VehicleFuel = (typeof VEHICLE_FUELS)[number];
+export const VEHICLE_TRANSMISSIONS = ['manual', 'automatic', 'robot', 'cvt'] as const;
+export type VehicleTransmission = (typeof VEHICLE_TRANSMISSIONS)[number];
+export const VEHICLE_DRIVES = ['fwd', 'rwd', 'awd'] as const;
+export type VehicleDrive = (typeof VEHICLE_DRIVES)[number];
+export const VEHICLE_BODY_TYPES = ['sedan', 'hatchback', 'wagon', 'suv', 'crossover', 'coupe', 'minivan', 'pickup', 'van'] as const;
+export type VehicleBodyType = (typeof VEHICLE_BODY_TYPES)[number];
+
+/** 17 characters, digits and latin letters except I, O and Q (ISO 3779); normalized to upper case. */
+export const vinSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-HJ-NPR-Z0-9]{17}$/, 'VIN: 17 characters, no I, O or Q');
+
+/** Liters, 0.6–8.0, one decimal (2.45 → 2.5). */
+const engineVolumeSchema = (coerce: boolean) =>
+  (coerce ? z.coerce.number() : z.number())
+    .min(LIMITS.engineVolumeMinL)
+    .max(LIMITS.engineVolumeMaxL)
+    .transform((v) => Math.round(v * 10) / 10);
+
+const mileageSchema = (coerce: boolean) => (coerce ? z.coerce.number() : z.number()).int().min(0).max(LIMITS.mileageMaxKm);
+
+const vehicleDescriptionSchema = z
+  .string()
+  .trim()
+  .max(LIMITS.vehicleDescriptionMax)
+  .refine((v) => !INVISIBLE_RE.test(v), 'Contains invalid characters')
+  .transform((v) => (v === '' ? null : v));
+
+const vehicleDetailFields = (coerce: boolean) => ({
+  vin: vinSchema.nullable().optional(),
+  engineVolumeL: engineVolumeSchema(coerce).nullable().optional(),
+  fuel: z.enum(VEHICLE_FUELS).nullable().optional(),
+  transmission: z.enum(VEHICLE_TRANSMISSIONS).nullable().optional(),
+  drive: z.enum(VEHICLE_DRIVES).nullable().optional(),
+  bodyType: z.enum(VEHICLE_BODY_TYPES).nullable().optional(),
+  mileageKm: mileageSchema(coerce).nullable().optional(),
+  description: vehicleDescriptionSchema.nullable().optional(),
+  /** Replaces the whole photo set (order kept); uploads with purpose `vehicle`. `[]` removes all. */
+  photoUploadIds: z
+    .array(idSchema)
+    .max(LIMITS.vehiclePhotosMax)
+    .refine((ids) => new Set(ids).size === ids.length, 'Duplicate photos')
+    .optional(),
+});
+
 export const vehicleSchema = z.object({
   brand: z.string().trim().min(1).max(LIMITS.vehicleTextMax),
   model: z.string().trim().min(1).max(LIMITS.vehicleTextMax),
@@ -151,11 +201,12 @@ export const vehicleSchema = z.object({
     .nullable()
     .optional(),
   isPrimary: z.boolean().optional(),
+  ...vehicleDetailFields(true),
 });
 export const updateVehicleSchema = vehicleSchema.partial();
 /**
- * JSON bodies of POST/PATCH /me/vehicles: like `vehicleSchema` (which coerces the year so web forms can use
- * it) but the year must be a real number.
+ * JSON bodies of POST/PATCH /me/vehicles: like `vehicleSchema` (which coerces numbers so web forms can use
+ * it) but the year, engine volume and mileage must be real numbers.
  */
 export const vehicleBodySchema = vehicleSchema.extend({
   year: z
@@ -163,6 +214,7 @@ export const vehicleBodySchema = vehicleSchema.extend({
     .int()
     .min(LIMITS.minVehicleYear)
     .refine((y) => y <= currentYear() + 1, 'Year is in the future'),
+  ...vehicleDetailFields(false),
 });
 export const updateVehicleBodySchema = vehicleBodySchema.partial();
 export type VehicleInput = z.infer<typeof vehicleSchema>;

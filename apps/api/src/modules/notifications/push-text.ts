@@ -1,5 +1,6 @@
 import type { Locale, NotificationType, PushPayload, UserMini } from '@autoc/shared';
 import { ADMIN_PUSH_TYPES, adminPushPayloadFor } from './admin-push-text';
+import { isPhase9Type, PHASE9_PUSH_TYPES, phase9PushPayloadFor, type Phase9NotificationType } from './phase9-push-text';
 
 type Ctx = {
   actor: string;
@@ -83,7 +84,7 @@ const REPORT_DECISION_TEXT: Record<Locale, Record<string, string>> = {
 };
 
 /** Every notification type has push text (enforced by the type: a missing key doesn't compile). */
-const TEXTS: Record<NotificationType, Record<Locale, Texts>> = {
+const TEXTS: Record<Exclude<NotificationType, Phase9NotificationType>, Record<Locale, Texts>> = {
   friend_request: {
     ru: { title: 'Заявка в друзья', body: (c) => `${c.actor} хочет добавить вас в друзья` },
     en: { title: 'Friend request', body: (c) => `${c.actor} wants to be your friend` },
@@ -179,7 +180,7 @@ const TEXTS: Record<NotificationType, Record<Locale, Texts>> = {
 };
 
 /** Every type with push text (all of NotificationType; see push-text.spec). */
-export const PUSH_TEXT_TYPES = Object.keys(TEXTS) as NotificationType[];
+export const PUSH_TEXT_TYPES = [...Object.keys(TEXTS), ...PHASE9_PUSH_TYPES] as NotificationType[];
 
 const asLocale = (locale: string): Locale => (locale === 'en' ? 'en' : 'ru');
 
@@ -192,6 +193,7 @@ const actorLabel = (u: UserMini | undefined) => (!u ? '' : u.name && u.nickname 
 export function pushPayloadFor(type: NotificationType, payload: Record<string, unknown>, locale: string): PushPayload | null {
   const l = asLocale(locale);
   if (ADMIN_PUSH_TYPES.includes(type)) return adminPushPayloadFor(type, payload, l);
+  if (isPhase9Type(type)) return phase9PushPayloadFor(type, payload, l);
   const texts = TEXTS[type]?.[l];
   if (!texts) return null;
   const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor ?? payload.author ?? payload.sender) as UserMini | undefined;

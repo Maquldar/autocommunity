@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { LOCALES, type Locale, type Me, type Relation, type UserMini, type UserPublic } from '@autoc/shared';
+import { LOCALES, tierForRating, type Locale, type Me, type Relation, type UserMini, type UserPublic } from '@autoc/shared';
 import { isUserBlocked } from '../../common/auth/user-state.service';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Storage } from '../../infra/storage/storage';
@@ -35,7 +35,8 @@ export class UserViewService {
   }
 
   toMini(user: UserWithView): UserMini {
-    return { id: user.id, nickname: user.nickname ?? '', name: user.name, avatarUrl: this.avatarUrl(user), rating: user.rating };
+    // Phase 9 step B: isPremium from the subscription.
+    return { id: user.id, nickname: user.nickname ?? '', name: user.name, avatarUrl: this.avatarUrl(user), rating: user.rating, isPremium: false };
   }
 
   toPublicWithRelation(user: UserWithView, relation: Relation): UserPublic {
@@ -52,6 +53,10 @@ export class UserViewService {
       primaryVehicle: primary ? toVehicleDto(primary, canSeePlate(relation)) : null,
       relation,
       status: isUserBlocked({ status: user.status, blockedUntil: user.blockedUntil?.toISOString() ?? null }) ? 'blocked' : 'active',
+      // Phase 9 step B: isPremium / profileFrame from the subscription.
+      isPremium: false,
+      profileFrame: null,
+      tier: tierForRating(user.rating),
     };
   }
 

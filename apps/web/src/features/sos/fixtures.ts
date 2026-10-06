@@ -13,6 +13,9 @@ export function user(id: string, extra: Partial<UserPublic> = {}): UserPublic {
     primaryVehicle: null,
     relation: 'none',
     status: 'active',
+    isPremium: false,
+    profileFrame: null,
+    tier: 'bronze',
     ...extra,
   };
 }

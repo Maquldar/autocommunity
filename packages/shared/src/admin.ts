@@ -34,6 +34,15 @@ export const ADMIN_ACTIONS = [
   'service.reject',
   'visit.approve',
   'visit.reject',
+  /* phase 9 */
+  'wallet.adjust',
+  'wallet.freeze',
+  'wallet.unfreeze',
+  'vote.remove',
+  'violation.approve',
+  'violation.reject',
+  'violation.uphold',
+  'violation.remove',
 ] as const;
 export type AdminActionKind = (typeof ADMIN_ACTIONS)[number];
 
@@ -46,6 +55,10 @@ export const FRAUD_FLAG_KINDS = [
   'new_account_sos',
   'otp_abuse',
   'reciprocal_sos',
+  /* phase 9 */
+  'wallet_funnel',
+  'vote_burst',
+  'violation_rejections',
 ] as const;
 export type FraudFlagKind = (typeof FRAUD_FLAG_KINDS)[number];
 
@@ -73,6 +86,19 @@ export const ANTIFRAUD = {
   /** Two users who helped each other (closed SOS, both directions) this many times within the window. */
   reciprocalSosMin: 2,
   reciprocalSosDays: 7,
+  /* phase 9 */
+  /** `wallet_funnel`: this many distinct senders with accounts younger than `walletFunnelSenderMaxAgeDays` transfer into one account within `walletFunnelHours`. */
+  walletFunnelSenders: 3,
+  walletFunnelSenderMaxAgeDays: 7,
+  walletFunnelHours: 24,
+  /** `vote_burst`: this many downvotes on one user within `voteBurstHours` from "new or low" voters (account < `voteBurstNewAccountDays` or rating < `voteBurstLowRating`). */
+  voteBurstDownvotes: 5,
+  voteBurstHours: 24,
+  voteBurstNewAccountDays: 30,
+  voteBurstLowRating: 50,
+  /** `violation_rejections`: a submitter's rejected violation submissions reach this count within `violationRejectionsDays`. */
+  violationRejectionsMin: 3,
+  violationRejectionsDays: 90,
 } as const;
 
 /* ---------- request schemas ---------- */

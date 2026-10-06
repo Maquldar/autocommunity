@@ -53,7 +53,7 @@ function fakeIo() {
 const notification = (id: string, type: NotificationDto['type'] = 'friend_request'): NotificationDto => ({
   id,
   type,
-  payload: { requestId: 'r1', user: { id: 'u1', nickname: 'aidar', name: 'Aidar', avatarUrl: null, rating: 60 } },
+  payload: { requestId: 'r1', user: { id: 'u1', nickname: 'aidar', name: 'Aidar', avatarUrl: null, rating: 60, isPremium: false } },
   readAt: null,
   createdAt: '2026-10-05T10:00:00Z',
 });
@@ -228,7 +228,7 @@ describe('createAppRealtimeHandlers', () => {
 });
 
 describe('createAppRealtimeHandlers — chats', () => {
-  const peer = { id: 'peer', nickname: 'peer', name: 'Peer', avatarUrl: null, rating: 50 };
+  const peer = { id: 'peer', nickname: 'peer', name: 'Peer', avatarUrl: null, rating: 50, isPremium: false };
   const message = (id: string, chatId = 'c1'): MessageDto => ({
     id,
     chatId,

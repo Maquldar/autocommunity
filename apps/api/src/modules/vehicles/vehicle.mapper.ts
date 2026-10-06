@@ -10,5 +10,14 @@ export function toVehicleDto(v: Vehicle, showPlate: boolean): VehicleDto {
     year: v.year,
     plate: showPlate ? v.plate : null,
     isPrimary: v.isPrimary,
+    // Phase 9 step B: vehicle details (migration pending).
+    engineVolumeL: null,
+    fuel: null,
+    transmission: null,
+    drive: null,
+    bodyType: null,
+    mileageKm: null,
+    description: null,
+    photos: [],
   };
 }

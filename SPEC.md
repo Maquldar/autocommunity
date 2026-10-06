@@ -14,7 +14,7 @@ Status: **Step 0 complete.** Blockers resolved by the owner on 2026-10-04 (see �
 | Stage 0 — prep (design system, schema, API contract, legal) | Yes (engineering parts) | Design system, DB schema, API.md. Legal texts = placeholder privacy/ToS pages with the required disclaimers (see A-12). |
 | Stage 1 — MVP (Sprints 1–10) | **Yes, fully** | Except store publishing (TestFlight / Play) — see KNOWN_GAPS. |
 | Stage 2 — v2.0 | **Yes** | Services catalog, events, feed, event/SOS group chats, notifications for all event types. |
-| Stage 3 — monetization + v3.0 | **No** | Premium, business accounts, store billing, AI assistant, breakdown prediction, OBD-II, parts marketplace, insurance → KNOWN_GAPS.md. The plan itself says "after audience is built". |
+| Stage 3 — monetization + v3.0 | **Partly (Phase 9)** | Owner decision 2026-10-06: an internal coin wallet, premium for coins, driver votes, vehicle violations, vehicle details and rating tiers (§9). Business accounts, store billing, AI assistant, breakdown prediction, OBD-II, parts marketplace, insurance stay out → KNOWN_GAPS.md. |
 
 MVP acceptance criterion (from plan): *a user registers, sees others on the map, joins a community, creates an SOS, receives help, leaves a rating.* This is the primary end-to-end test.
 
@@ -194,3 +194,45 @@ No password reset: there are no passwords (phone OTP + OAuth only).
 ### Minor (defaults chosen, no need to answer)
 
 - Q-5 UI language: default Russian + English (i18n), Russian primary, since the pilot is Almaty.
+
+---
+
+## 9. Phase 9 — monetization and trust (owner decisions, 2026-10-06, final)
+
+Contract: API.md §9. These decisions are final; they replace Q-2 for the items below.
+
+### 9.1 Features
+
+- **F-44 Wallet with internal coins.** 1 coin = 1 ₸; the UI calls them "монеты". Top-up through a payment-provider adapter (a working `demo` provider with an in-app checkout and the test card 4242 4242 4242 4242; the interface is ready for CloudPayments / Kaspi). Transfers between users with limits, a daily cap, eligibility gates and idempotency. History as an immutable ledger. Admins can view, adjust (+/−, never below 0), freeze and unfreeze a wallet, always with an audited note.
+- **F-45 Premium.** 1 490 coins for 30 days from the wallet; auto-renew with cancel / resume; a daily renewal job with a 3-day reminder and an expiry notice. Perks enforced server-side: a badge and a profile frame, and double the existing limits (vehicles 5 → 10, post images 6 → 12, owned communities 10 → 20, memberships 50 → 100). **SOS is free for everyone, always.**
+- **F-46 Driver votes (+/−)** with a reason, one per voter → target pair per 30 days, voter gates (account ≥ 7 days, rating ≥ 40, 20/day). A new rating component (±15, 180 days, decaying). Voters stay anonymous to everyone but admins; only downvotes notify.
+- **F-47 Vehicle violations** (КоАП РК / УК РК by category, optional free-text article — article numbers are not hardcoded) with 1–3 evidence photos, admin moderation, an owner dispute, and a −5 rating penalty per approved violation (max −20, expiring after 365 days, reversed on removal).
+- **F-48 Vehicle details:** VIN (owner only), engine volume, fuel, transmission, drive, body type, mileage, description, up to 5 photos.
+- **F-49 Rating tiers:** `warning` (0–29, a red "низкое доверие" marker), none, bronze, silver, gold, platinum.
+
+### 9.2 Coins are not money (regulatory position)
+
+- **There is no cash-out.** Coins can be bought, sent to other users as a gift or spent on premium inside the app. They can never be withdrawn, exchanged back to tenge or paid out to a card or bank account, and nothing in the API allows it.
+- This keeps coins a prepaid in-app service balance (like game currency) and keeps the product **out of e-money regulation** in Kazakhstan, where issuing electronic money and running money transfers are licensed activities. Adding cash-out, peer-to-peer payments for goods or services, or interest would change that and needs a lawyer first.
+- Transfers are limited (100..50 000 per transfer, 100 000 per day per sender) and watched by antifraud (`wallet_funnel`) to make the wallet unattractive for laundering or scams.
+- The ToS draft must say: coins have no cash value, are non-refundable except where the law requires, and can't be withdrawn. (Lawyer review, like the other legal drafts — A-12.)
+
+### 9.3 Entities (Phase 9)
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| Wallet | user_id PK, balance bigint (CHECK ≥ 0), frozen, frozen_at | Created lazily |
+| WalletTransaction | id, user_id, kind (topup / transfer_out / transfer_in / subscription / admin_adjust / refund), amount (signed), balance_after, counterparty_user_id, ref, note, idempotency_key (unique per user), created_at | Immutable ledger |
+| Topup | id, user_id, amount, provider, provider_ref, status, card_last4, expires_at, completed_at | One per checkout |
+| PremiumSubscription | id, user_id, started_at, current_period_end, auto_renew, status, reminder_sent_for, ended_at | One live row per user |
+| UserVote | id, voter_id, target_id, value ±1, reason, comment, weight, created_at | Pair cooldown 30 days |
+| Violation | id, vehicle_id, owner_id, submitter_id, category, code_type, article, occurred_at, description, photo_upload_ids, status, dispute_text, disputed_at, decided_at, decided_by, decision_note | Penalty through the rating ledger |
+| Vehicle (extended) | vin, engine_volume_l, fuel, transmission, drive, body_type, mileage_km, description, photo_upload_ids | VIN never public |
+
+### 9.4 Assumptions
+
+- **A-17** The demo provider never touches real money; the checkout page says so. Real providers are switched on by env (`PAYMENT_PROVIDER`) once a merchant account exists.
+- **A-18** Premium renews a day early (the daily job charges subscriptions ending within 24 h) so there is no gap; perks end exactly at `currentPeriodEnd` if it isn't renewed.
+- **A-19** Losing premium never deletes data: extra vehicles, posts and communities stay; only new additions above the base limits are blocked.
+- **A-20** A vote's weight is fixed at the voter's rating when they vote (0.5 / 1 / 1.5), so it can't be inflated later.
+

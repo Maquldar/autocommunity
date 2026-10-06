@@ -32,6 +32,9 @@ const user = (relation: UserPublic['relation']): UserPublic => ({
   primaryVehicle: null,
   relation,
   status: 'active',
+  isPremium: false,
+  profileFrame: null,
+  tier: 'silver',
 });
 
 /** What GET /users/u1 returns after the action (refetched on settle). */

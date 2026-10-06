@@ -164,7 +164,7 @@ export class UsersService {
       await tx.notification.deleteMany({ where: { userId } });
       await tx.$executeRaw`
         DELETE FROM notifications WHERE type = 'friend_request' AND payload->'user'->>'id' = ${userId}`;
-      const anonymous = { id: userId, nickname: '', name: DELETED_USER_NAME, avatarUrl: null, rating: 0 };
+      const anonymous = { id: userId, nickname: '', name: DELETED_USER_NAME, avatarUrl: null, rating: 0, isPremium: false };
       // Every key a UserMini of an actor is stored under (friends, communities, SOS, reviews).
       for (const key of ACTOR_PAYLOAD_KEYS) {
         await tx.$executeRaw`

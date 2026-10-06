@@ -67,7 +67,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function parseUserMini(value: unknown): UserMini | null {
   if (!isRecord(value)) return null;
-  const { id, nickname, name, avatarUrl, rating } = value;
+  const { id, nickname, name, avatarUrl, rating, isPremium } = value;
   if (typeof id !== 'string' || !id) return null;
   return {
     id,
@@ -75,6 +75,8 @@ export function parseUserMini(value: unknown): UserMini | null {
     name: typeof name === 'string' && name ? name : typeof nickname === 'string' ? nickname : '',
     avatarUrl: typeof avatarUrl === 'string' ? avatarUrl : null,
     rating: typeof rating === 'number' && Number.isFinite(rating) ? rating : 50,
+    // Snapshots stored before Phase 9 have no isPremium.
+    isPremium: isPremium === true,
   };
 }
 

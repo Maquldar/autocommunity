@@ -8,6 +8,8 @@ export const FEED_LIMITS = {
   textMax: 3000,
   /** Images per post (purpose `post`); a video post carries exactly one `video` upload. */
   mediaMax: 6,
+  /** Phase 9: premium authors may attach up to this many images (the server enforces `mediaMax` for others → 400 MEDIA_LIMIT). */
+  mediaMaxPremium: 12,
   pollQuestionMin: 3,
   pollQuestionMax: 200,
   pollOptionsMin: 2,
@@ -110,7 +112,7 @@ export const createPostSchema = z
     text: multiline(FEED_LIMITS.textMax).optional(),
     mediaUploadIds: z
       .array(idSchema)
-      .max(FEED_LIMITS.mediaMax)
+      .max(FEED_LIMITS.mediaMaxPremium)
       .refine((ids) => new Set(ids).size === ids.length, 'Duplicate uploads')
       .optional(),
     communityId: idSchema.nullable().optional(),

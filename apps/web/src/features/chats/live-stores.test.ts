@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createReadStore, createThrottle, createTypingStore } from './live-stores';
 
-const user = (id: string) => ({ id, nickname: id, name: id, avatarUrl: null, rating: 50 });
+const user = (id: string) => ({ id, nickname: id, name: id, avatarUrl: null, rating: 50, isPremium: false });
 
 describe('createThrottle (chat:typing at most once per 3 s)', () => {
   it('allows the first call, blocks inside the interval, allows again after it', () => {

@@ -6,7 +6,7 @@ import { reviewErrorKey } from './review-sheet';
 
 describe('breakdownRows', () => {
   it('orders components and fills bars relative to their caps', () => {
-    const rows = breakdownRows({ base: 50, help: 12.5, reviews: -7.5, activity: 5, tenure: 0, penalties: -10 });
+    const rows = breakdownRows({ base: 50, help: 12.5, reviews: -7.5, activity: 5, tenure: 0, votes: 0, penalties: -10 });
     expect(rows.map((r) => r.key)).toEqual(['base', 'help', 'reviews', 'activity', 'tenure', 'penalties']);
     expect(rows.find((r) => r.key === 'help')).toMatchObject({ fill: 0.5, sign: 'positive' });
     expect(rows.find((r) => r.key === 'reviews')).toMatchObject({ fill: 0.5, sign: 'negative' });

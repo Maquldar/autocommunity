@@ -455,7 +455,7 @@ export class EventsService implements OnModuleInit {
       return {
         id: r.id,
         community: { id: r.communityId, name: r.communityName, avatarUrl: avatar ? this.storage.publicUrl(avatar) : null, isPrivate: r.communityPrivate },
-        createdBy: creatorById.get(r.createdById) ?? { id: r.createdById, nickname: '', name: '', avatarUrl: null, rating: 0 },
+        createdBy: creatorById.get(r.createdById) ?? { id: r.createdById, nickname: '', name: '', avatarUrl: null, rating: 0, isPremium: false },
         title: r.title,
         description: r.description,
         place: r.place,

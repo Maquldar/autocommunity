@@ -173,6 +173,7 @@ Each phase ends with: features working UI → API → DB → UI, tests (unit + i
 | 6 | Admin + antifraud + hardening | Admin panel (users/communities/SOS/reports/audit), antifraud v1, k6 load test, security review | Admin blocks a user → user is logged out and can't SOS |
 | 7 | Services catalog (v2) | Categories, map + list, cards, submit service, admin verification, visit verification (geo/QR/photo), service reviews + rating | Find service → verify visit → review → rating updates |
 | 8 | Events, feed, polish (v2) | Events + RSVP + route + event chat, feed with photo/video/polls/likes/comments, push for all event types, accessibility pass, README, KNOWN_GAPS | Full regression suite green; one-command setup documented |
+| 9 | Monetization and trust | Coin wallet (demo payment provider, transfers, ledger), premium for coins with a renewal job, driver votes (new rating component), vehicle violations with moderation and penalties, vehicle details, rating tiers | Top up with the test card → transfer → subscribe to premium → vote → report a violation → admin approves → rating changes |
 
 ## 8. Agent workflow
 

@@ -10,3 +10,7 @@ export * from './reviews-reports';
 export * from './admin';
 export * from './events';
 export * from './feed';
+export * from './tiers';
+export * from './wallet';
+export * from './votes';
+export * from './violations';

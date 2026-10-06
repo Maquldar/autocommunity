@@ -2,8 +2,8 @@ import type { MessageDto } from '@autoc/shared';
 import { describe, expect, it } from 'vitest';
 import { buildTimeline, dayKey, groupPosition, matchEchoes, type PendingMessage, type TimelineMessage } from './timeline';
 
-const me = { id: 'me', nickname: 'me', name: 'Me', avatarUrl: null, rating: 50 };
-const peer = { id: 'peer', nickname: 'peer', name: 'Peer', avatarUrl: null, rating: 50 };
+const me = { id: 'me', nickname: 'me', name: 'Me', avatarUrl: null, rating: 50, isPremium: false };
+const peer = { id: 'peer', nickname: 'peer', name: 'Peer', avatarUrl: null, rating: 50, isPremium: false };
 
 function msg(id: string, iso: string, over: Partial<MessageDto> = {}): MessageDto {
   return { id, chatId: 'c1', sender: peer, type: 'text', text: id, upload: null, lat: null, lng: null, createdAt: iso, deletedAt: null, ...over };

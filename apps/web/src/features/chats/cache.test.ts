@@ -17,7 +17,7 @@ import {
   type MessagesData,
 } from './cache';
 
-const user = (id: string) => ({ id, nickname: id, name: id.toUpperCase(), avatarUrl: null, rating: 50 });
+const user = (id: string) => ({ id, nickname: id, name: id.toUpperCase(), avatarUrl: null, rating: 50, isPremium: false });
 
 function msg(id: string, at: string, over: Partial<MessageDto> = {}): MessageDto {
   return {

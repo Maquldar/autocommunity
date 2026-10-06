@@ -39,6 +39,7 @@ function toMini(me: Me): UserMini {
     name: me.name,
     avatarUrl: me.avatarUrl,
     rating: me.rating,
+    isPremium: me.isPremium,
   };
 }
 

@@ -164,6 +164,10 @@
         "penalties": {
           "label": "Penalties",
           "hint": "Confirmed reports (−10) or a fake SOS (−50). They expire after a year."
+        },
+        "votes": {
+          "label": "Driver votes",
+          "hint": "Ups and downs from other drivers over the last 180 days. Votes from trusted drivers weigh more; old votes fade. From −15 to +15."
         }
       },
       "unlocksLabel": "What the rating unlocks",
@@ -184,7 +188,9 @@
         "review_received": "New review",
         "penalty": "Penalty",
         "recalc_daily": "Daily update (activity, time with us, ageing)",
-        "recalc": "Recalculated"
+        "recalc": "Recalculated",
+        "vote_received": "Driver vote",
+        "penalty_reversed": "Penalty reversed"
       },
       "empty": {
         "title": "No changes yet",
@@ -2057,7 +2063,9 @@
         "review_received": "Review received",
         "penalty": "Penalty",
         "recalc_daily": "Daily recalculation",
-        "recalc": "Recalculation"
+        "recalc": "Recalculation",
+        "vote_received": "Driver vote",
+        "penalty_reversed": "Penalty reversed"
       },
       "noRatingEvents": "No rating changes yet.",
       "adminActions": "Admin history",
@@ -2113,7 +2121,10 @@
         "location_teleport": "Location jumps",
         "new_account_sos": "SOS from a new account",
         "reciprocal_sos": "Mutual SOS help (possible rating farming)",
-        "otp_abuse": "OTP abuse"
+        "otp_abuse": "OTP abuse",
+        "wallet_funnel": "Transfers from new accounts",
+        "vote_burst": "Downvote burst",
+        "violation_rejections": "False violation reports"
       },
       "facts": {
         "count": "SOS",
@@ -2148,7 +2159,15 @@
         "service_verify": "Service verified",
         "service_reject": "Service rejected",
         "visit_approve": "Visit approved",
-        "visit_reject": "Visit rejected"
+        "visit_reject": "Visit rejected",
+        "wallet_adjust": "Balance adjusted",
+        "wallet_freeze": "Wallet frozen",
+        "wallet_unfreeze": "Wallet unfrozen",
+        "vote_remove": "Vote removed",
+        "violation_approve": "Violation approved",
+        "violation_reject": "Violation rejected",
+        "violation_uphold": "Dispute rejected",
+        "violation_remove": "Violation removed"
       }
     },
     "reports": {

@@ -9,7 +9,7 @@ import { NotificationItem } from './notification-item';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
-const aidar = { id: 'u1', nickname: 'aidar', name: 'Aidar K.', avatarUrl: null, rating: 72 };
+const aidar = { id: 'u1', nickname: 'aidar', name: 'Aidar K.', avatarUrl: null, rating: 72, isPremium: false };
 const base = { readAt: null, createdAt: new Date(Date.now() - 5 * 60_000).toISOString() };
 const friendRequest: NotificationDto = { id: 'n1', type: 'friend_request', payload: { requestId: 'r1', user: aidar }, ...base };
 const friendAccepted: NotificationDto = { id: 'n2', type: 'friend_accepted', payload: { user: aidar }, ...base };
@@ -48,7 +48,7 @@ describe('describeNotification', () => {
       requestId: null,
       href: null,
     });
-    expect(parseUserMini({ id: 'u2', nickname: 'nick' })).toEqual({ id: 'u2', nickname: 'nick', name: 'nick', avatarUrl: null, rating: 50 });
+    expect(parseUserMini({ id: 'u2', nickname: 'nick' })).toEqual({ id: 'u2', nickname: 'nick', name: 'nick', avatarUrl: null, rating: 50, isPremium: false });
   });
 });
 

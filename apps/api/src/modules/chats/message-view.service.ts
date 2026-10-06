@@ -52,4 +52,4 @@ export class MessageViewService {
   }
 }
 
-const unknownSender = (id: string): UserMini => ({ id, nickname: '', name: '', avatarUrl: null, rating: 0 });
+const unknownSender = (id: string): UserMini => ({ id, nickname: '', name: '', avatarUrl: null, rating: 0, isPremium: false });

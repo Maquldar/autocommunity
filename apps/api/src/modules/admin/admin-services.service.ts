@@ -195,7 +195,7 @@ export class AdminServicesService {
       return {
         id: r.id,
         service: r.service,
-        user: minis.get(r.userId) ?? { id: r.userId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 },
+        user: minis.get(r.userId) ?? { id: r.userId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0, isPremium: false },
         method: r.method,
         status: r.status,
         photo: upload ? toUploadDto(upload, this.storage) : null,

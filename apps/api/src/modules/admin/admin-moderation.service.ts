@@ -95,7 +95,7 @@ export class AdminModerationService {
         city: c.city,
         isPrivate: c.isPrivate,
         memberCount: c.memberCount,
-        owner: owners.get(c.ownerId) ?? { id: c.ownerId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 },
+        owner: owners.get(c.ownerId) ?? { id: c.ownerId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0, isPremium: false },
         deleted: c.deletedAt !== null,
         deletedAt: c.deletedAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
@@ -366,7 +366,7 @@ export class AdminModerationService {
       resolutionNote: r.resolvedNote,
       createdAt: r.createdAt.toISOString(),
       resolvedAt: r.resolvedAt?.toISOString() ?? null,
-      reporter: minis.get(r.reporterId) ?? { id: r.reporterId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 },
+      reporter: minis.get(r.reporterId) ?? { id: r.reporterId, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0, isPremium: false },
       targetUser: r.targetUserId ? (minis.get(r.targetUserId) ?? null) : null,
       preview: previews.get(`${r.targetType}:${r.targetId}`) ?? { title: null, text: null, imageUrl: null, deleted: true },
     }));

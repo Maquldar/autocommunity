@@ -698,3 +698,179 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
   - Rate limits: `feed-post:{userId}` 20 / 24 h, `feed-comment:{userId}` 60 / h, `feed-like:{userId}` 120 / min (like and unlike together) → `429 RATE_LIMITED`.
 - **Reports:** `post` / `comment` targets are visible when the post is (comments: not deleted); `targetUserId` is the post / comment author.
 - **Push (F-43):** every `NotificationType` has ru/en text and a URL (enforced at compile time and by `push-text.spec.ts`): `event_new` → `/events/{id}` (cancelled → `/communities/{id}?tab=events`), `event_reminder` → `/events/{id}`, `post_comment`/`post_like` → `/posts/{id}`, `message` → `/chats/{chatId}`, `service_status`/`visit_status` → `/services/{serviceId}`, `admin_warning`/`report_resolved` → `/notifications`. Event times in push texts are Asia/Almaty.
+
+## 9. Phase 9 — Wallet, premium, driver votes, vehicle violations, vehicle details, rating tiers (FROZEN)
+
+Owner decisions (final): internal coins with no cash-out, premium for coins, driver votes, moderated vehicle violations, detailed vehicles, rating tiers. Shared: `packages/shared/src/wallet.ts` (wallet, payments, premium), `votes.ts`, `violations.ts`, `tiers.ts`; vehicle details in `schemas.ts`; new rating component in `rating.ts`.
+
+### 9.0 Changes to shared objects
+
+```ts
+type UserMini = { id; nickname; name; avatarUrl; rating; isPremium: boolean }   // tier: compute with tierForRating(rating)
+type UserPublic = { ...; isPremium: boolean; profileFrame: 'premium' | null; tier: RatingTier }  // Me inherits them
+type RatingTier = 'warning' | 'none' | 'bronze' | 'silver' | 'gold' | 'platinum'
+type VehicleDto = { id; brand; model; year; plate; isPrimary;
+  engineVolumeL: number | null; fuel: VehicleFuel | null; transmission: VehicleTransmission | null; drive: VehicleDrive | null;
+  bodyType: VehicleBodyType | null; mileageKm: number | null; description: string | null; photos: UploadDto[] }
+type OwnVehicleDto = VehicleDto & { vin: string | null }          // GET/POST/PATCH /me/vehicles only
+type VehicleDetailDto = VehicleDto & { owner: UserMini; approvedViolations: number }
+type RatingBreakdown = { base; help; reviews; activity; tenure; votes; penalties }   // `votes` is new
+```
+
+- `isPremium` is true while the user's premium period hasn't ended (`currentPeriodEnd > now`), on every rendering of the user (UserMini everywhere, UserPublic, Me). Notification payloads snapshot `UserMini` at creation time, so payloads stored before Phase 9 lack `isPremium` — clients treat a missing value as `false`.
+- `tierForRating(rating)` (shared, pure): 0–29 `warning` (a visible red "низкое доверие" marker), 30–49 `none`, 50–64 `bronze`, 65–79 `silver`, 80–89 `gold`, 90–100 `platinum`. UserPublic / Me carry `tier`; for UserMini the client calls the same function.
+- New `NotificationType`s: `wallet_received`, `wallet_admin`, `premium_reminder`, `premium_renewed`, `premium_expired`, `vote_received`, `violation_reported`, `violation_status` (payloads below; all pushed, ru/en).
+- New upload purposes (images, same pipeline as `post`): `vehicle`, `violation`.
+- New `RatingEventReason`s: `vote_received` (refId = vote id), `penalty_reversed` (refId = violation id). New penalty kind `violation` (−5).
+- New `FRAUD_FLAG_KINDS`: `wallet_funnel`, `vote_burst`, `violation_rejections`. New `ADMIN_ACTIONS`: `wallet.adjust`, `wallet.freeze`, `wallet.unfreeze`, `vote.remove`, `violation.approve`, `violation.reject`, `violation.uphold`, `violation.remove`.
+- New error codes: `INSUFFICIENT_FUNDS` (409), `WALLET_FROZEN` (403), `RECIPIENT_UNAVAILABLE` (409), `TRANSFER_DAILY_CAP` (409), `IDEMPOTENCY_KEY_REUSED` (409), `ACCOUNT_TOO_NEW` (403), `TOPUP_NOT_PENDING` (409), `TOPUP_EXPIRED` (409), `PAYMENT_DECLINED` (402), `ALREADY_PREMIUM` (409), `NOT_PREMIUM` (409), `WALLET_ALREADY_FROZEN` (409), `WALLET_NOT_FROZEN` (409), `ALREADY_VOTED` (409), `MEDIA_LIMIT` (400), `VIOLATION_INVALID_STATE` (409), `ALREADY_DISPUTED` (409). Reused: `RATING_TOO_LOW` (403), `INVALID_TARGET`, `INVALID_UPLOAD`, `RATE_LIMITED`, `VEHICLE_LIMIT` / `COMMUNITY_LIMIT` / `MEMBERSHIP_LIMIT` (now with `details { limit, premiumLimit }`).
+
+### 9.1 Wallet
+
+1 coin = 1 ₸; the UI calls them "монеты". **No cash-out** (SPEC §9). Every balance change is one row in the immutable ledger `wallet_transactions` written in the same transaction as the `wallets.balance` update (`balance >= 0` is a DB CHECK; `balance_after` = the balance after that row). A wallet is created lazily (balance 0) on first use.
+
+```ts
+type WalletTxKind = 'topup' | 'transfer_out' | 'transfer_in' | 'subscription' | 'admin_adjust' | 'refund'
+type WalletDto = { balance: number; frozen: boolean; premium: PremiumDto; transferDailyRemaining: number }
+type WalletTransactionDto = { id; kind: WalletTxKind; amount: number /* signed */; balanceAfter: number;
+  counterparty: UserMini | null /* transfers */; ref: string | null; note: string | null; createdAt }
+type TopupDto = { id; amount; status: 'pending'|'succeeded'|'declined'|'expired'; provider: 'demo'; cardLast4: string | null; createdAt; expiresAt; completedAt: string | null }
+```
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/wallet` | — | `WalletDto` |
+| GET | `/wallet/transactions` | `kind?`, cursor, limit | page of `WalletTransactionDto`, newest first |
+| POST | `/wallet/topups` | `{ amount }` (int 500..200 000) | `201 { topup: TopupDto, checkoutUrl }` |
+| GET | `/wallet/topups/:id` | — | `TopupDto` (own only, else 404) |
+| POST | `/wallet/topups/:id/demo-confirm` | `{ cardNumber, expiry?: 'MM/YY', cvc? }` | `200 TopupDto` (`succeeded`) · `402 PAYMENT_DECLINED` (top-up becomes `declined`) |
+| POST | `/wallet/transfers` | `{ toUserId \| toNickname, amount (int 100..50 000), message? ≤140, idempotencyKey }` | `201 TransferResult = { transaction: WalletTransactionDto (the sender's transfer_out), balance }`; a replay → `200` with the same result |
+
+**Top-up (PaymentProvider adapter):**
+- The API talks to payments only through a `PaymentProvider` interface: `createPayment({ topupId, userId, amount }) → { providerRef, checkoutUrl }` and a provider-specific completion that resolves to `{ topupId, status: 'succeeded' | 'declined' }`. Completion always goes through one idempotent `completeTopup` (row lock on the top-up; only a `pending` top-up changes; `succeeded` credits the wallet and writes one `topup` ledger row with `ref` = top-up id). A real provider (CloudPayments, Kaspi) plugs in as another adapter plus a public webhook route `POST /payments/webhook/:provider` (signature-checked) that calls the same `completeTopup`; that route is reserved and not implemented in this build.
+- `PAYMENT_PROVIDER=demo` is the only provider. Its `checkoutUrl` is the in-app page `<WEB_ORIGIN>/wallet/checkout/<topupId>`, which shows the amount and a card form and calls `demo-confirm`. With any other provider configured, `demo-confirm` → `404 PROVIDER_DISABLED`.
+- `demo-confirm`: card `4242 4242 4242 4242` (spaces/dashes ignored; `DEMO_TEST_CARD`) → `succeeded` and credited; any other well-formed number → `declined`, `402 PAYMENT_DECLINED`. Only the last 4 digits are stored. Idempotent: confirming a `succeeded` top-up again → `200` with the same `TopupDto`, credited once (also under concurrent confirms). Confirming a `declined` one → `409 TOPUP_NOT_PENDING`; after `expiresAt` (created + 30 min) → `409 TOPUP_EXPIRED` (the top-up becomes `expired`).
+- Limits: amount 500..200 000 (`400 VALIDATION_ERROR`); 10 top-ups created per hour per user → `429 RATE_LIMITED`; a frozen wallet → `403 WALLET_FROZEN` on create and on confirm.
+
+**Transfers:**
+- Recipient by `toUserId` or `toNickname` (exactly one). Self → `400 INVALID_TARGET`. Unknown, deleted or un-onboarded → `404`. Blocked recipient or recipient's wallet frozen → `409 RECIPIENT_UNAVAILABLE`.
+- Sender gates, in order: account ≥ 24 h old (`403 ACCOUNT_TOO_NEW`, details `{ minHours, retryAfterSec }`), rating ≥ 30 (`403 RATING_TOO_LOW`, details `{ min }`), wallet not frozen (`403 WALLET_FROZEN`), 10 transfers/min (`429 RATE_LIMITED`), rolling-24 h sent total + amount ≤ 100 000 (`409 TRANSFER_DAILY_CAP`, details `{ cap, remaining }`), balance ≥ amount (`409 INSUFFICIENT_FUNDS`, details `{ balance }`). Blocked senders never get here (`403 ACCOUNT_BLOCKED`).
+- Atomic: one transaction locks both wallets with `SELECT … FOR UPDATE` **in wallet-id order** (no deadlocks), re-checks the balance and the daily cap under the lock, and writes `transfer_out` (−amount, sender) and `transfer_in` (+amount, recipient); each row's `ref` is the other row's id and `note` is the message. Concurrent transfers can never overdraw.
+- Idempotency: `idempotencyKey` (8–64 chars `[A-Za-z0-9_-]`) is unique per sender (`wallet_transactions (user_id, idempotency_key)`). Repeating a key with the same recipient and amount returns the original result (`200`); with different ones → `409 IDEMPOTENCY_KEY_REUSED`.
+- The recipient gets `wallet_received` `{ transactionId, amount, message, user: UserMini (sender) }` (in-app + push, url `/wallet`).
+- Antifraud `wallet_funnel`: ≥ 3 distinct senders whose accounts are < 7 days old transfer into one account within 24 h → flag on the recipient (details `{ senderIds, total }`), at most once per 24 h per recipient; flag only. Runs in the background.
+
+**Reads:** `GET /wallet` creates the wallet if missing. `transferDailyRemaining` = 100 000 − sent in the rolling 24 h (0 when frozen). `GET /wallet/transactions?kind=` filters by kind; keyset on (`createdAt`, id).
+
+**Admin** (role admin, audited with a required note 3–500 chars, `assertTargetable`: not self, not another admin → `403 INVALID_TARGET`):
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/admin/users/:id/wallet` | — | `AdminWalletDto { userId, balance, frozen, frozenAt, premium: PremiumDto, sentLast24h }` |
+| GET | `/admin/users/:id/wallet/transactions` | `kind?`, cursor | page of `AdminWalletTransactionDto` (= `WalletTransactionDto` + `idempotencyKey`) |
+| POST | `/admin/users/:id/wallet/adjust` | `{ amount (non-zero int, \|amount\| ≤ 1 000 000), note }` | `AdminWalletDto`; a result below 0 → `409 INSUFFICIENT_FUNDS`. Writes `admin_adjust` (note = the admin note). Allowed on frozen wallets. Audit `wallet.adjust` |
+| POST | `/admin/users/:id/wallet/freeze` | `{ note }` | `AdminWalletDto`; already frozen → `409 WALLET_ALREADY_FROZEN`. Audit `wallet.freeze` |
+| POST | `/admin/users/:id/wallet/unfreeze` | `{ note }` | `AdminWalletDto`; not frozen → `409 WALLET_NOT_FROZEN`. Audit `wallet.unfreeze` |
+
+Each of the three writes sends `wallet_admin` `{ action: 'adjust'|'freeze'|'unfreeze', amount, balance, note }` to the user (url `/wallet`). A frozen wallet blocks top-ups, transfers out and in, subscribing and renewals; reads still work.
+
+`refund` is a reserved ledger kind for provider refunds (not produced by the demo provider).
+
+### 9.2 Premium
+
+1 490 coins for 30 days, charged from the wallet (`subscription` ledger row, `ref` = subscription id). SOS stays free for everyone.
+
+```ts
+type PremiumDto = { status: 'none' | 'active' | 'cancelled'; isPremium: boolean; autoRenew: boolean; startedAt: string | null;
+  currentPeriodEnd: string | null; priceCoins: 1490; periodDays: 30;
+  limits: { vehicles; postMedia; communitiesOwned; communityMemberships } }  // the limits that apply to the user now
+```
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/premium` | `PremiumDto` |
+| POST | `/premium/subscribe` | `200 PremiumDto`; charges 1 490 now, period = now + 30 days, `autoRenew = true`. Already premium → `409 ALREADY_PREMIUM`; `409 INSUFFICIENT_FUNDS` (details `{ balance, price }`); `403 WALLET_FROZEN`. Concurrent subscribes charge once (wallet row lock + status re-check) |
+| POST | `/premium/cancel` | `200 PremiumDto` with `status: 'cancelled'`: auto-renew off, premium stays until `currentPeriodEnd`. Not premium → `409 NOT_PREMIUM`; already cancelled → no-op `200` |
+| POST | `/premium/resume` | `200 PremiumDto` with `status: 'active'`: auto-renew back on (only before the period ends). Not premium → `409 NOT_PREMIUM` (subscribe instead); already active → no-op `200` |
+
+- `status` is `none` when the period has ended, whether or not the renewal job has run yet; `isPremium` is computed from `currentPeriodEnd > now` everywhere.
+- **Renewal job** (timer + Redis lock, first run 10 min after boot, then every 24 h, once a day across instances):
+  - Subscriptions whose period ends within the next 24 h (`PREMIUM.renewAheadHours`) and `autoRenew` on: wallet not frozen and balance ≥ 1 490 → charge, `currentPeriodEnd += 30 days`, `premium_renewed` `{ periodEnd, priceCoins, balance }`. Otherwise they are left to lapse.
+  - Subscriptions whose period has ended and weren't renewed → expired (`status` none, row closed), `premium_expired` `{ reason: 'cancelled' | 'insufficient_funds' | 'wallet_frozen' }`.
+  - 3 days before the period ends (once per period): `premium_reminder` `{ periodEnd, autoRenew, lowBalance, priceCoins, balance }` — "renews in 3 days" when auto-renew is on, a low-balance warning when the balance is below the price, "ends on …" when auto-renew is off.
+  - Each step is idempotent per subscription and period (a re-run on the same day charges and notifies nothing twice).
+- **Perks, enforced server-side** (`PREMIUM_PERK_LIMITS`, only limits that already existed are doubled):
+  - premium badge (`isPremium` on UserMini / UserPublic / Me) and profile frame (`UserPublic.profileFrame = 'premium'`);
+  - vehicles 10 instead of 5 (`409 VEHICLE_LIMIT`, details `{ limit, premiumLimit }`); existing vehicles are kept when premium ends, adding more is blocked;
+  - images per post 12 instead of 6 (the schema accepts 12; non-premium authors with 7–12 → `400 MEDIA_LIMIT`, details `{ limit, premiumLimit }`);
+  - owned communities 20 instead of 10 (`409 COMMUNITY_LIMIT`), memberships incl. pending 100 instead of 50 (`409 MEMBERSHIP_LIMIT`), both with `details { limit, premiumLimit }`; the ownership-transfer check uses the new owner's limit.
+  - Perks without an existing limit are listed in KNOWN_GAPS.md, not invented.
+
+### 9.3 Driver votes (+/−)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/users/:id/votes` | `{ value: 1 \| -1, reason, comment? ≤200 }` | `201 MyVoteDto { id, value, reason, comment, createdAt, canVoteAgainAt }` |
+| GET | `/users/:id/votes/summary` | — | `VoteSummaryDto { userId, up, down, byReason: Record<VoteReason, number>, myVote: MyVoteDto \| null, eligibility }` |
+
+- `reason` ∈ `helped_on_road | polite | good_driver` (only with +1), `rude | dangerous_driving | scam` (only with −1), `other` (either) → else `400 VALIDATION_ERROR`.
+- Voter gates, in order: self → `400 INVALID_TARGET`; target unknown / deleted / un-onboarded → `404`; account ≥ 7 days (`403 ACCOUNT_TOO_NEW`, details `{ minDays, retryAfterSec }`); rating ≥ 40 (`403 RATING_TOO_LOW`, details `{ min }`); one vote per voter → target pair per 30 days (`409 ALREADY_VOTED`, details `{ canVoteAgainAt, retryAfterSec }`); 20 votes per rolling 24 h (`429 RATE_LIMITED`). Blocked voters get `403 ACCOUNT_BLOCKED`. Votes on blocked targets are allowed. Concurrent votes on the same pair produce exactly one (pair lock).
+- Votes are final (no edit or delete by users).
+- **Rating:** new component `votes` in `computeRating` = Σ over votes of the last 180 days of `value × weight × 0.5^(ageDays/180)`, clamped to ±15 (`RATING_FORMULA.votes`). `weight` is fixed at voting time from the voter's rating: `voteWeight(r)` = 1.5 for r ≥ 80, 1 for 60–79, 0.5 below 60. Each vote recomputes the target in the same transaction (ledger reason `vote_received`, refId = vote id; no row if the rating didn't move). The daily job applies decay. `50 + Σ delta = users.rating` still holds.
+- **Summary:** public to every signed-in user (same visibility as `GET /users/:id`). Counts are all-time; `byReason` has every reason (0 when none). Voter identities are never returned to non-admins. `myVote` is the caller's vote of the last 30 days (null otherwise). `eligibility` ∈ `ok | self | account_too_new | rating_too_low | already_voted | daily_limit` tells the client whether to show the vote buttons.
+- **Notification:** downvotes only — `vote_received` `{ voteId, value: -1, reason }` (no voter), pushed, url `/profile?tab=votes`. Upvotes notify no one.
+- **Antifraud `vote_burst`:** ≥ 5 downvotes on one user within 24 h from voters whose account is < 30 days old or whose rating is < 50 → flag on the target (details `{ voterIds, count }`), at most once per 24 h per target (Redis `SET NX`); flag only.
+- **Admin:** `GET /admin/users/:id/votes?value=1|-1&cursor` → page of `AdminVoteDto { id, voter, target, value, reason, comment, weight, createdAt }` (votes received by the user, newest first); `DELETE /admin/votes/:id {note}` → `204`, deletes the vote and recomputes the target (`recalc`, refId = vote id); audit `vote.remove` (target user = the vote's target; `assertTargetable` on the target).
+
+### 9.4 Vehicle violations
+
+Most traffic offences are under КоАП РК, the serious ones under УК РК. Article numbers are **not** hardcoded: a category plus an optional free-text `article` (≤ 60, e.g. "ст. 610 КоАП").
+
+```ts
+type ViolationCategory = 'speeding'|'red_light'|'drunk_driving'|'wrong_lane'|'no_license'|'accident_fled'|'dangerous_driving'|'parking'|'other'
+type ViolationStatus = 'pending'|'approved'|'rejected'|'disputed'|'removed'
+type ViolationDto = { id; vehicle: { id, brand, model, year }; category; codeType: 'koap'|'uk'; article: string | null; occurredAt;
+  description; photos: UploadDto[]; status; dispute: { text, createdAt } | null /* owner + admins only */;
+  submittedByMe: boolean; canDispute: boolean; createdAt; decidedAt: string | null }
+```
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/vehicles/:id` | — | `VehicleDetailDto` (plate per the usual rule; never the VIN) |
+| POST | `/vehicles/:id/violations` | `{ category, codeType, article?, occurredAt, description 10..1000, photoUploadIds (1–3, purpose violation) }` | `201 ViolationDto` (`pending`) |
+| GET | `/vehicles/:id/violations` | cursor | page of `ViolationDto`, newest `occurredAt` first |
+| GET | `/users/:id/violations` | cursor | page of `ViolationDto` across the user's vehicles |
+| GET | `/me/violations/submitted` | cursor | page of `ViolationDto` the caller submitted (any status) |
+| POST | `/violations/:id/dispute` | `{ text 10..1000 }` | `200 ViolationDto` (`disputed`) |
+
+- **Submit:** the vehicle's owner, or anyone with an account ≥ 7 days and rating ≥ 40 (`403 ACCOUNT_TOO_NEW` / `403 RATING_TOO_LOW`). Vehicle of a deleted or un-onboarded owner → `404`. 5 submissions per rolling 24 h per submitter → `429 RATE_LIMITED`. `occurredAt` not in the future and ≤ 3 years ago. Photos: the caller's own uploads with purpose `violation`, not attached elsewhere → else `400 INVALID_UPLOAD`. When the submitter isn't the owner, the owner gets `violation_reported` `{ violationId, vehicleId, category, vehicle: 'Brand Model' }` (pushed, url `/vehicles/{vehicleId}?tab=violations`).
+- **Visibility:** everyone sees only `approved` violations. The owner additionally sees `pending` and `disputed` ones (with status and their dispute). The submitter sees their own submissions in `/me/violations/submitted`. `rejected` and `removed` are visible to admins only (and to the submitter in their list). The submitter's identity is never returned outside admin DTOs.
+- **Dispute:** owner only (`403 FORBIDDEN` for others who can see it, `404` otherwise); status `pending` or `approved` → `disputed`; a second dispute → `409 ALREADY_DISPUTED`; other states → `409 VIOLATION_INVALID_STATE`. An approved violation keeps its penalty while disputed.
+- **Admin** (audited with a note; `assertTargetable` on the vehicle owner; an admin can't moderate their own submission → `403 INVALID_TARGET`):
+  - `GET /admin/violations?status&cursor` → page of `AdminViolationDto` (adds `owner`, `submitter`, `dispute`, `submitterRejectedCount`, `penaltyApplied`, `decisionNote`), oldest first for `pending|disputed`, newest first otherwise.
+  - `POST /admin/violations/:id/approve {note}` (`pending` → `approved`, audit `violation.approve`), `/reject {note}` (`pending` → `rejected`, audit `violation.reject`), `/resolve-dispute {decision: 'uphold'|'remove', note}` (`disputed` → `approved`, audit `violation.uphold`; or → `removed`, audit `violation.remove`). Wrong state → `409 VIOLATION_INVALID_STATE`. Each returns the `AdminViolationDto`.
+  - Notifications `violation_status` `{ violationId, vehicleId, category, status: 'approved'|'rejected'|'removed', role: 'owner'|'submitter' }` to the owner (approve, uphold, remove) and to the submitter when it isn't the owner (approve, reject).
+- **Rating:** approval (incl. upholding a dispute of a pending one) applies a `violation` penalty of −5 to the owner through the ledger (`reason: 'penalty'`, `penaltyKind: 'violation'`, refId = violation id), once per violation. `computeRating` caps violation penalties at −20 in total; like other penalties they expire after 365 days. Removal writes a `penalty_reversed` row (refId = violation id) and the penalty no longer counts.
+- **Antifraud `violation_rejections`:** a submitter's rejected submissions reach 3 within 90 days → flag on the submitter (details `{ count, violationIds }`), at most once per 30 days; flag only.
+
+### 9.5 Vehicle details
+
+`POST /me/vehicles` and `PATCH /me/vehicles/:id` accept, all optional (`null` clears on PATCH):
+
+| Field | Rule |
+|---|---|
+| `vin` | 17 chars `[A-HJ-NPR-Z0-9]` (no I/O/Q), upper-cased. **Owner only**: returned in `OwnVehicleDto` (`/me/vehicles`), never in any other DTO (profiles, map, admin lists, violations) |
+| `engineVolumeL` | 0.6–8.0, rounded to 1 decimal |
+| `fuel` | `petrol \| diesel \| gas \| hybrid \| electric` |
+| `transmission` | `manual \| automatic \| robot \| cvt` |
+| `drive` | `fwd \| rwd \| awd` |
+| `bodyType` | `sedan \| hatchback \| wagon \| suv \| crossover \| coupe \| minivan \| pickup \| van` |
+| `mileageKm` | integer 0..2 000 000 |
+| `description` | ≤ 500, no invisible characters (`''` → null) |
+| `photoUploadIds` | ≤ 5 own uploads with purpose `vehicle` (→ else `400 INVALID_UPLOAD`); replaces the whole set in the given order; removed photos are deleted |
+
+JSON bodies take real numbers only (`vehicleBodySchema`); `vehicleSchema` coerces for web forms. Year, brand, model and plate rules are unchanged; plates are still never on the map. `GET /me/vehicles` returns `OwnVehicleDto[]`; `GET /users/:id/vehicles` and `primaryVehicle` return `VehicleDto` (no VIN). Vehicle limit per §9.2. Deleting a vehicle deletes its photos; its violations are kept for admins but disappear from public reads.
+
+### 9.6 Web routes referenced by push URLs
+
+`/wallet` (balance, history, top-up, transfer), `/wallet/checkout/{topupId}` (demo checkout), `/premium`, `/profile?tab=votes`, `/vehicles/{id}?tab=violations`, `/admin/violations`.

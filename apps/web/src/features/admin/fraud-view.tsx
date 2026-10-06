@@ -18,6 +18,9 @@ const KIND_TONE: Record<FraudFlagKind, 'danger' | 'warning' | 'neutral'> = {
   otp_abuse: 'warning',
   new_account_sos: 'neutral',
   reciprocal_sos: 'warning',
+  wallet_funnel: 'warning',
+  vote_burst: 'warning',
+  violation_rejections: 'warning',
 };
 
 /** Flags as cards: kind, who, the key facts, links to the SOS. */

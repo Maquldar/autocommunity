@@ -119,8 +119,8 @@ describe('reports', () => {
     resolutionNote: null,
     createdAt: '2026-10-05T00:00:00Z',
     resolvedAt: null,
-    reporter: { id: 'a', nickname: 'a', name: 'A', avatarUrl: null, rating: 50 },
-    targetUser: { id: 'b', nickname: 'b', name: 'B', avatarUrl: null, rating: 50 },
+    reporter: { id: 'a', nickname: 'a', name: 'A', avatarUrl: null, rating: 50, isPremium: false },
+    targetUser: { id: 'b', nickname: 'b', name: 'B', avatarUrl: null, rating: 50, isPremium: false },
     preview: { title: null, text: 'x', imageUrl: null, deleted: false },
     ...over,
   });

@@ -1,6 +1,8 @@
 import type { ChatReadEvent, ChatTypingEvent, MessageDeletedEvent, MessageDto } from './communities';
 import type { Locale, PrivacyMode, UserRole } from './constants';
+import type { VehicleBodyType, VehicleDrive, VehicleFuel, VehicleTransmission } from './schemas';
 import type { SosDto } from './sos';
+import type { RatingTier } from './tiers';
 
 export type Paginated<T> = { items: T[]; nextCursor: string | null };
 
@@ -22,9 +24,25 @@ export type VehicleDto = {
   brand: string;
   model: string;
   year: number;
+  /** Owner and accepted friends only, else null. Never on the map. */
   plate: string | null;
   isPrimary: boolean;
+  /* phase 9 details (null = not set) */
+  engineVolumeL: number | null;
+  fuel: VehicleFuel | null;
+  transmission: VehicleTransmission | null;
+  drive: VehicleDrive | null;
+  bodyType: VehicleBodyType | null;
+  mileageKm: number | null;
+  description: string | null;
+  photos: UploadDto[];
 };
+
+/** The owner's own view (`/me/vehicles`): adds the VIN, which is never part of any other DTO. */
+export type OwnVehicleDto = VehicleDto & { vin: string | null };
+
+/** `GET /vehicles/:id`: a vehicle with its owner and the count of approved violations. */
+export type VehicleDetailDto = VehicleDto & { owner: UserMini; approvedViolations: number };
 
 export type Relation = 'self' | 'none' | 'request_out' | 'request_in' | 'friend';
 
@@ -40,6 +58,13 @@ export type UserPublic = {
   primaryVehicle: VehicleDto | null;
   relation: Relation;
   status: 'active' | 'blocked';
+  /* phase 9 */
+  /** Active premium: the badge. */
+  isPremium: boolean;
+  /** Profile frame to draw around the avatar on the profile page (premium → 'premium'). */
+  profileFrame: 'premium' | null;
+  /** `tierForRating(rating)`. */
+  tier: RatingTier;
 };
 
 /** `nickname` is null until onboarding sets it (UserPublic is only rendered for onboarded users). */
@@ -55,7 +80,11 @@ export type Me = Omit<UserPublic, 'nickname'> & {
   warningsCount: number;
 };
 
-export type UserMini = { id: string; nickname: string; name: string; avatarUrl: string | null; rating: number };
+/**
+ * Phase 9 adds `isPremium`. The tier is not carried: compute it with `tierForRating(rating)`. Snapshots stored
+ * in notification payloads before Phase 9 lack `isPremium` — treat a missing value as false.
+ */
+export type UserMini = { id: string; nickname: string; name: string; avatarUrl: string | null; rating: number; isPremium: boolean };
 
 export type AuthProviders = {
   google: { clientId: string } | null;
@@ -100,7 +129,16 @@ export type NotificationType =
   | 'post_like'
   | 'service_status'
   | 'visit_status'
-  | 'report_resolved';
+  | 'report_resolved'
+  /* phase 9 */
+  | 'wallet_received'
+  | 'wallet_admin'
+  | 'premium_reminder'
+  | 'premium_renewed'
+  | 'premium_expired'
+  | 'vote_received'
+  | 'violation_reported'
+  | 'violation_status';
 
 export type NotificationDto = {
   id: string;

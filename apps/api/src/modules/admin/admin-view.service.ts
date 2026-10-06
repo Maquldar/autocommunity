@@ -90,4 +90,4 @@ export function assertTargetable(adminId: string, user: Pick<User, 'id' | 'role'
   if (user && (user.id === adminId || user.role === 'admin')) throw invalidTarget();
 }
 
-const deletedMini = (id: string): UserMini => ({ id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 });
+const deletedMini = (id: string): UserMini => ({ id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0, isPremium: false });

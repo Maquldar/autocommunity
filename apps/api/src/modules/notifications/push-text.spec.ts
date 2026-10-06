@@ -2,7 +2,7 @@ import type { NotificationType } from '@autoc/shared';
 import { describe, expect, it } from 'vitest';
 import { PUSH_TEXT_TYPES, pushPayloadFor } from './push-text';
 
-const user = { id: '0192f0c0-0000-7000-8000-000000000001', nickname: 'aidar', name: 'Айдар', avatarUrl: null, rating: 60 };
+const user = { id: '0192f0c0-0000-7000-8000-000000000001', nickname: 'aidar', name: 'Айдар', avatarUrl: null, rating: 60, isPremium: false };
 
 describe('pushPayloadFor', () => {
   it('localizes friend notifications by the recipient locale', () => {
@@ -134,6 +134,14 @@ const SAMPLES: Record<NotificationType, Record<string, unknown>> = {
   service_status: { serviceId: 'sv1', serviceName: 'Шиномонтаж', status: 'verified' },
   visit_status: { visitId: 'v1', serviceId: 'sv1', serviceName: 'Шиномонтаж', status: 'approved' },
   report_resolved: { reportId: 'rp1', decision: 'confirm' },
+  wallet_received: { transactionId: 'tx1', amount: 1500, message: 'За бензин', user },
+  wallet_admin: { action: 'adjust', amount: -200, balance: 800, note: 'Исправление ошибки' },
+  premium_reminder: { periodEnd: '2026-11-05T06:00:00.000Z', autoRenew: true, lowBalance: true, priceCoins: 1490, balance: 300 },
+  premium_renewed: { periodEnd: '2026-12-05T06:00:00.000Z', priceCoins: 1490, balance: 10 },
+  premium_expired: { reason: 'insufficient_funds' },
+  vote_received: { voteId: 'v1', value: -1, reason: 'rude' },
+  violation_reported: { violationId: 'vi1', vehicleId: 've1', category: 'speeding', vehicle: 'Toyota Camry' },
+  violation_status: { violationId: 'vi1', vehicleId: 've1', category: 'speeding', status: 'approved', role: 'owner' },
 };
 
 describe('push text completeness (F-43)', () => {

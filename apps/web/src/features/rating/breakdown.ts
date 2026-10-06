@@ -19,6 +19,7 @@ const RANGES: Record<BreakdownKey, [number, number]> = {
   reviews: [-RATING_FORMULA.reviews.cap, RATING_FORMULA.reviews.cap],
   activity: [0, RATING_FORMULA.activity.cap],
   tenure: [0, RATING_FORMULA.tenure.cap],
+  votes: [-RATING_FORMULA.votes.cap, RATING_FORMULA.votes.cap],
   penalties: [-100, 0],
 };
 
