@@ -6,11 +6,12 @@
 | 1. Foundation, auth, profile, vehicles | ✅ done |
 | 2. Map, privacy, friends, notifications | ✅ done |
 | 3. Communities + chat | ✅ done |
-| 4. SOS + direct chats | 🚧 API done (direct chats shipped in Phase 3), UI in progress |
-| 5. Ratings, reviews, reports | 🚧 API done, UI pending |
-| 6. Admin, antifraud, hardening | ✅ done (branch phase6) |
+| 4. SOS + direct chats | ✅ done |
+| 5. Ratings, reviews, reports | ✅ done |
+| 6. Admin, antifraud, hardening | ✅ done |
 | 7. Services catalog | ✅ done (built in parallel) |
-| 8. Events, feed, polish | ⏳ |
+| 8. Events, feed, polish | ✅ done |
+| Final release gate (DoD) | ✅ done (2026-10-06) |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
 
@@ -123,3 +124,36 @@
 - `load/` (k6 scripts + RESULTS.md, reduced scope) and `SECURITY.md` (ASVS L1 checklist, findings from Phases 1–5, residual risks).
 
 **Known issues:** see the Phase 6 report. Load capacity is bound by the single Node process (about 140 RPS on a shared 4-core host). The e2e admin journey signs in the seeded admin, whose phone is limited to 5 codes/h, so more than ~4 runs per hour hit the OTP limit.
+
+## Phase 4 + 5 UI and Phase 8 — Events and feed (2026-10-06)
+
+**Built**
+- SOS UI: create flow (type, photos, location), nearby SOS card and map layer, Help / Call / Message, accept up to 3 helpers, the SOS group chat, the share link, a "Call 112" button everywhere. Rating breakdown on profiles, mutual reviews after a closed SOS, a report dialog on every reportable target.
+- Events: community events with a route, RSVP with a cap, an event chat for those going, reminders, an events layer on the map. Feed: posts with photos, video and polls, likes and comments, community and personal feeds.
+
+## Final release gate (2026-10-06)
+
+**Security review of Phases 5–8 and XSS** (real HTTP, Socket.IO and Playwright): no XSS and no admin authorization bypass. Findings: 2 high, 5 medium, 6 low and 3 nits. All of them are fixed with regression tests except L2 (see KNOWN_GAPS.md).
+- High: people removed from a community (or whose community was deleted) kept event-chat access and event notices. They now lose their RSVPs and event chats, and event chats require a live community plus membership or a public community.
+- High: admins could not see or remove reported posts and comments. Previews and removal are added, and admins can read any post.
+- Medium:
+  - The report-burst auto-block could be triggered by throwaway accounts. Only credible reporters count now, and a Redis lock deduplicates it.
+  - The rating could be farmed with two accounts. Fake SOS no longer count, each counterpart counts once per 30 days, and a `reciprocal_sos` fraud flag is added.
+  - A removed event creator could still edit their event.
+  - Upload memory and quota abuse: a 10 MB default cap, 2 uploads in flight per user, a daily byte quota, and an hourly orphan purge.
+  - Event notification spam: new rate limits and throttles.
+- Low:
+  - Admins could act on other admins' services.
+  - Report resolution is now one transaction, and removals get audit rows.
+  - The public SOS JSON is now `no-store`, and the share token is redacted in logs.
+  - SECURITY.md no longer overclaims the CSP.
+  - Missing rate limits are added.
+- Nits: the service-worker URL check, punycode display of look-alike link hosts, and seed ledger consistency.
+
+**Tested on the final commit**
+- TypeScript: 0 errors.
+- API: 415/415 tests.
+- Web unit: 390/390 tests.
+- Shared: 44/44 tests.
+- Playwright e2e: 62 passed, 0 failed (14 skipped by design). This ran against the exact Render build and start scripts from a fresh clone (production mode, demo mode, Postgres file storage, no `.env`).
+

@@ -95,14 +95,14 @@ Details: [ARCHITECTURE.md](ARCHITECTURE.md) · API contract: [API.md](API.md) ·
 | Check | Result (final combined run) |
 |---|---|
 | TypeScript strict typecheck (shared, API, web) | 0 errors |
-| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **390 / 390** |
-| Web unit tests | **385 / 385** |
-| Shared package tests | **42 / 42** |
+| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **415 / 415** |
+| Web unit tests | **390 / 390** |
+| Shared package tests | **44 / 44** |
 | Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **62 passed, 0 failed** (14 skipped by design: journeys that run in one project only) |
 | Load test (k6, 4 vCPU, single API process) | 50 VUs: p95 197 ms, 0 % errors · 200 VUs: p95 1.64 s, 0 % errors ([load/RESULTS.md](load/RESULTS.md)) |
 
 
-Each phase went through an adversarial review: an agent tried to break the code with real requests. All findings were fixed with regression tests. The history is in [PROGRESS.md](PROGRESS.md).
+Each phase, and the final release, went through an adversarial review: an agent tried to break the code with real requests. All findings were fixed with regression tests. The history is in [PROGRESS.md](PROGRESS.md).
 
 ```bash
 pnpm test     # unit + integration (needs Postgres + Redis running)

@@ -12,3 +12,16 @@ Features from PLAN.md that are not in this build, with the reason. Updated every
 | Real SMS / Google / Apple / Mapbox / R2 / FCM | Adapters built, providers off | Owner decision Q-3: no credentials yet. SMS codes go to the server log (and the dev-code hint), maps use OpenStreetMap, storage uses local disk (the S3/R2 driver is the same code path), push uses Web Push. |
 | Legal texts (privacy policy, ToS, personal-data consent under KZ law) | Drafts | They need review by a lawyer before launch. |
 | Public demo (Render free plan) | Ready to deploy, not deployed | No hosting account in the build environment; the owner deploys with one click (DEPLOY.md). Demo mode shows login codes on screen, the service sleeps when idle, and the free database expires after 30 days. Photos are stored in Postgres because the free plan has no disk. |
+
+## Known issues in the built features
+
+| Issue | Why it's left |
+|---|---|
+| Duplicate SOS photo detection uses an exact hash of the re-encoded image, so re-uploading a downloaded photo is not caught | Needs a perceptual hash (dHash); this is low impact, and the photo is still visible to admins |
+| A report about an admin can't be resolved by any admin (it stays open) | Deliberate: admins never moderate other admins. A super-admin role would be needed |
+| The CSP allows inline scripts (`'unsafe-inline'`) | Next.js's inline bootstrap needs it without nonce middleware. No XSS was found; nonce CSP is the next hardening step |
+| Phase 8 posts use a smaller report dialog than the rest of the app | Cosmetic; both send the same report API |
+| A socket that connects at the same moment as its removal from a chat can get one event for about 1–3 ms | Rooms are re-checked right after the connection; the window is one DB query |
+| Uploads used as service photos are not in the exclusive-attachment check | The services module was built in parallel; low impact, since the owner uploads their own photos |
+| The free Render plan has 512 MB of RAM, sleeps when idle, and its database expires after 30 days | Hosting limits; DEPLOY.md explains how to upgrade |
+
