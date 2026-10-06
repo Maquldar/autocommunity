@@ -25,6 +25,14 @@ export const EVENT_LIMITS = {
   mapMax: 200,
   /** `event_new` is pushed only to members who RSVPed to an event of the community within this window. */
   pushLookbackDays: 90,
+  /** Per-user rate limits (429 RATE_LIMITED). */
+  createsPerDay: 10,
+  updatesPerHour: 30,
+  rsvpsPerMinute: 30,
+  /** `/map/events` requests per user per minute (same budget as `/map/users`). */
+  mapRequestsPerMinute: 60,
+  /** At most one "event updated" notice per event per this many seconds. */
+  updateNotifyThrottleSec: 600,
 } as const;
 
 export const RSVP_STATUSES = ['going', 'interested'] as const;

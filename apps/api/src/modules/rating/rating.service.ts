@@ -46,7 +46,12 @@ export class RatingService {
    * penalty points; its `delta` is the actual rating change (it can be smaller near 0).
    */
   async applyPenalty(userId: string, kind: RatingPenaltyKind, refId: string | null, now = new Date()): Promise<number | null> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction((tx) => this.applyPenaltyTx(tx, userId, kind, refId, now));
+  }
+
+  /** `applyPenalty` inside the caller's transaction. */
+  async applyPenaltyTx(tx: Tx, userId: string, kind: RatingPenaltyKind, refId: string | null, now = new Date()): Promise<number | null> {
+    {
       const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
       if (!locked[0]) return null;
       const id = newId();
@@ -58,7 +63,7 @@ export class RatingService {
       await tx.user.update({ where: { id: userId }, data: { rating } });
       await tx.ratingEvent.update({ where: { id }, data: { delta: rating - locked[0].rating } });
       return rating;
-    });
+    }
   }
 
   /** Live breakdown. If the cache drifted (decay since the last job), it is refreshed first so both agree. */

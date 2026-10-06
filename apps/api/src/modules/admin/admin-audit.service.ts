@@ -9,7 +9,7 @@ import { AdminViewService } from './admin-view.service';
 export type AuditEntry = {
   adminId: string;
   action: AdminActionKind;
-  targetType: 'user' | 'community' | 'sos' | 'report' | 'service' | 'visit';
+  targetType: 'user' | 'community' | 'sos' | 'report' | 'service' | 'visit' | 'message' | 'post' | 'comment';
   targetId: string;
   targetUserId: string | null;
   note: string;

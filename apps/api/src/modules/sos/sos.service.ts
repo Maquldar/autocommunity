@@ -409,8 +409,13 @@ export class SosService implements OnModuleInit {
       if (next.sos === 'closed') {
         for (const h of helpers.filter((x) => x.status === 'arrived')) await this.rating.recompute(tx, h.helperId, 'help_confirmed', id);
       }
-      return { status: next.sos, helperIds: helpers.map((h) => h.helperId) };
+      return {
+        status: next.sos,
+        helperIds: helpers.map((h) => h.helperId),
+        confirmed: next.sos === 'closed' ? helpers.filter((x) => x.status === 'arrived').map((h) => h.helperId) : [],
+      };
     });
+    this.antifraud.sosClosed(requesterId, id, res.confirmed);
     const chat = await this.sosChat(id);
     if (chat) await this.chats.postSystemMessage(chat, requesterId, action === 'close' ? 'sos.closed' : 'sos.cancelled');
     for (const helperId of res.helperIds) await this.notifications.create(helperId, 'sos_status', { sosId: id, status: res.status });

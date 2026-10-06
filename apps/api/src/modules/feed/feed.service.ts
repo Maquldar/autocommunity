@@ -87,8 +87,9 @@ export class FeedService {
     return { items: await this.toDtos(viewerId, page), nextCursor: hasMore && last ? encodeCursor(last) : null };
   }
 
-  async get(viewerId: string, id: string): Promise<PostDto> {
-    return (await this.toDtos(viewerId, [await this.requireVisible(viewerId, id)]))[0]!;
+  /** `asAdmin`: platform admins read any non-deleted post (reported content), whatever its community. */
+  async get(viewerId: string, id: string, opts: { asAdmin?: boolean } = {}): Promise<PostDto> {
+    return (await this.toDtos(viewerId, [await this.requireVisible(viewerId, id, this.prisma, opts.asAdmin)]))[0]!;
   }
 
   /* ------------------------------------------------------------------ posts */
@@ -138,9 +139,28 @@ export class FeedService {
     await this.prisma.post.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
   }
 
+  /** Moderation (admin panel, confirmed report): soft-deletes the post. Returns false when it was already gone. */
+  async removePostAsAdmin(id: string, db: Tx = this.prisma): Promise<boolean> {
+    const { count } = await db.post.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
+    return count > 0;
+  }
+
+  /** Moderation: soft-deletes the comment and keeps the post's commentCount right. False when already gone. */
+  async removeCommentAsAdmin(commentId: string, db: Tx = this.prisma): Promise<boolean> {
+    const run = async (tx: Tx) => {
+      const comment = await tx.postComment.findUnique({ where: { id: commentId }, select: { postId: true } });
+      if (!comment) return false;
+      const { count } = await tx.postComment.updateMany({ where: { id: commentId, deletedAt: null }, data: { deletedAt: new Date() } });
+      if (count) await tx.post.update({ where: { id: comment.postId }, data: { commentCount: { decrement: count } } });
+      return count > 0;
+    };
+    return db === this.prisma ? this.prisma.$transaction(run) : run(db);
+  }
+
   /* ------------------------------------------------------------------ likes */
 
   async like(userId: string, id: string): Promise<LikeResult> {
+    await this.likeRateLimit(userId);
     const post = await this.requireVisible(userId, id);
     const inserted = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.postLike.createMany({ data: [{ postId: id, userId }], skipDuplicates: true });
@@ -154,6 +174,7 @@ export class FeedService {
   }
 
   async unlike(userId: string, id: string): Promise<LikeResult> {
+    await this.likeRateLimit(userId);
     await this.requireVisible(userId, id);
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.postLike.deleteMany({ where: { postId: id, userId } });
@@ -165,8 +186,8 @@ export class FeedService {
   /* ------------------------------------------------------------------ comments */
 
   /** Oldest first (keyset on createdAt, id). Deleted comments are left out. */
-  async comments(viewerId: string, postId: string, cursor: string | undefined, limit: number): Promise<Paginated<PostCommentDto>> {
-    const post = await this.requireVisible(viewerId, postId);
+  async comments(viewerId: string, postId: string, cursor: string | undefined, limit: number, opts: { asAdmin?: boolean } = {}): Promise<Paginated<PostCommentDto>> {
+    const post = await this.requireVisible(viewerId, postId, this.prisma, opts.asAdmin);
     const after = decodeCursor(cursor);
     const rows = await this.prisma.postComment.findMany({
       where: {
@@ -254,6 +275,10 @@ export class FeedService {
     return (await this.visibleAuthor(viewerId, c.postId)) ? c.authorId : null;
   }
 
+  private likeRateLimit(userId: string): Promise<void> {
+    return this.rateLimiter.consumeOrThrow([{ key: `feed-like:${userId}`, limit: FEED_LIMITS.likesPerMinute, windowSec: 60 }]);
+  }
+
   private async likeState(userId: string, id: string): Promise<LikeResult> {
     const [post, mine] = await Promise.all([
       this.prisma.post.findUniqueOrThrow({ where: { id }, select: { likeCount: true } }),
@@ -313,8 +338,8 @@ export class FeedService {
     }
   }
 
-  private async requireVisible(viewerId: string, id: string, db: Tx = this.prisma): Promise<PostRow> {
-    const [row] = await this.query(viewerId, Prisma.sql`AND p.id = ${id}::uuid`, 1, db);
+  private async requireVisible(viewerId: string, id: string, db: Tx = this.prisma, asAdmin = false): Promise<PostRow> {
+    const [row] = await this.query(viewerId, Prisma.sql`AND p.id = ${id}::uuid`, 1, db, asAdmin);
     if (!row) throw postNotFound();
     return row;
   }
@@ -323,7 +348,7 @@ export class FeedService {
    * Visible, non-deleted posts newest first: global ones, public communities' ones and those of the
    * viewer's active communities (live communities only; deleted authors' posts are hidden).
    */
-  private query(viewerId: string, where: Prisma.Sql, limit: number, db: Tx = this.prisma): Promise<PostRow[]> {
+  private query(viewerId: string, where: Prisma.Sql, limit: number, db: Tx = this.prisma, asAdmin = false): Promise<PostRow[]> {
     const me = Prisma.sql`${viewerId}::uuid`;
     return db.$queryRaw<PostRow[]>`
       SELECT p.id, p.author_id AS "authorId", p.community_id AS "communityId", c.name AS "communityName", p.text,
@@ -334,7 +359,7 @@ export class FeedService {
       LEFT JOIN communities c ON c.id = p.community_id
       LEFT JOIN community_members vm ON vm.community_id = p.community_id AND vm.user_id = ${me} AND vm.status = 'active'
       WHERE p.deleted_at IS NULL AND a.status <> 'deleted'
-        AND (p.community_id IS NULL OR (c.deleted_at IS NULL AND (c.is_private = false OR vm.user_id IS NOT NULL)))
+        ${asAdmin ? Prisma.empty : Prisma.sql`AND (p.community_id IS NULL OR (c.deleted_at IS NULL AND (c.is_private = false OR vm.user_id IS NOT NULL)))`}
         ${where}
       ORDER BY p.created_at DESC, p.id DESC
       LIMIT ${limit}::int`;

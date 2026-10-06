@@ -40,3 +40,18 @@ describe('community names', () => {
     expect(createCommunitySchema.safeParse({ name: 'Ab.', isPrivate: false }).success).toBe(false);
   });
 });
+
+describe('admin schemas (security review additions)', () => {
+  it('accepts the reciprocal_sos fraud flag filter and lists the content-removal audit action', async () => {
+    const { adminFraudFlagsQuerySchema, ADMIN_ACTIONS, FRAUD_FLAG_KINDS } = await import('./admin');
+    expect(FRAUD_FLAG_KINDS).toContain('reciprocal_sos');
+    expect(ADMIN_ACTIONS).toContain('report.remove_content');
+    expect(adminFraudFlagsQuerySchema.safeParse({ kind: 'reciprocal_sos' }).success).toBe(true);
+    expect(adminFraudFlagsQuerySchema.safeParse({ kind: 'nope' }).success).toBe(false);
+  });
+
+  it('the report preview may carry the post to open', async () => {
+    const preview: import('./admin').ReportTargetPreview = { title: null, text: 'x', imageUrl: null, deleted: false, postId: '0192a6c5-1234-7abc-8def-0123456789ab' };
+    expect(preview.postId).toBeTruthy();
+  });
+});

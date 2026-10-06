@@ -5,7 +5,7 @@
  *   pnpm --filter @autoc/api db:seed
  */
 import { PrismaClient, type PrivacyMode } from '@prisma/client';
-import { CAR_BRANDS, computeRating, DEFAULT_MAP_CENTER, RATING } from '@autoc/shared';
+import { CAR_BRANDS, computeRating, DEFAULT_MAP_CENTER, RATING, RATING_FORMULA } from '@autoc/shared';
 import sharp from 'sharp';
 import { loadDotEnv, parseEnvOrThrow } from '../../src/config/env';
 import { v7 } from 'uuid';
@@ -283,7 +283,11 @@ function arrangeDemoNeighbourhood(users: SeedUser[]): void {
   }
 }
 
-/** Sets users.rating from computeRating over the seeded data and records a `recalc` ledger row. */
+/**
+ * Sets users.rating from computeRating over the seeded data and records a `recalc` ledger row so the ledger
+ * agrees with the cached rating the same way it does for real accounts: base (50, the column default every
+ * account starts at) + sum(delta) = users.rating.
+ */
 async function recomputeSeedRatings(ids: string[]): Promise<{ count: number; min: number; max: number }> {
   const now = new Date(NOW);
   const ratings: number[] = [];
@@ -291,9 +295,10 @@ async function recomputeSeedRatings(ids: string[]): Promise<{ count: number; min
     const input = await loadRatingInput(prisma, id, now);
     if (!input) continue;
     const { rating } = computeRating(input, now);
-    const old = (await prisma.user.findUniqueOrThrow({ where: { id }, select: { rating: true } })).rating;
+    const ledger = await prisma.ratingEvent.aggregate({ where: { userId: id }, _sum: { delta: true } });
+    const fromLedger = RATING_FORMULA.base + (ledger._sum.delta ?? 0);
     await prisma.user.update({ where: { id }, data: { rating } });
-    if (rating !== old) await prisma.ratingEvent.create({ data: { id: newId(), userId: id, delta: rating - old, reason: 'recalc', createdAt: now } });
+    if (rating !== fromLedger) await prisma.ratingEvent.create({ data: { id: newId(), userId: id, delta: rating - fromLedger, reason: 'recalc', createdAt: now } });
     ratings.push(rating);
   }
   return { count: ratings.length, min: Math.min(...ratings), max: Math.max(...ratings) };

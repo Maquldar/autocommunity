@@ -46,6 +46,15 @@ export class AntifraudService {
     this.tasks.run('antifraud sosCancelled', () => this.checkCancelStreak(userId, sosId));
   }
 
+  /** After an SOS was closed with confirmed helpers: reciprocal_sos. */
+  sosClosed(requesterId: string, sosId: string, helperIds: string[]): void {
+    if (helperIds.length) {
+      this.tasks.run('antifraud sosClosed', async () => {
+        for (const helperId of helperIds) await this.checkReciprocalSos(requesterId, helperId, sosId);
+      });
+    }
+  }
+
   /** After a report was filed: report_burst on the reported user. */
   reportCreated(targetUserId: string | null): void {
     if (targetUserId) this.tasks.run('antifraud reportCreated', () => this.checkReportBurst(targetUserId));
@@ -103,6 +112,32 @@ export class AntifraudService {
     return true;
   }
 
+  /**
+   * Two users who helped each other (closed, non-fake SOS with the helper `arrived`, in both directions)
+   * at least ANTIFRAUD.reciprocalSosMin times within ANTIFRAUD.reciprocalSosDays → a flag on each of them
+   * (once per pair per window; Redis SET NX). Flag only: an admin decides.
+   */
+  async checkReciprocalSos(a: string, b: string, sosId: string | null): Promise<boolean> {
+    if (a === b) return false;
+    const rows = await this.prisma.$queryRaw<{ requester: string; helper: string; sosId: string }[]>`
+      SELECT s.user_id AS requester, r.helper_id AS helper, s.id::text AS "sosId"
+      FROM sos_requests s
+      JOIN sos_responses r ON r.sos_id = s.id AND r.status = 'arrived'
+      WHERE s.status = 'closed' AND NOT s.is_fake
+        AND s.closed_at > now() - make_interval(days => ${ANTIFRAUD.reciprocalSosDays}::int)
+        AND ((s.user_id = ${a}::uuid AND r.helper_id = ${b}::uuid) OR (s.user_id = ${b}::uuid AND r.helper_id = ${a}::uuid))`;
+    const aHelpedB = rows.filter((r) => r.helper === a).length;
+    const bHelpedA = rows.filter((r) => r.helper === b).length;
+    if (!aHelpedB || !bHelpedA || rows.length < ANTIFRAUD.reciprocalSosMin) return false;
+    const pair = a < b ? `${a}:${b}` : `${b}:${a}`;
+    const fresh = await this.redis.set(`af:reciprocal:${pair}`, '1', 'EX', ANTIFRAUD.reciprocalSosDays * 24 * 3600, 'NX');
+    if (fresh !== 'OK') return false;
+    const sosIds = rows.map((r) => r.sosId);
+    await this.flag('reciprocal_sos', a, { otherUserId: b, helps: rows.length, sosIds, triggerSosId: sosId, windowDays: ANTIFRAUD.reciprocalSosDays });
+    await this.flag('reciprocal_sos', b, { otherUserId: a, helps: rows.length, sosIds, triggerSosId: sosId, windowDays: ANTIFRAUD.reciprocalSosDays });
+    return true;
+  }
+
   /** An account younger than 24 h created an SOS → flag only. */
   async checkNewAccountSos(userId: string, sosId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } });
@@ -130,19 +165,26 @@ export class AntifraudService {
   }
 
   /**
-   * ≥ 3 distinct reporters with open reports against the user within 24 h → flag (once per 24 h), plus a
-   * temporary 24 h block when the user's rating is below 30.
+   * ≥ 3 distinct credible reporters (account ≥ 7 days old, rating ≥ 40, none of their reports ever
+   * dismissed) with open reports against the user within 24 h → flag (once per 24 h), plus a temporary
+   * 24 h block when the user's rating is below 30. Concurrent reports run this concurrently: a Redis
+   * SET NX on `af:burst:{userId}` (24 h) lets exactly one of them flag / block.
    */
   async checkReportBurst(targetUserId: string): Promise<boolean> {
     const since = new Date(Date.now() - ANTIFRAUD.reportBurstHours * HOUR_MS);
-    const reporters = await this.prisma.report.findMany({
-      where: { targetUserId, status: 'open', createdAt: { gt: since } },
-      distinct: ['reporterId'],
-      select: { reporterId: true },
-    });
+    const minCreated = new Date(Date.now() - ANTIFRAUD.reportBurstReporterMinAgeDays * 24 * HOUR_MS);
+    const reporters = await this.prisma.$queryRaw<{ reporterId: string }[]>`
+      SELECT DISTINCT r.reporter_id AS "reporterId"
+      FROM reports r
+      JOIN users u ON u.id = r.reporter_id
+      WHERE r.target_user_id = ${targetUserId}::uuid AND r.status = 'open' AND r.created_at > ${since}
+        AND u.created_at <= ${minCreated} AND u.rating >= ${ANTIFRAUD.reportBurstReporterMinRating}::int
+        AND NOT EXISTS (SELECT 1 FROM reports d WHERE d.reporter_id = r.reporter_id AND d.status = 'dismissed')`;
     if (reporters.length < ANTIFRAUD.reportBurstReporters) return false;
     const recent = await this.prisma.fraudFlag.count({ where: { userId: targetUserId, kind: 'report_burst', createdAt: { gt: since } } });
     if (recent) return false;
+    const fresh = await this.redis.set(`af:burst:${targetUserId}`, '1', 'EX', ANTIFRAUD.reportBurstHours * 3600, 'NX');
+    if (fresh !== 'OK') return false;
     const user = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { rating: true, role: true, status: true, blockedUntil: true } });
     if (!user || user.status === 'deleted') return false;
     const alreadyBlocked = user.status === 'blocked' && (!user.blockedUntil || user.blockedUntil.getTime() > Date.now());

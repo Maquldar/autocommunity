@@ -20,6 +20,8 @@ import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
 import { decodeCursor, encodeCursor } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
+import { RedisService } from '../../infra/redis/redis.service';
 import { Storage } from '../../infra/storage/storage';
 import { BackgroundTasks } from '../../infra/tasks/background-tasks';
 import { ChatsService } from '../chats/chats.service';
@@ -72,6 +74,8 @@ export class EventsService implements OnModuleInit {
     private readonly notifications: NotificationsService,
     private readonly queue: EventsQueue,
     private readonly tasks: BackgroundTasks,
+    private readonly rateLimiter: RateLimiterService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit(): void {
@@ -143,6 +147,7 @@ export class EventsService implements OnModuleInit {
 
   /** Upcoming events (not ended, starting within 7 days) inside the bbox, soonest first, at most 200. */
   async map(viewerId: string, bbox: Bbox): Promise<EventMapResult> {
+    await this.rateLimiter.consumeOrThrow([{ key: `map-events:${viewerId}`, limit: EVENT_LIMITS.mapRequestsPerMinute, windowSec: 60 }]);
     const where = Prisma.sql`
       ${ENDS} > now()
       AND e.starts_at <= now() + make_interval(days => ${EVENT_LIMITS.mapDays}::int)
@@ -172,6 +177,7 @@ export class EventsService implements OnModuleInit {
     if (!community) throw Errors.notFound('Community not found');
     const role = await this.activeRole(communityId, userId);
     if (!isMod(role)) throw Errors.forbidden('Only the owner and moderators can create events');
+    await this.rateLimiter.consumeOrThrow([{ key: `event-create:${userId}`, limit: EVENT_LIMITS.createsPerDay, windowSec: 86_400 }]);
     const id = newId();
     await this.prisma.$executeRaw`
       INSERT INTO events (id, community_id, created_by_id, title, description, place, location, starts_at, ends_at, route, updated_at)
@@ -189,6 +195,7 @@ export class EventsService implements OnModuleInit {
    * notifies the participants (`event_new` with `change: 'updated'`).
    */
   async update(userId: string, id: string, input: UpdateEventInput): Promise<EventDto> {
+    await this.rateLimiter.consumeOrThrow([{ key: `event-update:${userId}`, limit: EVENT_LIMITS.updatesPerHour, windowSec: 3600 }]);
     const result = await this.prisma.$transaction(async (tx) => {
       const before = await this.lockManageable(tx, userId, id);
       const startsAt = input.startsAt ?? before.startsAt;
@@ -240,7 +247,7 @@ export class EventsService implements OnModuleInit {
     const dto = await this.get(userId, id);
     if (result.changed) {
       const payload = { ...notificationPayload({ ...dto, communityId: dto.community.id, communityName: dto.community.name, startsAt: new Date(dto.startsAt) }), change: 'updated' as const };
-      this.tasks.run('event update notices', () => this.notifyParticipants(id, userId, payload));
+      this.tasks.run('event update notices', () => this.notifyUpdated(id, userId, payload));
     }
     return dto;
   }
@@ -249,7 +256,7 @@ export class EventsService implements OnModuleInit {
   async remove(userId: string, id: string): Promise<void> {
     const { event, participantIds, chat } = await this.prisma.$transaction(async (tx) => {
       const event = await this.lockManageable(tx, userId, id);
-      const participants = await tx.eventParticipant.findMany({ where: { eventId: id }, select: { userId: true } });
+      const participants = await this.visibleParticipants(id, {}, tx);
       const chat = await tx.chat.findUnique({ where: { refId: id }, select: { id: true, members: { select: { userId: true } } } });
       if (chat) await tx.chat.delete({ where: { id: chat.id } });
       await tx.event.delete({ where: { id } });
@@ -267,11 +274,14 @@ export class EventsService implements OnModuleInit {
    * the viewer can see that haven't ended; at most EVENT_LIMITS.maxGoing going → 409 EVENT_FULL.
    */
   async rsvp(userId: string, id: string, input: RsvpInput): Promise<EventDto> {
+    await this.rateLimiter.consumeOrThrow([{ key: `event-rsvp:${userId}`, limit: EVENT_LIMITS.rsvpsPerMinute, windowSec: 60 }]);
     const change = await this.prisma.$transaction(async (tx) => {
-      await this.requireVisible(userId, id, tx);
+      // Lock first, then check visibility: a concurrent leave/removal (which locks the community's events)
+      // is then either fully visible here or waits for this RSVP and cleans it up.
       const [event] = await tx.$queryRaw<{ goingCount: number; ended: boolean }[]>`
         SELECT e.going_count AS "goingCount", ${ENDS} <= now() AS ended FROM events e WHERE e.id = ${id}::uuid FOR UPDATE`;
       if (!event) throw notFound();
+      await this.requireVisible(userId, id, tx);
       if (event.ended) throw Errors.conflict('EVENT_ENDED', 'This event has already ended');
       const current = await tx.eventParticipant.findUnique({ where: { eventId_userId: { eventId: id, userId } }, select: { status: true } });
       const wasGoing = current?.status === 'going';
@@ -313,7 +323,7 @@ export class EventsService implements OnModuleInit {
       data: { reminderSentAt: new Date() },
     });
     if (!count) return 0;
-    const going = await this.prisma.eventParticipant.findMany({ where: { eventId: event.id, status: 'going' }, select: { userId: true } });
+    const going = await this.visibleParticipants(event.id, { status: 'going' });
     const payload = notificationPayload({ ...event, communityName: event.community.name });
     await this.notifications.createMany('event_reminder', going.map((g) => ({ userId: g.userId, payload })));
     return going.length;
@@ -345,9 +355,31 @@ export class EventsService implements OnModuleInit {
     );
   }
 
+  /** "Event updated" notices: at most one per event per EVENT_LIMITS.updateNotifyThrottleSec (Redis SET NX). */
+  private async notifyUpdated(eventId: string, actorId: string, payload: EventNotificationPayload): Promise<void> {
+    const fresh = await this.redis.set(`notify:event_updated:${eventId}`, actorId, 'EX', EVENT_LIMITS.updateNotifyThrottleSec, 'NX');
+    if (fresh !== 'OK') return;
+    await this.notifyParticipants(eventId, actorId, payload);
+  }
+
   private async notifyParticipants(eventId: string, actorId: string, payload: EventNotificationPayload): Promise<void> {
-    const participants = await this.prisma.eventParticipant.findMany({ where: { eventId, userId: { not: actorId } }, select: { userId: true } });
+    const participants = (await this.visibleParticipants(eventId)).filter((p) => p.userId !== actorId);
     if (participants.length) await this.notifications.createMany('event_new', participants.map((p) => ({ userId: p.userId, payload })));
+  }
+
+  /**
+   * Participants who can still see the event: its community is live and public, or they are active
+   * members of it (someone who left a private community keeps no access through an old RSVP).
+   */
+  private visibleParticipants(eventId: string, opts: { status?: RsvpStatus } = {}, db: Tx = this.prisma): Promise<{ userId: string }[]> {
+    return db.$queryRaw<{ userId: string }[]>`
+      SELECT ep.user_id AS "userId"
+      FROM event_participants ep
+      JOIN events e ON e.id = ep.event_id
+      JOIN communities c ON c.id = e.community_id AND c.deleted_at IS NULL
+      LEFT JOIN community_members m ON m.community_id = c.id AND m.user_id = ep.user_id AND m.status = 'active'
+      WHERE ep.event_id = ${eventId}::uuid AND (c.is_private = false OR m.user_id IS NOT NULL)
+        ${opts.status ? Prisma.sql`AND ep.status = ${opts.status}::"RsvpStatus"` : Prisma.empty}`;
   }
 
   private async activeRole(communityId: string, userId: string): Promise<string | null> {
@@ -377,7 +409,8 @@ export class EventsService implements OnModuleInit {
   private async lockManageable(tx: Tx, userId: string, id: string): Promise<EventRow> {
     await tx.$queryRaw`SELECT id FROM events WHERE id = ${id}::uuid FOR UPDATE`;
     const row = await this.requireVisible(userId, id, tx);
-    if (row.createdById !== userId && !isMod(row.myRole)) throw Errors.forbidden('Only the creator and community moderators can change this event');
+    // The creator manages the event only while still an active member of the community.
+    if (!row.myRole || (row.createdById !== userId && !isMod(row.myRole))) throw Errors.forbidden('Only the creator and community moderators can change this event');
     return row;
   }
 
@@ -436,7 +469,7 @@ export class EventsService implements OnModuleInit {
         myRsvp: r.myRsvp,
         chatId: r.myRsvp === 'going' ? (chatByEvent.get(r.id) ?? null) : null,
         distanceM: r.distanceM,
-        canManage: isMod(r.myRole) || r.createdById === viewerId,
+        canManage: isMod(r.myRole) || (r.createdById === viewerId && r.myRole !== null),
       };
     });
   }

@@ -148,6 +148,21 @@ export class ChatsService {
     await this.softDelete(message);
   }
 
+  /**
+   * Moderation inside the caller's transaction: soft-deletes any non-system message. Returns null when it was
+   * already gone, else the after-commit step (drops the attached file, tells the chat).
+   */
+  async removeMessageTx(tx: Prisma.TransactionClient, messageId: string): Promise<(() => Promise<void>) | null> {
+    const message = await tx.message.findUnique({ where: { id: messageId } });
+    if (!message || message.deletedAt || message.type === 'system') return null;
+    const { count } = await tx.message.updateMany({ where: { id: messageId, deletedAt: null }, data: { deletedAt: new Date() } });
+    if (!count) return null;
+    return async () => {
+      if (message.uploadId) await this.uploads.remove(message.uploadId).catch((err: unknown) => this.logger.warn({ err }, 'Failed to remove message upload'));
+      this.realtime.emitToChat(message.chatId, 'message:deleted', { chatId: message.chatId, messageId });
+    };
+  }
+
   /** Moderation (admin panel): deletes any non-system message. Returns false when it was already gone. */
   async removeMessage(messageId: string): Promise<boolean> {
     const message = await this.prisma.message.findUnique({ where: { id: messageId } });
@@ -271,15 +286,20 @@ export class ChatsService {
     );
   }
 
-  /** 404 unless the user is a member of the chat (and, for community chats, the community is live). */
+  /**
+   * 404 unless the user is a member of the chat; for community chats the community must be live; for event
+   * chats the event must exist and its community be live and public or the user an active member of it.
+   */
   private async requireMember(userId: string, chatId: string): Promise<{ id: string; type: ChatType; refId: string }> {
     const rows = await this.prisma.$queryRaw<{ id: string; type: ChatType; refId: string }[]>`
       SELECT c.id, c.type, c.ref_id AS "refId"
       FROM chat_members cm
       JOIN chats c ON c.id = cm.chat_id
       LEFT JOIN communities com ON com.id = CASE WHEN c.type = 'community' THEN c.ref_id::uuid END
+      ${EVENT_CHAT_JOINS}
       WHERE cm.chat_id = ${chatId}::uuid AND cm.user_id = ${userId}::uuid
-        AND (c.type <> 'community' OR com.deleted_at IS NULL)`;
+        AND (c.type <> 'community' OR com.deleted_at IS NULL)
+        AND ${EVENT_CHAT_VISIBLE}`;
     if (!rows[0]) throw chatNotFound();
     return rows[0];
   }
@@ -345,7 +365,7 @@ export class ChatsService {
       LEFT JOIN uploads cu ON cu.id = com.avatar_upload_id
       LEFT JOIN sos_requests sr ON sr.id = CASE WHEN c.type = 'sos' THEN c.ref_id::uuid END
       LEFT JOIN users sru ON sru.id = sr.user_id
-      LEFT JOIN events ev ON ev.id = CASE WHEN c.type = 'event' THEN c.ref_id::uuid END
+      ${EVENT_CHAT_JOINS}
       LEFT JOIN LATERAL (
         SELECT o.user_id FROM chat_members o WHERE c.type = 'direct' AND o.chat_id = c.id AND o.user_id <> ${me} LIMIT 1
       ) peer ON true
@@ -354,6 +374,7 @@ export class ChatsService {
       ) lm ON true
       WHERE cm.user_id = ${me}
         AND (c.type <> 'community' OR com.deleted_at IS NULL)
+        AND ${EVENT_CHAT_VISIBLE}
         ${opts.chatId ? Prisma.sql`AND c.id = ${opts.chatId}::uuid` : Prisma.empty}
         ${opts.after ? Prisma.sql`AND (c.last_message_at, c.id) < (${opts.after.createdAt}, ${opts.after.id}::uuid)` : Prisma.empty}
       ORDER BY c.last_message_at DESC, c.id DESC
@@ -413,6 +434,13 @@ export class ChatsService {
     }
   }
 }
+
+/** Joins `ev` (the event of an event chat), its community `evc` and the member's active membership `evm` (needs `c`, `cm`). */
+const EVENT_CHAT_JOINS = Prisma.sql`
+      LEFT JOIN events ev ON ev.id = CASE WHEN c.type = 'event' THEN c.ref_id::uuid END
+      LEFT JOIN communities evc ON evc.id = ev.community_id
+      LEFT JOIN community_members evm ON evm.community_id = evc.id AND evm.user_id = cm.user_id AND evm.status = 'active'`;
+const EVENT_CHAT_VISIBLE = Prisma.sql`(c.type <> 'event' OR (ev.id IS NOT NULL AND evc.deleted_at IS NULL AND (evc.is_private = false OR evm.user_id IS NOT NULL)))`;
 
 const chatNotFound = () => Errors.notFound('Chat not found');
 /** `unreadCount` never exceeds this; 99 means "99 or more". */

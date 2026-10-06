@@ -506,13 +506,18 @@ describe('reports', () => {
     ]);
   });
 
-  it('confirming a report about another admin → 403 INVALID_TARGET (dismiss is allowed)', async () => {
+  it('resolving (confirm or dismiss) a report about yourself or another admin → 403 INVALID_TARGET', async () => {
     const a = await admin();
     const b = await admin();
     const reporter = await createUser(t);
     const r = (await as(reporter).post('/reports', { targetType: 'user', targetId: b.id, reason: 'other' }).expect(201)).body.id;
     expect((await as(a).post(`/admin/reports/${r}/resolve`, { decision: 'confirm', note: NOTE }).expect(403)).body.error.code).toBe('INVALID_TARGET');
-    await as(a).post(`/admin/reports/${r}/resolve`, { decision: 'dismiss', note: NOTE }).expect(200);
+    expect((await as(a).post(`/admin/reports/${r}/resolve`, { decision: 'dismiss', note: NOTE }).expect(403)).body.error.code).toBe('INVALID_TARGET');
+    const self = (await as(reporter).post('/reports', { targetType: 'user', targetId: a.id, reason: 'other' }).expect(201)).body.id;
+    expect((await as(a).post(`/admin/reports/${self}/resolve`, { decision: 'dismiss', note: NOTE }).expect(403)).body.error.code).toBe('INVALID_TARGET');
+    // Reports about admins stay open (no admin may resolve them); nothing was written.
+    expect(await t.prisma.adminAction.count({ where: { targetId: { in: [r, self] } } })).toBe(0);
+    expect((await t.prisma.report.findUniqueOrThrow({ where: { id: r } })).status).toBe('open');
   });
 });
 

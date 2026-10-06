@@ -22,7 +22,7 @@ import { currentQrCode } from '../services/qr';
 import { lockService, recomputeServiceStats } from '../services/service-rating';
 import { toUploadDto } from '../uploads/upload.mapper';
 import { AdminAuditService } from './admin-audit.service';
-import { invalidTarget, AdminViewService } from './admin-view.service';
+import { assertTargetable, invalidTarget, AdminViewService } from './admin-view.service';
 
 type ServiceRaw = {
   id: string;
@@ -82,6 +82,8 @@ export class AdminServicesService {
     const service = await this.prisma.serviceCenter.findUnique({ where: { id }, select: { status: true, name: true, submittedById: true } });
     if (!service) throw Errors.notFound('Service not found');
     if (service.submittedById === adminId) throw invalidTarget("You can't moderate your own submission");
+    // Same rule as every admin action on a user: never on yourself or another admin.
+    if (service.submittedById) assertTargetable(adminId, await this.prisma.user.findUnique({ where: { id: service.submittedById }, select: { id: true, role: true } }));
     if (service.status === status) throw Errors.conflict('SERVICE_STATUS_UNCHANGED', `The service is already ${status}`);
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.serviceCenter.updateMany({ where: { id, status: service.status }, data: { status } });
@@ -162,6 +164,7 @@ export class AdminServicesService {
     const visit = await this.prisma.serviceVisit.findUnique({ where: { id }, include: { service: { select: { name: true } } } });
     if (!visit) throw Errors.notFound('Visit not found');
     if (visit.userId === adminId) throw invalidTarget("You can't moderate your own visit");
+    assertTargetable(adminId, await this.prisma.user.findUnique({ where: { id: visit.userId }, select: { id: true, role: true } }));
     await this.prisma.$transaction(async (tx) => {
       await lockService(tx, visit.serviceId);
       const { count } = await tx.serviceVisit.updateMany({ where: { id, status: 'pending' }, data: { status } });

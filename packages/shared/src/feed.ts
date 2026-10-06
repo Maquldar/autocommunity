@@ -16,6 +16,8 @@ export const FEED_LIMITS = {
   commentMax: 1000,
   postsPerDay: 20,
   commentsPerHour: 60,
+  /** Like + unlike requests per user per minute. */
+  likesPerMinute: 120,
   /** One `post_comment` notification per post per this many seconds. */
   commentNotifyThrottleSec: 600,
   /** One `post_like` notification per post per this many seconds. */

@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, Post, Req } from '@nestjs/common';
 import {
   bboxSchema,
   cancelSosSchema,
@@ -112,8 +112,10 @@ export class SosMapController {
 export class PublicSosController {
   constructor(private readonly sos: SosService) {}
 
+  /** Live location data behind a bearer link: never cached by browsers or proxies. */
   @Public()
   @Get(':token')
+  @Header('Cache-Control', 'no-store')
   get(@ZParam('token', z.string().max(200)) token: string, @Req() req: Request): Promise<PublicSosDto> {
     return this.sos.publicView(token, req.ip ?? 'unknown');
   }

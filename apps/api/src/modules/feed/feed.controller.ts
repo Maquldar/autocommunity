@@ -43,7 +43,7 @@ export class PostsController {
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @IdParam() id: string): Promise<PostDto> {
-    return this.feed.get(user.id, id);
+    return this.feed.get(user.id, id, { asAdmin: user.role === 'admin' });
   }
 
   @Delete(':id')
@@ -71,7 +71,7 @@ export class PostsController {
     @IdParam() id: string,
     @ZQuery(paginationQuerySchema) q: z.output<typeof paginationQuerySchema>,
   ): Promise<Paginated<PostCommentDto>> {
-    return this.feed.comments(user.id, id, q.cursor, q.limit);
+    return this.feed.comments(user.id, id, q.cursor, q.limit, { asAdmin: user.role === 'admin' });
   }
 
   @RequireOnboarded()

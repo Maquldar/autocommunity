@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AntifraudModule } from '../antifraud/antifraud.module';
 import { ChatsModule } from '../chats/chats.module';
 import { CommunitiesModule } from '../communities/communities.module';
+import { FeedModule } from '../feed/feed.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RatingModule } from '../rating/rating.module';
 import { SosModule } from '../sos/sos.module';
@@ -17,7 +18,7 @@ import { AdminViewService } from './admin-view.service';
 
 /** Phase 6 admin panel API (API.md §6). */
 @Module({
-  imports: [UsersModule, NotificationsModule, RatingModule, SosModule, ChatsModule, CommunitiesModule, AntifraudModule],
+  imports: [UsersModule, NotificationsModule, RatingModule, SosModule, ChatsModule, CommunitiesModule, AntifraudModule, FeedModule],
   controllers: [AdminController],
   providers: [
     AdminViewService,

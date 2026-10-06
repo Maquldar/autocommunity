@@ -177,16 +177,32 @@ export class CommunitiesService {
   }
 
   /** Soft delete: hidden from lists, chat access revoked for everyone; the name becomes free again. */
-  async remove(userId: string, id: string, opts: { asAdmin?: boolean } = {}): Promise<void> {
-    const { chatId, userIds } = await this.prisma.$transaction(async (tx) => {
-      const community = await lockCommunity(tx, id);
-      if (community.ownerId !== userId && !opts.asAdmin) throw Errors.forbidden('Only the owner can delete the community');
-      await tx.community.update({ where: { id }, data: { deletedAt: new Date() } });
-      const chat = await tx.chat.findUnique({ where: { refId: id }, select: { id: true, members: { select: { userId: true } } } });
-      if (chat) await tx.chatMember.deleteMany({ where: { chatId: chat.id } });
-      return { chatId: chat?.id ?? null, userIds: chat?.members.map((m) => m.userId) ?? [] };
+  /**
+   * Soft delete: hidden from lists, chat access revoked for everyone (community chat and every event
+   * chat; event participations are dropped); the name becomes free again. `inTx` runs inside the same
+   * transaction (admin audit rows).
+   */
+  async remove(userId: string, id: string, opts: { asAdmin?: boolean; inTx?: (tx: Tx) => Promise<void> } = {}): Promise<void> {
+    const after = await this.prisma.$transaction(async (tx) => {
+      const done = await this.removeTx(tx, userId, id, opts);
+      if (opts.inTx) await opts.inTx(tx);
+      return done;
     });
-    if (chatId) this.chats.revoked(chatId, userIds);
+    after();
+  }
+
+  /** `remove` inside the caller's transaction; returns the after-commit step (socket rooms, chat lists). */
+  async removeTx(tx: Tx, userId: string, id: string, opts: { asAdmin?: boolean } = {}): Promise<() => void> {
+    const community = await lockCommunity(tx, id);
+    if (community.ownerId !== userId && !opts.asAdmin) throw Errors.forbidden('Only the owner can delete the community');
+    await tx.community.update({ where: { id }, data: { deletedAt: new Date() } });
+    const chat = await tx.chat.findUnique({ where: { refId: id }, select: { id: true, members: { select: { userId: true } } } });
+    if (chat) await tx.chatMember.deleteMany({ where: { chatId: chat.id } });
+    const events = await dropEventParticipation(tx, id, null);
+    const revocations = [...(chat ? [{ chatId: chat.id, userIds: chat.members.map((m) => m.userId) }] : []), ...events];
+    return () => {
+      for (const r of revocations) this.chats.revoked(r.chatId, r.userIds);
+    };
   }
 
   /* ------------------------------------------------------------------ membership
@@ -221,14 +237,14 @@ export class CommunitiesService {
 
   /** Leaving (or cancelling a pending request). The owner must transfer ownership or delete instead. */
   async leave(userId: string, id: string): Promise<void> {
-    const chatId = await this.prisma.$transaction(async (tx) => {
+    const revocations = await this.prisma.$transaction(async (tx) => {
       await lockCommunity(tx, id);
       const m = await membership(tx, id, userId);
       if (!m) throw Errors.notFound('You are not a member of this community');
       if (m.role === 'owner') throw Errors.badRequest('OWNER_CANNOT_LEAVE', 'Transfer ownership or delete the community first');
       return this.dropMember(tx, id, userId);
     });
-    if (chatId) this.chats.revoked(chatId, [userId]);
+    for (const r of revocations) this.chats.revoked(r.chatId, r.userIds);
   }
 
   async approve(actorId: string, id: string, targetId: string): Promise<void> {
@@ -282,7 +298,7 @@ export class CommunitiesService {
 
   /** Moderators remove members (active or pending); only the owner can remove moderators; nobody removes the owner. */
   async removeMember(actorId: string, id: string, targetId: string): Promise<void> {
-    const chatId = await this.prisma.$transaction(async (tx) => {
+    const revocations = await this.prisma.$transaction(async (tx) => {
       await lockCommunity(tx, id);
       const actor = await membership(tx, id, actorId);
       if (!isMod(actor)) throw Errors.forbidden('Only the owner and moderators can remove members');
@@ -293,7 +309,7 @@ export class CommunitiesService {
       if (target.role === 'moderator' && actor!.role !== 'owner') throw Errors.forbidden('Only the owner can remove moderators');
       return this.dropMember(tx, id, targetId);
     });
-    if (chatId) this.chats.revoked(chatId, [targetId]);
+    for (const r of revocations) this.chats.revoked(r.chatId, r.userIds);
   }
 
   /* ------------------------------------------------------------------ helpers */
@@ -306,18 +322,23 @@ export class CommunitiesService {
     return chat.id;
   }
 
-  /** Deletes the membership row; for an active one also decrements memberCount and leaves the chat. Returns the chat id when chat access was revoked. */
-  private async dropMember(tx: Tx, communityId: string, userId: string): Promise<string | null> {
+  /**
+   * Deletes the membership row; for an active one also decrements memberCount and leaves the community
+   * chat. The user's RSVPs to the community's events go too (and with them the event chats). Returns the
+   * chats whose access was revoked (call `chats.revoked` for each after commit).
+   */
+  private async dropMember(tx: Tx, communityId: string, userId: string): Promise<Revocation[]> {
     const deleted = await tx.communityMember.deleteMany({ where: { communityId, userId, status: 'active' } });
     if (!deleted.count) {
       const pending = await tx.communityMember.deleteMany({ where: { communityId, userId, status: 'pending' } });
       if (!pending.count) throw Errors.notFound('Member not found');
-      return null;
+      return dropEventParticipation(tx, communityId, [userId]);
     }
     await tx.community.update({ where: { id: communityId }, data: { memberCount: { decrement: 1 } } });
     const chat = await tx.chat.findUnique({ where: { refId: communityId }, select: { id: true } });
     if (chat) await this.chats.removeMembers(tx, chat.id, [userId]);
-    return chat?.id ?? null;
+    const events = await dropEventParticipation(tx, communityId, [userId]);
+    return [...(chat ? [{ chatId: chat.id, userIds: [userId] }] : []), ...events];
   }
 
   private async assertMembershipRoom(tx: Tx, userId: string): Promise<void> {
@@ -382,6 +403,41 @@ export class CommunitiesService {
       };
     });
   }
+}
+
+type Revocation = { chatId: string; userIds: string[] };
+
+/**
+ * Removes RSVPs of `userIds` (every participant when null) to the community's events, keeps goingCount
+ * right and removes those users from the event chats. The events are locked first (same order as RSVP,
+ * which locks the event row before re-checking visibility), so a concurrent RSVP can't slip back in.
+ */
+async function dropEventParticipation(tx: Tx, communityId: string, userIds: string[] | null): Promise<Revocation[]> {
+  const events = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM events WHERE community_id = ${communityId}::uuid ORDER BY id FOR UPDATE`;
+  if (!events.length) return [];
+  const eventIds = events.map((e) => e.id);
+  const userFilter = userIds ? { userId: { in: userIds } } : {};
+  const removed = await tx.eventParticipant.findMany({ where: { eventId: { in: eventIds }, ...userFilter }, select: { eventId: true } });
+  if (removed.length) {
+    await tx.eventParticipant.deleteMany({ where: { eventId: { in: eventIds }, ...userFilter } });
+    const touched = [...new Set(removed.map((r) => r.eventId))];
+    await tx.$executeRaw`
+      UPDATE events e SET going_count = (SELECT count(*)::int FROM event_participants p WHERE p.event_id = e.id AND p.status = 'going')
+      WHERE e.id = ANY(${touched}::uuid[])`;
+  }
+  const chats = await tx.chat.findMany({
+    where: { type: 'event', refId: { in: eventIds } },
+    select: { id: true, members: { where: userIds ? { userId: { in: userIds } } : {}, select: { userId: true } } },
+  });
+  const revocations: Revocation[] = [];
+  for (const chat of chats) {
+    if (!chat.members.length) continue;
+    const members = chat.members.map((m) => m.userId);
+    await tx.chatMember.deleteMany({ where: { chatId: chat.id, userId: { in: members } } });
+    revocations.push({ chatId: chat.id, userIds: members });
+  }
+  return revocations;
 }
 
 const avatarInclude = { avatar: { select: { key: true, thumbKey: true } } } satisfies Prisma.CommunityInclude;

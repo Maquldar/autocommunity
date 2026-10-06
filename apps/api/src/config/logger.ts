@@ -23,6 +23,14 @@ export const REDACT_PATHS = [
   '*.idToken',
 ];
 
+/** Share tokens live in the path (`/public/sos/:token`, web `/s/:token`): keep them out of logs. */
+const TOKEN_PATH_RE = /(\/public\/sos\/|\/s\/)[^/?#]+/g;
+
+/** The logged form of a request URL: path only (query strings can carry search text), share tokens redacted. */
+export function logUrl(url: string): string {
+  return url.split('?')[0]!.replace(TOKEN_PATH_RE, '$1[redacted]');
+}
+
 export function loggerOptions(env: Env): Params {
   return {
     // Named wildcard (path-to-regexp v8 syntax); the library default "*" triggers a deprecation warning.
@@ -42,8 +50,7 @@ export function loggerOptions(env: Env): Params {
         req: (req: { id: unknown; method: string; url: string; remoteAddress?: string }) => ({
           id: req.id,
           method: req.method,
-          // Query strings can carry search text; log the path only.
-          url: req.url.split('?')[0],
+          url: logUrl(req.url),
           remoteAddress: req.remoteAddress,
         }),
       },

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, type Report } from '@prisma/client';
 import {
   type AdminCommunityDto,
@@ -27,6 +27,7 @@ import { AntifraudService } from '../antifraud/antifraud.service';
 import { SanctionsService } from '../antifraud/sanctions.service';
 import { ChatsService } from '../chats/chats.service';
 import { CommunitiesService } from '../communities/communities.service';
+import { FeedService } from '../feed/feed.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RatingService } from '../rating/rating.service';
 import { SosService } from '../sos/sos.service';
@@ -34,6 +35,10 @@ import { toUploadDto } from '../uploads/upload.mapper';
 import { userViewInclude } from '../users/user-view.service';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminViewService, assertTargetable } from './admin-view.service';
+
+type Tx = Prisma.TransactionClient;
+/** Runs after the moderation transaction committed (notifications, sockets, file removal, SOS cancel). */
+type AfterCommit = () => Promise<void>;
 
 const OPEN_SOS: SosStatus[] = ['created', 'accepted', 'in_progress'];
 const snippet = (text: string | null | undefined, max = 280) => (text ? (text.length > max ? `${text.slice(0, max - 1)}…` : text) : null);
@@ -56,6 +61,8 @@ type SosRowRaw = {
 /** Communities, SOS, reports and fraud flags in the admin panel (API.md §6). */
 @Injectable()
 export class AdminModerationService {
+  private readonly logger = new Logger(AdminModerationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: Storage,
@@ -68,6 +75,7 @@ export class AdminModerationService {
     private readonly notifications: NotificationsService,
     private readonly sanctions: SanctionsService,
     private readonly antifraud: AntifraudService,
+    private readonly feed: FeedService,
   ) {}
 
   /* ------------------------------------------------------------------ communities */
@@ -101,8 +109,11 @@ export class AdminModerationService {
     const community = await this.prisma.community.findFirst({ where: { id, deletedAt: null }, select: { ownerId: true } });
     if (!community) throw Errors.notFound('Community not found');
     assertTargetable(adminId, await this.prisma.user.findUnique({ where: { id: community.ownerId }, select: { id: true, role: true } }));
-    await this.communityService.remove(adminId, id, { asAdmin: true });
-    await this.audit.record({ adminId, action: 'community.delete', targetType: 'community', targetId: id, targetUserId: community.ownerId, note });
+    // The audit row commits together with the deletion.
+    await this.communityService.remove(adminId, id, {
+      asAdmin: true,
+      inTx: (tx) => this.audit.record({ adminId, action: 'community.delete', targetType: 'community', targetId: id, targetUserId: community.ownerId, note }, tx),
+    });
   }
 
   /* ------------------------------------------------------------------ SOS */
@@ -160,24 +171,31 @@ export class AdminModerationService {
     if (!sos) throw Errors.notFound('SOS not found');
     await this.view.targetUser(adminId, sos.userId);
     if (sos.isFake) throw Errors.conflict('SOS_ALREADY_FAKE', 'This SOS is already marked as fake');
-    await this.applyFake(adminId, id, sos.userId, note, sos.status);
+    const marked = await this.prisma.$transaction((tx) => this.applyFakeTx(tx, adminId, id, sos.userId, note));
+    if (marked) await this.afterFake(id, sos.userId, note, sos.status);
     return this.sosDetail(id);
   }
 
-  private async applyFake(adminId: string, id: string, requesterId: string, note: string, status: SosStatus): Promise<void> {
-    const marked = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.sosRequest.updateMany({ where: { id, isFake: false }, data: { isFake: true } });
-      if (count) await this.audit.record({ adminId, action: 'sos.mark_fake', targetType: 'sos', targetId: id, targetUserId: requesterId, note }, tx);
-      return count > 0;
-    });
-    if (!marked) return;
+  /** isFake + audit row + `fake_sos` penalty, inside the caller's transaction. False when it already was fake. */
+  private async applyFakeTx(tx: Tx, adminId: string, id: string, requesterId: string, note: string): Promise<boolean> {
+    const { count } = await tx.sosRequest.updateMany({ where: { id, isFake: false }, data: { isFake: true } });
+    if (!count) return false;
+    await this.audit.record({ adminId, action: 'sos.mark_fake', targetType: 'sos', targetId: id, targetUserId: requesterId, note }, tx);
+    await this.rating.applyPenaltyTx(tx, requesterId, 'fake_sos', id);
+    // A fake SOS no longer counts as a help (or for its reviews): the helpers' ratings are recomputed too.
+    const helpers = await tx.sosResponse.findMany({ where: { sosId: id, status: 'arrived' }, select: { helperId: true }, orderBy: { helperId: 'asc' } });
+    for (const h of helpers) await this.rating.recompute(tx, h.helperId, 'recalc', id);
+    return true;
+  }
+
+  /** After the fake mark committed: cancel if still open, helpers' ratings, the sanction notice, the cancel streak. */
+  private async afterFake(id: string, requesterId: string, note: string, status: SosStatus): Promise<void> {
     if (OPEN_SOS.includes(status)) {
       await this.sos.cancel(requesterId, id, 'fake', { system: true }).catch((err: unknown) => {
         // Someone ended it in the meantime: the fake mark and penalty still apply.
         if (!(err instanceof ApiException && err.code === 'SOS_INVALID_STATE')) throw err;
       });
     }
-    await this.rating.applyPenalty(requesterId, 'fake_sos', id);
     await this.sanctions.notify(requesterId, { kind: 'fake_sos', note, until: null, automatic: false, sosId: id });
     await this.antifraud.checkCancelStreak(requesterId, id);
   }
@@ -228,82 +246,108 @@ export class AdminModerationService {
   /**
    * confirm → `report_confirmed` penalty (−10) on the target user, plus content removal when asked; other
    * open reports on the same target get the same decision; every reporter gets `report_resolved`.
+   * The status change, the content removal (with its own `report.remove_content` audit row), the penalty
+   * and the audit rows commit in one transaction: either all of it happened or none of it (and the report
+   * stays open for a retry). Notifications and socket updates follow after commit.
+   * The admin can't resolve (either way) a report about themselves or another admin.
    */
   async resolve(adminId: string, id: string, input: AdminResolveReportInput): Promise<AdminResolveResult> {
     const confirm = input.decision === 'confirm';
     const status = confirm ? 'confirmed' : 'dismissed';
     const report = await this.prisma.report.findUnique({ where: { id } });
     if (!report) throw Errors.notFound('Report not found');
-    if (confirm && report.targetUserId) await this.view.targetUser(adminId, report.targetUserId);
+    if (report.targetUserId) await this.view.targetUser(adminId, report.targetUserId);
 
-    const resolved = await this.prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM reports WHERE id = ${id}::uuid FOR UPDATE`;
-      if (locked[0]?.status !== 'open') throw Errors.conflict('REPORT_ALREADY_RESOLVED', 'This report is already resolved');
-      const now = new Date();
-      const data = { status, resolvedById: adminId, resolvedNote: input.note, resolvedAt: now } as const;
-      const siblings = await tx.report.findMany({
-        where: { targetType: report.targetType, targetId: report.targetId, status: 'open', id: { not: id } },
-        select: { id: true, reporterId: true },
-      });
-      await tx.report.updateMany({ where: { id: { in: [id, ...siblings.map((s) => s.id)] } }, data });
-      await this.audit.record(
-        { adminId, action: confirm ? 'report.confirm' : 'report.dismiss', targetType: 'report', targetId: id, targetUserId: report.targetUserId, note: input.note },
-        tx,
-      );
-      return [{ id, reporterId: report.reporterId }, ...siblings];
-    });
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const locked = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM reports WHERE id = ${id}::uuid FOR UPDATE`;
+        if (locked[0]?.status !== 'open') throw Errors.conflict('REPORT_ALREADY_RESOLVED', 'This report is already resolved');
+        const now = new Date();
+        const data = { status, resolvedById: adminId, resolvedNote: input.note, resolvedAt: now } as const;
+        const siblings = await tx.report.findMany({
+          where: { targetType: report.targetType, targetId: report.targetId, status: 'open', id: { not: id } },
+          select: { id: true, reporterId: true },
+        });
+        await tx.report.updateMany({ where: { id: { in: [id, ...siblings.map((s) => s.id)] } }, data });
+        await this.audit.record(
+          { adminId, action: confirm ? 'report.confirm' : 'report.dismiss', targetType: 'report', targetId: id, targetUserId: report.targetUserId, note: input.note },
+          tx,
+        );
+        let after: AfterCommit | null = null;
+        let penaltyApplied = false;
+        if (confirm) {
+          if (input.removeContent) {
+            after = await this.removeContentTx(tx, adminId, report, input.note);
+            if (after) {
+              await this.audit.record(
+                { adminId, action: 'report.remove_content', targetType: report.targetType, targetId: report.targetId, targetUserId: report.targetUserId, note: input.note },
+                tx,
+              );
+            }
+          }
+          if (report.targetUserId) penaltyApplied = (await this.rating.applyPenaltyTx(tx, report.targetUserId, 'report_confirmed', id)) !== null;
+        }
+        return { resolved: [{ id, reporterId: report.reporterId }, ...siblings], after, penaltyApplied };
+      },
+      { timeout: 20_000 },
+    );
 
-    let contentRemoved = false;
-    let penaltyApplied = false;
-    if (confirm) {
-      if (input.removeContent) contentRemoved = await this.removeContent(adminId, report, input.note);
-      if (report.targetUserId) {
-        await this.rating.applyPenalty(report.targetUserId, 'report_confirmed', id);
-        penaltyApplied = true;
-      }
-    }
+    if (result.after) await result.after().catch((err: unknown) => this.logger.warn({ err, reportId: id }, 'Post-removal side effects failed'));
     await this.notifications.createMany(
       'report_resolved',
-      resolved.map((r) => ({
+      result.resolved.map((r) => ({
         userId: r.reporterId,
         payload: { reportId: r.id, decision: status, targetType: report.targetType } satisfies ReportResolvedPayload,
       })),
     );
     const fresh = await this.prisma.report.findUniqueOrThrow({ where: { id } });
-    return { report: (await this.toReportDtos([fresh]))[0]!, resolvedSiblings: resolved.length - 1, penaltyApplied, contentRemoved };
+    return {
+      report: (await this.toReportDtos([fresh]))[0]!,
+      resolvedSiblings: result.resolved.length - 1,
+      penaltyApplied: result.penaltyApplied,
+      contentRemoved: result.after !== null,
+    };
   }
 
-  /** Removes the reported content per target type. Returns whether something was removed. */
-  private async removeContent(adminId: string, report: Report, note: string): Promise<boolean> {
+  /**
+   * Removes the reported content per target type inside the resolution transaction. Returns null when there
+   * was nothing to remove, else the after-commit step.
+   */
+  private async removeContentTx(tx: Tx, adminId: string, report: Report, note: string): Promise<AfterCommit | null> {
+    const noop: AfterCommit = async () => {};
     switch (report.targetType) {
       case 'message':
-        return this.chats.removeMessage(report.targetId);
+        return this.chats.removeMessageTx(tx, report.targetId);
+      case 'post':
+        return (await this.feed.removePostAsAdmin(report.targetId, tx)) ? noop : null;
+      case 'comment':
+        return (await this.feed.removeCommentAsAdmin(report.targetId, tx)) ? noop : null;
       case 'community': {
-        const live = await this.prisma.community.count({ where: { id: report.targetId, deletedAt: null } });
-        if (!live) return false;
-        await this.communityService.remove(adminId, report.targetId, { asAdmin: true });
-        return true;
+        const live = await tx.community.count({ where: { id: report.targetId, deletedAt: null } });
+        if (!live) return null;
+        const done = await this.communityService.removeTx(tx, adminId, report.targetId, { asAdmin: true });
+        return async () => done();
       }
       case 'service': {
-        const svc = await this.prisma.serviceCenter.findUnique({ where: { id: report.targetId }, select: { status: true, name: true, submittedById: true } });
-        if (!svc || svc.status === 'rejected') return false;
-        await this.prisma.serviceCenter.update({ where: { id: report.targetId }, data: { status: 'rejected' } });
-        if (svc.submittedById) {
+        const svc = await tx.serviceCenter.findUnique({ where: { id: report.targetId }, select: { status: true, name: true, submittedById: true } });
+        if (!svc || svc.status === 'rejected') return null;
+        await tx.serviceCenter.update({ where: { id: report.targetId }, data: { status: 'rejected' } });
+        return async () => {
+          if (!svc.submittedById) return;
           const payload: ServiceStatusPayload = { serviceId: report.targetId, serviceName: svc.name, status: 'rejected', note };
           await this.notifications.create(svc.submittedById, 'service_status', payload);
-        }
-        return true;
+        };
       }
       case 'sos': {
-        if (report.reason !== 'fake_sos') return false;
-        const sos = await this.prisma.sosRequest.findUnique({ where: { id: report.targetId }, select: { userId: true, isFake: true, status: true } });
-        if (!sos || sos.isFake) return false;
-        await this.applyFake(adminId, report.targetId, sos.userId, note, sos.status);
-        return true;
+        if (report.reason !== 'fake_sos') return null;
+        const sos = await tx.sosRequest.findUnique({ where: { id: report.targetId }, select: { userId: true, isFake: true, status: true } });
+        if (!sos || sos.isFake) return null;
+        if (!(await this.applyFakeTx(tx, adminId, report.targetId, sos.userId, note))) return null;
+        return () => this.afterFake(report.targetId, sos.userId, note, sos.status);
       }
       default:
-        // user (no content to remove), post/comment (Phase 8).
-        return false;
+        // user: no content to remove.
+        return null;
     }
   }
 
@@ -375,6 +419,34 @@ export class AdminModerationService {
     if (serviceIds.length) {
       for (const s of await this.prisma.serviceCenter.findMany({ where: { id: { in: serviceIds } }, select: { id: true, name: true, address: true, status: true } })) {
         out.set(`service:${s.id}`, { title: s.name, text: s.address, imageUrl: null, deleted: s.status === 'rejected' });
+      }
+    }
+    const postIds = ids('post');
+    if (postIds.length) {
+      const posts = await this.prisma.post.findMany({
+        where: { id: { in: postIds } },
+        select: { id: true, text: true, mediaUploadIds: true, deletedAt: true, community: { select: { name: true, deletedAt: true } } },
+      });
+      const firstMedia = posts.map((p) => p.mediaUploadIds[0]).filter((m): m is string => !!m);
+      const media = firstMedia.length ? await this.prisma.upload.findMany({ where: { id: { in: firstMedia } }, select: { id: true, key: true, thumbKey: true, purpose: true } }) : [];
+      const mediaById = new Map(media.map((m) => [m.id, m]));
+      for (const p of posts) {
+        const gone = p.deletedAt !== null || !!p.community?.deletedAt;
+        const m = p.mediaUploadIds[0] ? mediaById.get(p.mediaUploadIds[0]) : undefined;
+        // A video has no image unless a thumbnail was made.
+        const imageUrl = m ? (m.purpose === 'video' ? (m.thumbKey ? this.storage.publicUrl(m.thumbKey) : null) : url(m)) : null;
+        out.set(`post:${p.id}`, { title: p.community?.name ?? null, text: snippet(p.text), imageUrl, deleted: gone, postId: p.id });
+      }
+    }
+    const commentIds = ids('comment');
+    if (commentIds.length) {
+      const comments = await this.prisma.postComment.findMany({
+        where: { id: { in: commentIds } },
+        select: { id: true, postId: true, text: true, deletedAt: true, post: { select: { deletedAt: true, community: { select: { name: true, deletedAt: true } } } } },
+      });
+      for (const c of comments) {
+        const gone = c.deletedAt !== null || c.post.deletedAt !== null || !!c.post.community?.deletedAt;
+        out.set(`comment:${c.id}`, { title: c.post.community?.name ?? null, text: snippet(c.text), imageUrl: null, deleted: gone, postId: c.postId });
       }
     }
     return out;

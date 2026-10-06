@@ -72,7 +72,7 @@ Rules
 - Nickname: 3–24 chars `[a-z0-9_.]` with at least one letter or digit, case-insensitive unique; `RESERVED_NICKNAMES` (shared: admin, support, moderator, autocommunity, system, root, help) → `409 NICKNAME_TAKEN`. Name 1–60, single line, must contain a letter or digit. Name and bio reject control/zero-width/bidi characters (ZWJ allowed for emoji). Bio ≤ 300. City from `CITIES` list (shared).
 - Vehicle: brand from `CAR_BRANDS` (shared) or free text ≤ 40; model ≤ 40; year 1950..current+1; plate ≤ 12, normalized uppercase.
 - Upload limits: images (jpeg/png/webp/heic) ≤ 10 MB → re-encoded WebP, EXIF stripped, max 2048 px + 400 px thumb; voice (webm/ogg/mp4/mpeg audio) ≤ 5 MB, ≤ 3 min; video (mp4/webm) ≤ 50 MB. Type checked by magic bytes.
-- Rate limits: OTP request: phone 1/60 s & 5/h, IP 20/h. OTP verify: 5 attempts per code, 10 failures/h per phone **from one IP** and 30 failures/h per phone overall → `RATE_LIMITED` (both also block new codes). Uploads 60/h per user.
+- Rate limits: OTP request: phone 1/60 s & 5/h, IP 20/h. OTP verify: 5 attempts per code, 10 failures/h per phone **from one IP** and 30 failures/h per phone overall → `RATE_LIMITED` (both also block new codes). Uploads 60/h per user, at most 2 in flight per user and 300 MB per rolling 24 h per user (→ `429 RATE_LIMITED`). Without `?purpose=` the stream is capped at the image limit (10 MB) — send `?purpose=video` / `voice` for those. Uploads never attached to anything are deleted 24 h after upload (hourly job).
 - New user created on first successful verify with `nickname = null` → `onboardingCompleted=false`. Client routes to onboarding until complete. Default `privacyMode = 'community'`, `receiveSos = true`, `rating = 50`.
 - Visibility: `GET /users/:id` and `/users/:id/vehicles` return `404` for users who haven't completed onboarding or deleted their account (self excepted). Blocked users are returned with `status: 'blocked'`.
 - Vehicles `isPrimary`: `true` moves the primary flag; `false` on the current primary hands it to the oldest other vehicle (a lone vehicle stays primary).
@@ -406,7 +406,7 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
   - Each `POST /share` rotates the token (the old link stops working). Allowed only while open (`409 SOS_INVALID_STATE` after).
   - The public response adds `helperNicknames: string[]` (`helperNickname` = the first, or `null`).
   - `requesterName` is the first word of the requester's name.
-  - Unknown/expired token → `404`; more than 60 requests/min per IP → `429 RATE_LIMITED`.
+  - Unknown/expired token → `404`; more than 60 requests/min per IP → `429 RATE_LIMITED`. Responses carry `Cache-Control: no-store`; the token is redacted (`[redacted]`) in request logs.
 - **Jobs:**
   - BullMQ queue `sos`: `sos.dispatch` steps at 0, +`SOS_EXPAND_DELAY_MS`, +2×`SOS_EXPAND_DELAY_MS` (default 5 min), and `sos.expire` at `expiresAt`. `expiresAt` = createdAt + `SOS_TTL_SEC` (default 7200).
   - Both env variables exist only to shorten test runs.
@@ -498,6 +498,7 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
   - Closing an SOS recomputes every `arrived` helper (`help_confirmed`, `refId` = SOS id).
   - A review recomputes its target (`review_received`, `refId` = review id).
   - `GET /me/rating` and `/users/:id/rating` refresh a drifted cache first (`recalc`), so `rating` always matches the live breakdown.
+  - Anti-farming inputs: SOS marked fake count neither as helps nor for the reviews left on them (mark-fake recomputes the helpers too, ledger reason `recalc`, `refId` = SOS id); helps for the same requester and reviews from the same author count at most once per 30 days. The ledger satisfies `50 + sum(delta) = users.rating` (the seed included).
   - `/me/rating/events` returns newest first (keyset pagination).
 - **Daily job:** first run 10 min after boot, then every 24 h. A Redis lock held ~23 h means it runs once a day across instances. It covers all onboarded, non-deleted users, one short transaction per user.
 - **`/users/:id/rating`, `/users/:id/reviews`:** same visibility as `GET /users/:id` (404 for deleted / un-onboarded, self excepted).
@@ -555,7 +556,10 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 - Reports:
   - `GET /admin/reports?status=open|confirmed|dismissed&targetType&cursor`, with target preview: content snippet or deleted marker, target user mini.
   - `POST /admin/reports/:id/resolve {decision:'confirm'|'dismiss', note, removeContent?: boolean}`.
-  - `confirm` → `report_confirmed` penalty (−10) on `targetUserId`, plus content removal when `removeContent` (message soft-delete, community soft-delete, service reject; SOS → treated like mark-fake when reason=fake_sos).
+  - `confirm` → `report_confirmed` penalty (−10) on `targetUserId`, plus content removal when `removeContent` (message, post and comment soft-delete — a comment decrements the post's `commentCount`; community soft-delete; service reject; SOS → treated like mark-fake when reason=fake_sos). The status change, the removal, the penalty and the audit rows commit in one transaction; a removal writes an extra audit row `report.remove_content` (`targetType` = the content type, `targetId` = the content id). If anything fails the report stays `open` and the call can be retried.
+  - Neither decision is allowed on a report whose target user is the admin themselves or another admin → `403 INVALID_TARGET`.
+  - Report `preview` for `post` / `comment` targets: `text` (snippet), `imageUrl` (the post's first image or video thumbnail; comments `null`), `title` (community name or `null`), `deleted` (post/comment deleted or its community deleted) and `postId` (the post itself, or the comment's parent post) — link to `/posts/{postId}`. Other target types omit `postId`.
+  - Admins (`role=admin` from the account state) can `GET /posts/:id` and `GET /posts/:id/comments` for any non-deleted post regardless of community privacy or deletion.
   - The reporter gets a `report_resolved` notification `{ reportId, decision }`.
   - Other open reports with the same target are resolved with the same decision.
 - `GET /admin/fraud-flags?cursor` and `GET /admin/audit?cursor&adminId&targetUserId`.
@@ -567,7 +571,8 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 **Antifraud v1** (automatic; every trigger writes a `fraud_flags` row `{kind, details}` and is visible in admin):
 - `sos_cancel_streak`: more than 2 SOS cancelled within 30 min of creation, or marked fake, in 7 days → automatic SOS ban for 72 h, with a notification (SPEC A-9).
 - `duplicate_sos_photo`: an SOS photo whose `contentHash` matches a photo from a *different* user's SOS in the last 30 days → flag only.
-- `report_burst`: ≥ 3 distinct reporters with open reports against the same user within 24 h → flag, plus an automatic temporary block for 24 h if the user's rating < 30.
+- `report_burst`: ≥ 3 distinct reporters with open reports against the same user within 24 h → flag, plus an automatic temporary block for 24 h if the user's rating < 30. Only credible reporters count: account ≥ 7 days old, rating ≥ 40, none of their reports ever dismissed. Concurrent reports produce one flag / one block (Redis `SET NX af:burst:{userId}`, 24 h).
+- `reciprocal_sos`: two users who helped each other (closed, non-fake SOS, helper `arrived`, both directions) ≥ 2 times within 7 days → a flag on each (details `{ otherUserId, helps, sosIds }`), once per pair per 7 days; flag only.
 - `location_teleport`: ≥ 3 implausible location jumps in 1 h → flag (uses the Phase 5 untrusted-location detection).
 - `new_account_sos`: an SOS created by an account < 24 h old → flag only (allowed, as SPEC permits).
 - `otp_abuse`: more than 3 OTP lockouts for the same phone in 24 h → flag (no user yet: `userId` null allowed, `details.phoneMasked`).
@@ -581,7 +586,7 @@ type SosResponseDto = { id; helper: UserPublic; status: 'offered'|'accepted'|'ar
 - **Shared:** `packages/shared/src/admin.ts`: request schemas (`adminNoteBodySchema`, `adminBlockSchema`, `adminSosBanSchema`, `adminResolveReportSchema`, list queries), DTOs (`AdminStatsDto`, `AdminUserRow`, `AdminUserDetail`, `AdminActionDto`, `FraudFlagDto`, `AdminCommunityDto`, `AdminSosRow`/`AdminSosDetail`, `AdminReportDto` with `preview`, `AdminResolveResult`, `AdminServiceDto`, `AdminVisitDto`, `AdminServiceQrDto`), `ADMIN_ACTIONS`, `FRAUD_FLAG_KINDS`, `ANTIFRAUD` thresholds, notification payload types.
 - **Status codes:** every admin `POST` → `200` (user actions return the fresh `AdminUserDetail`, mark-fake the `AdminSosDetail`, resolve `{ report, resolvedSiblings, penaltyApplied, contentRemoved }`, services/visits the updated item). `DELETE /admin/communities/:id` → `204`. Non-admins → `403 FORBIDDEN` on every route (the role is read from the account state, not the token). `GET /admin/services/:id` (one service) and `GET /admin/services/:id/qr` → `{ code, validFor: 'today', url }` (`url` = what the printed QR encodes) were added.
 - **Notes:** `note` is trimmed, 3–500 chars. `until` (block, sos-ban) must be an ISO date-time in the future; sos-ban requires it, block without it is indefinite.
-- **Errors:** `403 INVALID_TARGET` (self/other admin; also confirming a report about an admin, mark-fake on an admin's SOS, deleting an admin-owned community, moderating your own service submission or visit), `409 NOT_BLOCKED`, `409 NOT_SOS_BANNED`, `409 SOS_ALREADY_FAKE`, `409 REPORT_ALREADY_RESOLVED` (siblings included), `409 SERVICE_STATUS_UNCHANGED`, `409 VISIT_NOT_PENDING`, `429 RATE_LIMITED` (300/min/admin).
+- **Errors:** `403 INVALID_TARGET` (self/other admin; also resolving — confirm or dismiss — a report about an admin, verifying/rejecting a service submitted by an admin, approving/rejecting an admin's visit, mark-fake on an admin's SOS, deleting an admin-owned community, moderating your own service submission or visit), `409 NOT_BLOCKED`, `409 NOT_SOS_BANNED`, `409 SOS_ALREADY_FAKE`, `409 REPORT_ALREADY_RESOLVED` (siblings included), `409 SERVICE_STATUS_UNCHANGED`, `409 VISIT_NOT_PENDING`, `429 RATE_LIMITED` (300/min/admin).
 - **Users list:** `q` = case-insensitive substring of nickname or name; 3+ digits also match the phone. `status=active` includes expired temporary blocks.
 - **Block side effects:** status `blocked` (+ `blockedUntil`), refresh tokens revoked and access tokens invalidated, `session:revoked` + socket disconnect, open SOS cancelled with `cancelReason = 'system:admin_blocked'` (helpers notified as usual), `admin_warning` notification.
 - **Notifications:** `admin_warning` `{ kind: 'warning'|'blocked'|'sos_ban'|'fake_sos', note, until, automatic, sosId? }` (automatic sanctions use it too, `note: null, automatic: true`); `report_resolved` `{ reportId, decision: 'confirmed'|'dismissed', targetType }` to every reporter (siblings included); `service_status` `{ serviceId, serviceName, status, note }`; `visit_status` `{ visitId, serviceId, serviceName, status, note }`. All pushed (ru/en); `url` is `/notifications` for warnings and reports, `/services/{id}` for services and visits.
@@ -669,7 +674,7 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
 
 - **Shared:** `packages/shared/src/events.ts` (`EVENT_LIMITS`, `EventDto`, `EventParticipantDto`, `EventMapItem`, `EventNotificationPayload`, request schemas, `eventEndsAt`) and `feed.ts` (`FEED_LIMITS`, `PostDto`, `PollDto`, `PostCommentDto`, `LikeResult`, request schemas, `textPreview`).
 - **Events:**
-  - `EventDto` also has `canManage: boolean` (creator, or active owner/moderator of the community).
+  - `EventDto` also has `canManage: boolean` (active owner/moderator of the community, or the creator while still an active member). A creator who left or was removed gets `403` on PATCH/DELETE.
   - An event without `endsAt` counts as ended 3 h after `startsAt`. *Upcoming* = not ended, `startsAt` asc; *past* = ended, `startsAt` desc. Keyset on (`startsAt`, id).
   - `POST /communities/:id/events` → `201 EventDto`; non-moderators → `403`; unknown/deleted community → `404`. `PATCH` takes any subset of the create fields (`null` clears `endsAt` / `route`); time rules are re-checked on the merged event, and `startsAt` must be in the future only when it is sent. A PATCH that changes nothing sends no notices.
   - `GET /events?communityId=` and `GET /communities/:id/events` for a private community the viewer isn't an active member of → `403`. `GET /events/:id`, participants and RSVP for an invisible event → `404`.
@@ -678,7 +683,9 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
   - `GET /map/events?bbox` → `{ items: EventMapItem[], truncated }` (`{ id, title, place, lat, lng, startsAt, communityName, goingCount, myRsvp }`, at most 200, soonest first).
   - `distanceM` is from the viewer's stored position (any age), `null` without one.
   - The event chat's `ChatDto.title` is the event title; owners/moderators of the event's community may delete messages in it. Deleting an event deletes its chat.
-  - `event_new` payload `{ eventId, communityId, communityName, title, startsAt, place, change? }`. In-app to all active members except the creator; pushed only to members with an RSVP (any event of that community) created in the last 90 days. Change notices (`change: 'updated'`) go to all participants except the actor; delete sends `change: 'cancelled'`.
+  - `event_new` payload `{ eventId, communityId, communityName, title, startsAt, place, change? }`. In-app to all active members except the creator; pushed only to members with an RSVP (any event of that community) created in the last 90 days. Change notices (`change: 'updated'`) go to all participants except the actor, at most one per event per 10 min (Redis `notify:event_updated:{eventId}`); delete sends `change: 'cancelled'`. Change/cancel notices and reminders go only to participants who can still see the event (live community; public, or they are an active member).
+  - Leaving or being removed from a community drops the user's RSVPs to its events (`goingCount` recomputed) and their event-chat memberships (`chats:changed`, sockets leave the rooms); deleting a community does this for everyone. Event-chat access (read, send, list) also requires the event's community to be live and public or the user an active member.
+  - Rate limits: event create 10 / 24 h per user, PATCH 30 / h, RSVP 30 / min, `GET /map/events` 60 / min → `429 RATE_LIMITED`.
   - `event_reminder` (same payload, no `change`) goes once to `going` participants `EVENT_REMINDER_LEAD_MS` (env, default 2 h) before the start. BullMQ job id `event-reminder-{eventId}-{startsAtMs}`; PATCH of `startsAt` removes the old job and resets `reminderSentAt`; delete removes it; the handler re-checks the event and its `startsAt`. An event created inside the lead window gets no reminder.
 - **Feed:**
   - `PostDto` and `PostCommentDto` also carry `canDelete: boolean`. `GET /posts/:id` returns one visible post (`404` otherwise; deleted posts and posts of deleted authors/communities are invisible).
@@ -688,6 +695,6 @@ Feed: `GET /feed?communityId&authorId&cursor` · `POST /posts {text?, mediaUploa
   - `POST /posts/:id/comments` → `201 PostCommentDto`; `GET` excludes deleted comments; `DELETE /comments/:id` → `204` (soft; `commentCount` decremented).
   - `POST /posts/:id/poll/vote { optionIds }` → `200 PollDto`. No poll → `404`; several options on a single-choice poll → `400 VALIDATION_ERROR`; an option of another poll → `400 INVALID_OPTION`; second vote → `409 ALREADY_VOTED` (serialized by a row lock on the poll). `polls.total_voters` counts distinct voters.
   - `post_comment` payload `{ postId, commentId, preview, user }`, `post_like` `{ postId, preview, user }` (`preview` ≤ 120 chars). Throttles are Redis `SET NX EX` keys per post (`notify:post_comment:{postId}` 10 min, `notify:post_like:{postId}` 1 h): events inside the window create no notification.
-  - Rate limits: `feed-post:{userId}` 20 / 24 h, `feed-comment:{userId}` 60 / h → `429 RATE_LIMITED`.
+  - Rate limits: `feed-post:{userId}` 20 / 24 h, `feed-comment:{userId}` 60 / h, `feed-like:{userId}` 120 / min (like and unlike together) → `429 RATE_LIMITED`.
 - **Reports:** `post` / `comment` targets are visible when the post is (comments: not deleted); `targetUserId` is the post / comment author.
 - **Push (F-43):** every `NotificationType` has ru/en text and a URL (enforced at compile time and by `push-text.spec.ts`): `event_new` → `/events/{id}` (cancelled → `/communities/{id}?tab=events`), `event_reminder` → `/events/{id}`, `post_comment`/`post_like` → `/posts/{id}`, `message` → `/chats/{chatId}`, `service_status`/`visit_status` → `/services/{serviceId}`, `admin_warning`/`report_resolved` → `/notifications`. Event times in push texts are Asia/Almaty.

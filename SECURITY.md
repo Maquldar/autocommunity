@@ -88,7 +88,7 @@ Paths are relative to the repository root. API tests are in `apps/api/test/*.int
 |---|---|---|---|
 | 9.1 | HTTPS + HSTS in production (helmet; hosting terminates TLS) | 🟡 | `bootstrap.ts` (helmet); TLS is the host's job (Render/Vercel), not tested here |
 | 9.1 | CORS allow-list (`WEB_ORIGIN`); state-changing requests from other origins → 403; sockets from other origins refused | ✅ | `bootstrap.ts`; `health.int.spec.ts`, `realtime.int.spec.ts` |
-| 9.x | Strict CSP on the web app (self + listed CDNs/tiles) | ✅ | `apps/web/next.config.ts` |
+| 9.x | CSP on the web app (self + listed CDNs/tiles). `script-src` still allows `'unsafe-inline'` because Next.js injects inline bootstrap scripts; a nonce-based CSP is a known gap (see Residual risks) | 🟡 | `apps/web/next.config.ts` |
 
 ## V10 Malicious code / V14 Configuration
 
@@ -140,6 +140,21 @@ From PROGRESS.md and the commit history (`be0dd36`, `1c6d36f`, `ac3c3bc`). Every
 | 3–4 | Medium (×7) | Expired SOS still actionable; account-deletion leftovers; onboarding gate missing on social actions; socket-room races; upload reuse across messages/avatars; SOS fan-out N+1; unicode-confusable community names | Expire-before-act; deletion hooks; `OnboardedGuard`; rooms re-checked on connect; unique attachment indexes; batched notifications; normalized name keys |
 | 3–4 | Low (×6) | Unread-count cap, socket flood limits, dispatch idempotency and others | See commit `ac3c3bc` |
 
+Security review at `718dc7f` (fixed afterwards; tests in `apps/api/test/security-review.int.spec.ts` unless noted):
+
+| Severity | Finding | Fix |
+|---|---|---|
+| High | Event chats and notices stayed open to users who left / were removed from a community, and after community deletion | Leave, removal and community deletion drop the users' RSVPs (goingCount recomputed) and event-chat memberships, sockets leave the rooms; event-chat access additionally requires a live community that is public or where the user is an active member; change notices and reminders go only to participants who can still see the event |
+| High | Admins could neither preview nor remove reported posts/comments | Post/comment previews (text, first image, `postId`, deleted); confirm + `removeContent` soft-deletes them; admins can read any non-deleted post and its comments |
+| Medium | Report-burst auto-block could be driven by throwaway accounts and raced into duplicate blocks | Only reporters ≥ 7 days old, rating ≥ 40 and without dismissed reports count; a Redis `SET NX` (`af:burst:{userId}`, 24 h) admits one flag/block |
+| Medium | Rating farming via fake SOS / repeated mutual help | Fake SOS count neither as helps nor for reviews (helpers recomputed on mark-fake); each counterpart counts once per 30 days; new `reciprocal_sos` flag |
+| Medium | A creator who left the community could still edit/delete their event | Managing requires an active membership |
+| Medium | Upload cap defaulted to 50 MB without `?purpose`; no concurrency or volume limit; orphans kept forever | Image cap by default; 2 uploads in flight per user; 300 MB / 24 h per user; hourly purge of uploads unattached for 24 h (disk, Postgres and S3 drivers) |
+| Medium / Low | Missing rate limits on events, likes, RSVP, `/map/events`; "event updated" notice spam | 10 events/day, 30 edits/h, 30 RSVPs/min, 120 likes/min, 60 `/map/events`/min; one update notice per event per 10 min |
+| Low | Admins could moderate other admins' services/visits and dismiss reports about themselves | Same target rule (`INVALID_TARGET`) for submitters, visitors and both report decisions |
+| Low | Report resolution side effects were not atomic; community-delete audit row written after the fact | Status change, content removal, penalty and audit rows (including a new `report.remove_content` row) commit in one transaction (a failure leaves the report open for a retry); the community-delete audit row is part of the deletion transaction |
+| Low | Public SOS JSON cacheable; share tokens in request logs | `Cache-Control: no-store`; `/public/sos/:token` and `/s/:token` redacted in the pino request serializer (`logger.spec.ts`) |
+
 Phase 6 changes reviewed in this pass: admin role re-read per request (a demoted admin loses access within the 60 s state cache, or immediately after `invalidate`); system SOS cancellations carry a `system:` prefix that user input can't produce (stripped from user reasons), so a user can't hide cancellations from the antifraud streak; notification `href`s for moderation types only accept safe ids.
 
 ## Residual risks
@@ -151,5 +166,6 @@ Phase 6 changes reviewed in this pass: admin role re-read per request (a demoted
 - **Rate limits are per user / per IP** and rely on `TRUST_PROXY` being set correctly behind the host's proxy; a misconfigured proxy setting either lets clients spoof IPs or puts everyone behind one IP.
 - **Content moderation is reactive** (reports); there is no automated content scanning of images or text.
 - **Voice/video files keep their metadata** (no ffmpeg in the image).
+- **CSP allows inline scripts** (`'unsafe-inline'` in `script-src`) because Next.js emits inline bootstrap scripts; moving to per-request nonces (middleware + `nonce` on scripts) is a known gap. Output encoding by React remains the main XSS defence.
 - **Dependency scanning** (`pnpm audit`, Dependabot) isn't in CI.
 - The **demo deployment** (`DEMO_MODE=true`) shows login codes on screen by design; it must never hold real users.

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { UploadsCleanupService } from '../src/modules/uploads/uploads-cleanup.service';
 import { bearer, createTestApp, createUser, type TestApp } from './support/app';
 import { jpegWithGps } from './support/images';
 
@@ -30,5 +31,15 @@ describe('STORAGE_DRIVER=postgres (demo hosting without a persistent disk)', () 
     await request(t.http).head(path).expect(200);
     await request(t.http).get('/media/avatar/2026/01/does-not-exist.webp').expect(404);
     await request(t.http).get('/media/..%2F..%2Fetc%2Fpasswd').expect(404);
+  });
+
+  it('the orphan cleanup deletes unattached uploads older than 24 h from the database store too', async () => {
+    const u = await createUser(t);
+    const res = await request(t.http).post('/api/v1/uploads?purpose=post').set(bearer(u.token)).attach('file', await jpegWithGps(32, 24), { filename: 'o.jpg' }).expect(201);
+    const path = new URL(res.body.url as string).pathname;
+    await t.prisma.upload.update({ where: { id: res.body.id }, data: { createdAt: new Date(Date.now() - 25 * 3600_000) } });
+    expect(await t.app.get(UploadsCleanupService).purge()).toBe(1);
+    expect(await t.prisma.upload.findUnique({ where: { id: res.body.id } })).toBeNull();
+    await request(t.http).get(path).expect(404);
   });
 });

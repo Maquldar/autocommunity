@@ -29,6 +29,7 @@ export const ADMIN_ACTIONS = [
   'sos.mark_fake',
   'report.confirm',
   'report.dismiss',
+  'report.remove_content',
   'service.verify',
   'service.reject',
   'visit.approve',
@@ -44,6 +45,7 @@ export const FRAUD_FLAG_KINDS = [
   'location_teleport',
   'new_account_sos',
   'otp_abuse',
+  'reciprocal_sos',
 ] as const;
 export type FraudFlagKind = (typeof FRAUD_FLAG_KINDS)[number];
 
@@ -56,6 +58,9 @@ export const ANTIFRAUD = {
   cancelStreakBanHours: 72,
   duplicatePhotoDays: 30,
   reportBurstReporters: 3,
+  /** Only reporters with an account at least this old, at least this rating and no dismissed reports count. */
+  reportBurstReporterMinAgeDays: 7,
+  reportBurstReporterMinRating: 40,
   reportBurstHours: 24,
   reportBurstBlockBelowRating: 30,
   reportBurstBlockHours: 24,
@@ -65,6 +70,9 @@ export const ANTIFRAUD = {
   /** "More than 3" lockouts. */
   otpLockoutsMin: 4,
   otpWindowHours: 24,
+  /** Two users who helped each other (closed SOS, both directions) this many times within the window. */
+  reciprocalSosMin: 2,
+  reciprocalSosDays: 7,
 } as const;
 
 /* ---------- request schemas ---------- */
@@ -209,6 +217,8 @@ export type ReportTargetPreview = {
   text: string | null;
   imageUrl: string | null;
   deleted: boolean;
+  /** Post and comment targets: the post to open (`/posts/:id`; the comment's parent post). */
+  postId?: string | null;
 };
 
 export type AdminReportDto = {
