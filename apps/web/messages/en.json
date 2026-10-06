@@ -2112,6 +2112,7 @@
         "report_burst": "Report burst",
         "location_teleport": "Location jumps",
         "new_account_sos": "SOS from a new account",
+        "reciprocal_sos": "Mutual SOS help (possible rating farming)",
         "otp_abuse": "OTP abuse"
       },
       "facts": {
@@ -2123,7 +2124,8 @@
         "minutes": "account age, min",
         "matches": "matches",
         "phone": "phone",
-        "lockouts": "lockouts"
+        "lockouts": "lockouts",
+        "helps": "mutual helps, 7 days"
       }
     },
     "audit": {
@@ -2142,6 +2144,7 @@
         "sos_mark_fake": "SOS marked fake",
         "report_confirm": "Report confirmed",
         "report_dismiss": "Report dismissed",
+        "report_remove_content": "Reported content removed",
         "service_verify": "Service verified",
         "service_reject": "Service rejected",
         "visit_approve": "Visit approved",

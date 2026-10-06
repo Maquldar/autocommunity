@@ -227,6 +227,9 @@ export function flagFacts(flag: Pick<FraudFlagDto, 'kind' | 'details'>): Record<
     case 'new_account_sos':
       put('minutes', num(d.accountAgeMin));
       break;
+    case 'reciprocal_sos':
+      put('helps', num(d.helps));
+      break;
     case 'duplicate_sos_photo':
       put('matches', Array.isArray(d.matches) ? d.matches.length : null);
       break;

@@ -2112,6 +2112,7 @@
         "report_burst": "Волна жалоб",
         "location_teleport": "Скачки геопозиции",
         "new_account_sos": "SOS с нового аккаунта",
+        "reciprocal_sos": "Взаимная помощь по SOS (возможная накрутка рейтинга)",
         "otp_abuse": "Перебор кодов"
       },
       "facts": {
@@ -2123,7 +2124,8 @@
         "minutes": "возраст аккаунта, мин",
         "matches": "совпадений",
         "phone": "телефон",
-        "lockouts": "блокировок"
+        "lockouts": "блокировок",
+        "helps": "взаимных помощей за 7 дней"
       }
     },
     "audit": {
@@ -2142,6 +2144,7 @@
         "sos_mark_fake": "SOS признан ложным",
         "report_confirm": "Жалоба подтверждена",
         "report_dismiss": "Жалоба отклонена",
+        "report_remove_content": "Контент удалён по жалобе",
         "service_verify": "Сервис подтверждён",
         "service_reject": "Сервис отклонён",
         "visit_approve": "Визит подтверждён",

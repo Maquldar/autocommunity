@@ -17,6 +17,7 @@ const KIND_TONE: Record<FraudFlagKind, 'danger' | 'warning' | 'neutral'> = {
   location_teleport: 'warning',
   otp_abuse: 'warning',
   new_account_sos: 'neutral',
+  reciprocal_sos: 'warning',
 };
 
 /** Flags as cards: kind, who, the key facts, links to the SOS. */
