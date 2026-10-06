@@ -39,7 +39,8 @@ export const DEMO_TEST_CARD = '4242424242424242';
 export const PAYMENT_PROVIDERS = ['demo'] as const;
 export type PaymentProviderName = (typeof PAYMENT_PROVIDERS)[number];
 
-export const WALLET_TX_KINDS = ['topup', 'transfer_out', 'transfer_in', 'subscription', 'admin_adjust', 'refund'] as const;
+/** `purchase` / `sale`: Phase 10 payments at partner points (API.md §10). */
+export const WALLET_TX_KINDS = ['topup', 'transfer_out', 'transfer_in', 'subscription', 'admin_adjust', 'refund', 'purchase', 'sale'] as const;
 export type WalletTxKind = (typeof WALLET_TX_KINDS)[number];
 
 export const TOPUP_STATUSES = ['pending', 'succeeded', 'declined', 'expired'] as const;

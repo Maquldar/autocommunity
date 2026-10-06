@@ -8,7 +8,7 @@ import { bboxSchema, idSchema, latSchema, lngSchema, paginationQuerySchema, phon
 
 /* ---------- enums & limits ---------- */
 
-export const SERVICE_CATEGORIES = ['repair', 'tires', 'wash', 'parts', 'tow'] as const;
+export const SERVICE_CATEGORIES = ['repair', 'tires', 'wash', 'parts', 'tow', 'fuel'] as const;
 export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number];
 
 export const SERVICE_STATUSES = ['pending', 'verified', 'rejected'] as const;
@@ -314,9 +314,13 @@ export type ServiceDto = {
   openNow: boolean | null;
   /** The viewer's latest visit. */
   myVisit: MyVisit | null;
+  /** Phase 10: a payment partner ("Оплата на точке", API.md §10). */
+  acceptsPayments: boolean;
+  /** Phase 10: the viewer is an admin or the point's owner and may manage its price list. */
+  canManagePay: boolean;
 };
 
-export type ServiceListItem = Omit<ServiceDto, 'description' | 'hours' | 'photos' | 'myVisit'> & { photoUrl: string | null };
+export type ServiceListItem = Omit<ServiceDto, 'description' | 'hours' | 'photos' | 'myVisit' | 'canManagePay'> & { photoUrl: string | null };
 
 export type ServiceMapItem = { id: string; name: string; category: ServiceCategory; lat: number; lng: number; rating: number };
 export type ServiceMapResult = { items: ServiceMapItem[]; truncated: boolean };

@@ -109,7 +109,7 @@ export const isTestCard = (text: string) => cardDigits(text) === DEMO_TEST_CARD;
 
 /* ---------- ledger ---------- */
 
-export const TX_FILTERS = ['all', 'topup', 'transfer_in', 'transfer_out', 'subscription', 'admin_adjust'] as const;
+export const TX_FILTERS = ['all', 'topup', 'purchase', 'transfer_in', 'transfer_out', 'subscription', 'admin_adjust'] as const;
 export type TxFilter = (typeof TX_FILTERS)[number];
 
 /** UI filter → API `kind` (`all` → no filter). */

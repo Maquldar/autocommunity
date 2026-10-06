@@ -139,7 +139,9 @@ export type NotificationType =
   | 'premium_expired'
   | 'vote_received'
   | 'violation_reported'
-  | 'violation_status';
+  | 'violation_status'
+  /* phase 10 */
+  | 'purchase_paid';
 
 export type NotificationDto = {
   id: string;

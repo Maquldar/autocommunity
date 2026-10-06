@@ -120,6 +120,7 @@ const CATEGORY_COLORS: Record<ServiceCategory, [string, string]> = {
   wash: ['#0f7ea3', '#0b5872'],
   parts: ['#5f6d1c', '#3f4812'],
   tow: ['#b4570b', '#7d3c06'],
+  fuel: ['#0f766e', '#0b524d'],
 };
 const CATEGORY_GLYPH: Record<ServiceCategory, string> = {
   // Simple line drawings (wrench, tyre, droplet, gear, truck) in a 120×120 box.
@@ -128,6 +129,7 @@ const CATEGORY_GLYPH: Record<ServiceCategory, string> = {
   wash: '<path d="M60 22c14 20 26 34 26 48a26 26 0 0 1-52 0c0-14 12-28 26-48z"/>',
   parts: '<circle cx="60" cy="60" r="16"/><path d="M60 24v14M60 82v14M24 60h14M82 60h14M35 35l10 10M75 75l10 10M85 35 75 45M45 75 35 85"/>',
   tow: '<path d="M18 78V50h40v28M58 60h22l14 18H58M18 78h76"/><circle cx="34" cy="82" r="8"/><circle cx="78" cy="82" r="8"/>',
+  fuel: '<path d="M30 96V30a8 8 0 0 1 8-8h28a8 8 0 0 1 8 8v66M24 96h56M38 46h28M74 52l12 10v26a6 6 0 0 0 12 0V48L88 38"/>',
 };
 
 async function servicePhoto(category: ServiceCategory, variant: number): Promise<{ main: Buffer; thumb: Buffer }> {
@@ -147,6 +149,49 @@ async function servicePhoto(category: ServiceCategory, variant: number): Promise
   return { main, thumb };
 }
 
+/**
+ * Phase 10 demo payment partners ("Оплата на точке", API.md §10). Demo data: generic addresses, prices in
+ * coins (1 coin = 1 ₸). RP has no owner account (sales become merchant settlements); GT Oil Service is owned
+ * by a seeded driver, whose wallet receives the `sale` rows.
+ */
+const PARTNERS: (SeedService & { items: { name: string; priceCoins: number; unit: 'l' | 'pcs' | 'service' }[]; owned: boolean })[] = [
+  {
+    name: 'RP',
+    category: 'fuel',
+    address: 'пр. Райымбека, 480',
+    lat: 43.2672,
+    lng: 76.8712,
+    hours: HOURS.always,
+    description: 'АЗС: АИ-92, АИ-95, дизель. Оплата в приложении: приложите телефон к NFC-метке у кассы или отсканируйте QR. Демо-данные.',
+    photos: 1,
+    owned: false,
+    items: [
+      { name: 'АИ-92', priceCoins: 205, unit: 'l' },
+      { name: 'АИ-95', priceCoins: 245, unit: 'l' },
+      { name: 'ДТ', priceCoins: 290, unit: 'l' },
+    ],
+  },
+  {
+    name: 'GT Oil Service',
+    category: 'repair',
+    address: 'ул. Жандосова, 140',
+    lat: 43.2183,
+    lng: 76.8607,
+    hours: HOURS.daily,
+    description: 'Экспресс-замена масла и фильтров за 30 минут. Оплата в приложении по NFC-метке или QR на стойке. Демо-данные.',
+    photos: 1,
+    owned: true,
+    items: [
+      { name: 'Замена масла 5W-30 (4 л)', priceCoins: 18_000, unit: 'service' },
+      { name: 'Масляный фильтр', priceCoins: 3_500, unit: 'pcs' },
+      { name: 'Замена масла + фильтр', priceCoins: 20_000, unit: 'service' },
+    ],
+  },
+];
+
+/** Deterministic payTag (22 base64url chars) so printed stickers and the e2e spec survive a reseed. */
+export const seedPayTag = (name: string) => createHash('sha256').update(`seed-paytag:${name}`).digest('base64url').slice(0, 22);
+
 /** Deterministic per-service secret so printed QR codes survive a reseed. */
 const qrSecretFor = (name: string) => createHash('sha256').update(`seed-qr:${name}`).digest('hex');
 
@@ -158,7 +203,7 @@ export async function seedServices(ctx: ServiceSeedContext): Promise<string> {
   const ids: string[] = [];
   let photoCount = 0;
 
-  const insert = async (s: SeedService, index: number, status: 'verified' | 'pending', submittedById: string) => {
+  const insert = async (s: SeedService, index: number, status: 'verified' | 'pending', submittedById: string, fixedCreatedAt?: Date) => {
     const id = newId();
     const photoIds: string[] = [];
     for (let p = 0; p < (s.photos ?? 0); p++) {
@@ -175,7 +220,7 @@ export async function seedServices(ctx: ServiceSeedContext): Promise<string> {
       photoCount++;
     }
     const phone = `+7727${String(2_000_000 + index * 37_717).slice(-7)}`;
-    const createdAt = new Date(now - (status === 'pending' ? rng.int(1, 3) : rng.int(30, 400)) * DAY);
+    const createdAt = fixedCreatedAt ?? new Date(now - (status === 'pending' ? rng.int(1, 3) : rng.int(30, 400)) * DAY);
     await prisma.$executeRaw`
       INSERT INTO service_centers (id, name, category, description, address, phone, hours, photo_upload_ids, location, rating,
                                    status, qr_secret, submitted_by_id, created_at, updated_at)
@@ -239,6 +284,22 @@ export async function seedServices(ctx: ServiceSeedContext): Promise<string> {
   });
   visitCount++;
 
+  // Payment partners: verified, in the catalog and on the map like any other service.
+  let payItems = 0;
+  for (const [i, p] of PARTNERS.entries()) {
+    // A fixed creation date and no reviews: the partners don't consume the seeded RNG, so the rest of the seed
+    // (communities, SOS, wallets…) stays exactly as before.
+    const id = await insert(p, SERVICES.length + PENDING.length + i, 'verified', admin.id, new Date(now - 60 * DAY));
+    await prisma.serviceCenter.update({
+      where: { id },
+      data: { acceptsPayments: true, payTag: seedPayTag(p.name), ownerId: p.owned ? reviewers[0]!.id : null },
+    });
+    for (const [k, item] of p.items.entries()) {
+      await prisma.payItem.create({ data: { id: newId(), serviceId: id, ...item, sortOrder: k } });
+      payItems++;
+    }
+  }
+
   for (const id of ids) {
     const [agg] = await prisma.$queryRaw<{ reviews: number; stars: number; visits: number }[]>`
       SELECT (SELECT count(*)::int FROM reviews WHERE target_type = 'service' AND target_id = ${id}::uuid) AS reviews,
@@ -250,5 +311,8 @@ export async function seedServices(ctx: ServiceSeedContext): Promise<string> {
     });
   }
 
-  return `${ids.length} verified + ${PENDING.length} pending services (${photoCount} photos), ${visitCount} visits, ${reviewCount} reviews`;
+  return (
+    `${ids.length} verified + ${PENDING.length} pending services (${photoCount} photos), ${visitCount} visits, ${reviewCount} reviews; ` +
+    `payment partners ${PARTNERS.map((p) => `${p.name} (/pay/t/${seedPayTag(p.name)})`).join(', ')} with ${payItems} items`
+  );
 }

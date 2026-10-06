@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, CalendarClock, CalendarDays, CalendarX, CarFront, Check, Crown, ShieldAlert, ShieldCheck, Siren, Star, ThumbsDown, UserCheck, UsersRound, Wallet } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, CalendarX, CarFront, Check, Crown, ShieldAlert, ShieldCheck, Siren, Star, ThumbsDown, UserCheck, UsersRound, ReceiptText, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -37,6 +37,7 @@ type TitleSpec =
   | { key: 'types.voteReceived'; values: { reason: string } }
   | { key: 'types.violationReported'; values: { category: string; vehicle: string } }
   | { key: 'types.violationStatus'; values: { status: string; role: string; category: string } }
+  | { key: 'types.purchasePaid'; values: { point: string; amount: number; method: string } }
   | { key: 'types.generic'; values: Record<string, never> };
 
 type TitleContext = {
@@ -116,6 +117,8 @@ function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
       return { key: 'types.violationReported', values: { category: ctx.category(view.category), vehicle: view.vehicle || ctx.someCar } };
     case 'violation_status':
       return { key: 'types.violationStatus', values: { status: view.status, role: view.role, category: ctx.category(view.category) } };
+    case 'purchase_paid':
+      return { key: 'types.purchasePaid', values: { point: view.pointName || ctx.someCommunity, amount: view.total, method: view.method } };
     default:
       return { key: 'types.generic', values: {} };
   }
@@ -224,6 +227,8 @@ function iconFor(view: NotificationView): typeof Bell {
     case 'wallet_received':
     case 'wallet_admin':
       return Wallet;
+    case 'purchase_paid':
+      return ReceiptText;
     case 'violation_status':
     case 'violation_reported':
       return CarFront;

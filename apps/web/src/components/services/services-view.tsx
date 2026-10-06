@@ -1,13 +1,14 @@
 'use client';
 
 import { SERVICE_CATEGORIES, type ServiceCategory } from '@autoc/shared';
-import { List, Map as MapIcon, Plus } from 'lucide-react';
+import { List, Map as MapIcon, Nfc, Plus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -58,12 +59,19 @@ export function ServicesView() {
         description={t('description')}
         className="pb-0"
         actions={
+          <>
+          <IconButton asChild variant="outline" aria-label={t('payAtPoint')}>
+            <Link href="/pay" data-testid="services-pay">
+              <Nfc />
+            </Link>
+          </IconButton>
           <Button asChild variant="outline" leadingIcon={<Plus aria-hidden="true" />}>
             <Link href="/services/new">
               <span className="max-[25rem]:hidden">{t('add')}</span>
               <span className="min-[25rem]:hidden">{t('addShort')}</span>
             </Link>
           </Button>
+          </>
         }
       />
       <SegmentedControl<View>

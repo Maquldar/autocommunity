@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeCheck, CircleX, Hourglass, SearchX } from 'lucide-react';
+import { BadgeCheck, CircleX, CreditCard, Hourglass, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -16,6 +16,7 @@ import { hasErrorCode } from '@/lib/api/errors';
 import { roundCoords, useService } from './api';
 import { CategoryTile } from './category';
 import { ReportButton } from '@/features/reports/report-dialog';
+import { PartnerPanel } from '@/features/pay/partner-panel';
 import { ContactsCard } from './contacts-card';
 import { useServiceErrorMessage } from './errors';
 import { HoursTable } from './hours-table';
@@ -140,6 +141,18 @@ export function ServiceDetailsView({ id }: { id: string }) {
 
       <PhotoGallery photos={s.photos} name={s.name} />
 
+      {s.status === 'verified' && s.acceptsPayments ? (
+        <Card variant="flat" className="flex flex-col gap-3 bg-primary-soft text-primary-soft-foreground sm:flex-row sm:items-center" data-testid="service-pay">
+          <p className="flex flex-1 items-start gap-2 text-[0.9375rem]">
+            <CreditCard aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+            {t('details.payHint')}
+          </p>
+          <Button asChild leadingIcon={<CreditCard aria-hidden="true" />}>
+            <Link href={`/pay/${s.id}`}>{t('details.pay')}</Link>
+          </Button>
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <Card className="flex flex-col gap-3 lg:col-start-1">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1" data-testid="service-rating">
@@ -176,6 +189,11 @@ export function ServiceDetailsView({ id }: { id: string }) {
             </p>
             <ReviewsList serviceId={s.id} />
           </section>
+        ) : null}
+        {s.canManagePay ? (
+          <div className="lg:col-start-1">
+            <PartnerPanel serviceId={s.id} />
+          </div>
         ) : null}
         <div className="flex justify-center lg:col-start-1">
           <ReportButton target={{ type: 'service', id: s.id }} label={t('details.report')} size="sm" />

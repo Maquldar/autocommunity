@@ -142,6 +142,7 @@ const SAMPLES: Record<NotificationType, Record<string, unknown>> = {
   vote_received: { voteId: 'v1', value: -1, reason: 'rude' },
   violation_reported: { violationId: 'vi1', vehicleId: 've1', category: 'speeding', vehicle: 'Toyota Camry' },
   violation_status: { violationId: 'vi1', vehicleId: 've1', category: 'speeding', status: 'approved', role: 'owner' },
+  purchase_paid: { orderId: 'o1', serviceId: 'sv1', pointName: 'RP', total: 1225, method: 'coins' },
 };
 
 describe('push text completeness (F-43)', () => {

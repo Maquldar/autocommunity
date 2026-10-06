@@ -1061,7 +1061,8 @@
       "premiumExpired": "{reason, select, insufficient_funds {Premium ended: not enough coins to renew} wallet_frozen {Premium ended: your wallet is frozen} other {Premium ended}}",
       "voteReceived": "A driver gave you a thumbs down: {reason}",
       "violationReported": "Violation reported on your <b>{vehicle}</b>: {category}. Moderators will review it",
-      "violationStatus": "{status, select, approved {{role, select, submitter {Your report was confirmed: {category}} other {A violation on your car was confirmed: {category}}}} rejected {Your report was rejected: {category}} removed {A violation on your car was removed: {category}} other {Violation updated: {category}}}"
+      "violationStatus": "{status, select, approved {{role, select, submitter {Your report was confirmed: {category}} other {A violation on your car was confirmed: {category}}}} rejected {Your report was rejected: {category}} removed {A violation on your car was removed: {category}} other {Violation updated: {category}}}",
+      "purchasePaid": "Paid <b>{amount, plural, one {# coin} other {# coins}}</b> at {point}{method, select, google_pay { with Google Pay (TEST)} other {}}"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
@@ -1369,7 +1370,7 @@
     "detailsMetaTitle": "Service",
     "newMetaTitle": "Add a service",
     "title": "Services",
-    "description": "Car services, tyre shops, washes, parts and tow trucks in Almaty",
+    "description": "Car services, gas stations, tyre shops, washes, parts and tow trucks in Almaty",
     "add": "Add a service",
     "addShort": "Add",
     "view": {
@@ -1383,7 +1384,8 @@
       "tires": "Tyres",
       "wash": "Car wash",
       "parts": "Parts",
-      "tow": "Tow truck"
+      "tow": "Tow truck",
+      "fuel": "Gas station"
     },
     "categoryFilter": "Category",
     "search": {
@@ -1455,7 +1457,9 @@
       "statusVerified": "Verified",
       "statusRejected": "Rejected by moderators",
       "rejectedDescription": "This listing was not approved. Only you can see it.",
-      "report": "Report this place"
+      "report": "Report this place",
+      "pay": "Pay here",
+      "payHint": "Pay at the counter from the app: with coins or Google Pay."
     },
     "pending": {
       "badge": "Under review",
@@ -1616,7 +1620,8 @@
       "geoDenied": "Allow location access to confirm by location, or use a QR code.",
       "geoUnavailable": "Couldn't get your location. Try again, or use another method.",
       "bboxTooLarge": "Zoom in to see services"
-    }
+    },
+    "payAtPoint": "Pay at a point"
   },
   "sos": {
     "requestMetaTitle": "Request help",
@@ -2315,7 +2320,10 @@
         "violation_approve": "Violation approved",
         "violation_reject": "Violation rejected",
         "violation_uphold": "Dispute rejected",
-        "violation_remove": "Violation removed"
+        "violation_remove": "Violation removed",
+        "pay_partner": "Partner payments changed",
+        "pay_items": "Price list changed",
+        "pay_tag_rotate": "Sticker code reissued"
       }
     },
     "reports": {
@@ -2996,7 +3004,8 @@
         "transfer_in": "Received",
         "transfer_out": "Sent",
         "subscription": "Premium",
-        "admin_adjust": "Corrections"
+        "admin_adjust": "Corrections",
+        "purchase": "Purchases"
       },
       "emptyTitle": "No operations yet",
       "emptyHint": "Top up your balance to send coins or pay for premium.",
@@ -3008,7 +3017,9 @@
         "transfer_out": "To {name}",
         "subscription": "Premium for 30 days",
         "admin_adjust": "Correction by a moderator",
-        "refund": "Refund"
+        "refund": "Refund",
+        "purchase": "Payment at a point",
+        "sale": "Sale at your point"
       },
       "kindNames": {
         "topup": "Top-up",
@@ -3016,7 +3027,9 @@
         "transfer_out": "Transfer sent",
         "subscription": "Premium",
         "admin_adjust": "Admin adjustment",
-        "refund": "Refund"
+        "refund": "Refund",
+        "purchase": "Purchase",
+        "sale": "Sale"
       },
       "balanceAfter": "balance {balance}",
       "credit": "credit",
@@ -3039,7 +3052,8 @@
       "alreadyPremium": "Premium is already active.",
       "notPremium": "You don't have premium. Subscribe instead.",
       "validation": "Check the amount and try again."
-    }
+    },
+    "payAtPoint": "Pay at a point"
   },
   "premium": {
     "title": "Premium",
@@ -3252,6 +3266,171 @@
       "description": "Violations you reported and what moderators decided.",
       "emptyTitle": "No reports yet",
       "emptyHint": "Report a violation from a car's page, on the Violations tab."
+    }
+  },
+  "pay": {
+    "coins": "{amount, plural, one {# coin} other {# coins}}",
+    "coinsShort": "{amount}",
+    "total": "Total",
+    "next": "Next",
+    "lineSummary": "{name} · {qty} × {price}",
+    "units": {
+      "l": "per liter",
+      "pcs": "per piece",
+      "service": "per service"
+    },
+    "scan": {
+      "title": "Pay at a point",
+      "description": "Gas stations and services that take payments in the app.",
+      "holdTitle": "Hold your phone to the NFC tag at the counter",
+      "detectedTitle": "Tag found",
+      "detectedPoint": "{name} — opening the checkout…",
+      "detectedOpening": "Opening the checkout…",
+      "status": {
+        "checking": "Getting the NFC reader ready…",
+        "scanning": "Scanning… Keep the top of the phone on the sticker for a second.",
+        "needsTap": "Allow NFC to start scanning.",
+        "denied": "NFC is off or not allowed. Scan the QR code or type the code from the sticker.",
+        "unsupported": "NFC works in Chrome on Android. Here, scan the QR code or type the code from the sticker.",
+        "foreign": "This tag isn't an AutoCommunity payment sticker.",
+        "detected": "Tag found"
+      },
+      "startNfc": "Start NFC scan",
+      "fallbackTitle": "No NFC? Use the QR code",
+      "fallbackTitlePrimary": "Scan the QR code at the counter",
+      "qrStart": "Scan QR code",
+      "qrStop": "Stop camera",
+      "qrHint": "Point the camera at the QR code on the sticker",
+      "qrUnsupported": "This browser can't scan QR codes. Type the code printed under the QR instead.",
+      "qrDenied": "No camera access. Type the code printed under the QR instead.",
+      "codeLabel": "Code from the sticker",
+      "codeHint": "Or paste the link from the sticker.",
+      "codeInvalid": "That isn't a payment code. Check it and try again.",
+      "codeSubmit": "Open the checkout",
+      "history": "My payments"
+    },
+    "point": {
+      "title": "Payment",
+      "loading": "Loading the point…",
+      "notFound": "Point not found",
+      "notFoundHint": "The sticker may be outdated, or the point doesn't take payments right now.",
+      "scanAgain": "Scan again",
+      "noItems": "No price list yet",
+      "noItemsHint": "This point hasn't added what it sells yet.",
+      "pickFuel": "Fuel",
+      "pickService": "Service"
+    },
+    "qty": {
+      "liters": "Liters",
+      "count": "Quantity",
+      "presets": "Quick amounts",
+      "litersValue": "{value} l",
+      "fullTank": "Full tank",
+      "fullTankHint": "≈ {liters} l",
+      "less": "Less",
+      "more": "More",
+      "litersUnit": "l",
+      "countUnit": "pcs"
+    },
+    "method": {
+      "title": "How to pay",
+      "change": "Change",
+      "coins": "Coin balance",
+      "balance": "Balance: {amount, plural, one {# coin} other {# coins}}",
+      "balanceLoading": "Checking your balance…",
+      "short": "{amount, plural, one {# coin} other {# coins}} short",
+      "frozen": "Your wallet is frozen",
+      "gpay": "Google Pay",
+      "test": "Test",
+      "gpayHint": "Test mode: no card is charged.",
+      "gpayDemo": "Google Pay runs in TEST mode: no real money moves.",
+      "coinsDemo": "Demo: coins are app coins (1 coin = 1 ₸); no real money moves.",
+      "payCoins": "Pay {amount, plural, one {# coin} other {# coins}}",
+      "topUp": "Top up the balance",
+      "paying": "Paying…",
+      "gpayLoading": "Loading Google Pay…",
+      "gpayPayWith": "Pay with",
+      "gpayFallbackLabel": "Pay with Google Pay (test)"
+    },
+    "receipt": {
+      "title": "Receipt",
+      "loading": "Loading the receipt…",
+      "notFound": "Receipt not found",
+      "notFoundHint": "Only the buyer can open a receipt.",
+      "paid": "Paid",
+      "items": "Items",
+      "freeAmount": "Payment by amount",
+      "lineDetail": "{qty} × {price}",
+      "method": "Paid with",
+      "balanceAfter": "Balance after",
+      "number": "Receipt no.",
+      "demo": "Demo payment: no real money moved. Show this receipt at the counter.",
+      "done": "Done",
+      "history": "My payments"
+    },
+    "orders": {
+      "title": "My payments",
+      "description": "Payments at gas stations and services.",
+      "emptyTitle": "No payments yet",
+      "emptyHint": "Pay at a partner point by tapping its NFC sticker.",
+      "payNow": "Pay at a point"
+    },
+    "errors": {
+      "pointUnavailable": "This point can't take payments right now. Pay at the counter.",
+      "invalidItem": "The price list changed. Go back and choose again.",
+      "invalidQty": "Check the quantity: liters from 0.1 to 200 in steps of 0.1.",
+      "orderLimit": "One payment can be at most {max} coins.",
+      "notFound": "This point doesn't take payments any more.",
+      "declined": "Google Pay declined the payment. Try again or pay with coins.",
+      "insufficientFunds": "Not enough coins: you have {balance}."
+    },
+    "partner": {
+      "title": "Payments at this point",
+      "descriptionAdmin": "Partner settings, price list and the sticker. Changes are logged with your note.",
+      "descriptionOwner": "Your price list and the sticker for the counter.",
+      "accepts": "Takes payments in the app",
+      "owner": "Sales go to @{nickname}",
+      "noOwner": "No owner account: sales are settled by the platform",
+      "on": "On",
+      "off": "Off",
+      "enableTitle": "Turn payments on?",
+      "enableHint": "Drivers can pay this point from the app. The first time, a sticker code is issued.",
+      "disableTitle": "Turn payments off?",
+      "disableHint": "Stickers stop working until payments are turned back on.",
+      "enable": "Turn on",
+      "disable": "Turn off",
+      "saved": "Saved",
+      "items": "Price list (coins)",
+      "noItems": "No items yet.",
+      "itemName": "Item {n}: name",
+      "itemPrice": "Item {n}: price in coins",
+      "itemUnit": "Item {n}: unit",
+      "remove": "Remove {name}",
+      "add": "Add item",
+      "save": "Save price list",
+      "saveTitle": "Save the price list?",
+      "errors": {
+        "name": "Name: 2–80 characters",
+        "price": "Price: a whole number from 1 to 1 000 000"
+      },
+      "sticker": "Sticker at the counter",
+      "qrAlt": "Payment QR code for {name}",
+      "nfcLink": "NFC link",
+      "stickerHint": "Write this link onto an NFC sticker (NDEF URL record) and print the QR next to it. The code is opaque: it never contains the service id.",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "copyFailed": "Couldn't copy. Select the link and copy it by hand.",
+      "write": "Write to NFC tag",
+      "written": "Written to the tag",
+      "writeFailed": "Couldn't write the tag. Hold it still and try again.",
+      "rotate": "Issue a new code",
+      "rotateTitle": "Issue a new sticker code?",
+      "rotateHint": "The current stickers and QR codes stop working at once. Replace them at the counter.",
+      "rotated": "New code issued"
+    },
+    "unitShort": {
+      "l": "l",
+      "pcs": "pcs"
     }
   }
 }

@@ -10,6 +10,8 @@ export const PHASE9_PUSH_TYPES = [
   'vote_received',
   'violation_reported',
   'violation_status',
+  /* phase 10 */
+  'purchase_paid',
 ] as const satisfies readonly NotificationType[];
 export type Phase9NotificationType = (typeof PHASE9_PUSH_TYPES)[number];
 
@@ -152,6 +154,19 @@ export function phase9PushPayloadFor(type: Phase9NotificationType, payload: Reco
         body: ru ? `${vehicle ? `${vehicle}: ` : ''}${category}. Сообщение на проверке, его можно оспорить.` : `${vehicle ? `${vehicle}: ` : ''}${category}. It is under review; you can dispute it.`,
         url: `/vehicles/${vehicleId}?tab=violations`,
         tag: `violation:${str(payload.violationId) || vehicleId}`,
+      };
+    }
+    case 'purchase_paid': {
+      const orderId = id(payload.orderId);
+      const total = num(payload.total);
+      if (!orderId || total === null) return null;
+      const point = str(payload.pointName);
+      const how = payload.method === 'google_pay' ? 'Google Pay (TEST)' : ru ? 'монетами' : 'with coins';
+      return {
+        title: ru ? 'Оплата прошла' : 'Payment complete',
+        body: ru ? `${point ? `${point}: ` : ''}${coins(total, l)}, ${how}` : `${point ? `${point}: ` : ''}${coins(total, l)} ${how}`,
+        url: `/pay/orders/${orderId}`,
+        tag: `purchase_paid:${orderId}`,
       };
     }
     case 'violation_status': {

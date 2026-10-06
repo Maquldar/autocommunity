@@ -1,7 +1,7 @@
 'use client';
 
 import type { WalletDto, WalletTransactionDto, WalletTxKind } from '@autoc/shared';
-import { ArrowDownLeft, ArrowUpRight, Coins, Crown, History, Plus, Send, ShieldCheck, Snowflake, Undo2, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Coins, Crown, History, Nfc, Plus, ReceiptText, Send, ShieldCheck, Snowflake, Store, Undo2, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -77,6 +77,9 @@ function BalanceCard({ wallet, onTopup, onTransfer }: { wallet: WalletDto; onTop
         <Button variant="secondary" leadingIcon={<Send aria-hidden="true" />} onClick={onTransfer} disabled={wallet.frozen || wallet.balance <= 0} fullWidth>
           {t('transferAction')}
         </Button>
+        <Button asChild variant="secondary" leadingIcon={<Nfc aria-hidden="true" />} fullWidth className="sm:col-span-2" data-testid="wallet-pay-at-point">
+          <Link href="/pay">{t('payAtPoint')}</Link>
+        </Button>
       </div>
       <p className="flex items-start gap-2 text-sm text-muted-foreground" data-testid="wallet-no-cashout">
         <Coins aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -114,6 +117,8 @@ const TX_ICON: Record<WalletTxKind, typeof Plus> = {
   subscription: Crown,
   admin_adjust: ShieldCheck,
   refund: Undo2,
+  purchase: ReceiptText,
+  sale: Store,
 };
 
 function TransactionHistory() {

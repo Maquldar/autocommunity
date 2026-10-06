@@ -43,6 +43,10 @@ export const ADMIN_ACTIONS = [
   'violation.reject',
   'violation.uphold',
   'violation.remove',
+  /* phase 10 */
+  'pay.partner',
+  'pay.items',
+  'pay.tag_rotate',
 ] as const;
 export type AdminActionKind = (typeof ADMIN_ACTIONS)[number];
 

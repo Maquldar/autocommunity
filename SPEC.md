@@ -14,7 +14,7 @@ Status: **Step 0 complete.** Blockers resolved by the owner on 2026-10-04 (see �
 | Stage 0 — prep (design system, schema, API contract, legal) | Yes (engineering parts) | Design system, DB schema, API.md. Legal texts = placeholder privacy/ToS pages with the required disclaimers (see A-12). |
 | Stage 1 — MVP (Sprints 1–10) | **Yes, fully** | Except store publishing (TestFlight / Play) — see KNOWN_GAPS. |
 | Stage 2 — v2.0 | **Yes** | Services catalog, events, feed, event/SOS group chats, notifications for all event types. |
-| Stage 3 — monetization + v3.0 | **Partly (Phase 9)** | Owner decision 2026-10-06: an internal coin wallet, premium for coins, driver votes, vehicle violations, vehicle details and rating tiers (§9). Business accounts, store billing, AI assistant, breakdown prediction, OBD-II, parts marketplace, insurance stay out → KNOWN_GAPS.md. |
+| Stage 3 — monetization + v3.0 | **Partly (Phase 9, 10)** | Owner decision 2026-10-06: an internal coin wallet, premium for coins, driver votes, vehicle violations, vehicle details and rating tiers (§9). Business accounts, store billing, AI assistant, breakdown prediction, OBD-II, parts marketplace, insurance stay out → KNOWN_GAPS.md. |
 
 MVP acceptance criterion (from plan): *a user registers, sees others on the map, joins a community, creates an SOS, receives help, leaves a rating.* This is the primary end-to-end test.
 
@@ -236,3 +236,22 @@ Contract: API.md §9. These decisions are final; they replace Q-2 for the items 
 - **A-19** Losing premium never deletes data: extra vehicles, posts and communities stay; only new additions above the base limits are blocked.
 - **A-20** A vote's weight is fixed at the voter's rating when they vote (0.5 / 1 / 1.5), so it can't be inflated later.
 
+
+---
+
+## 10. Phase 10 — "Оплата на точке" (demo)
+
+Contract: API.md §10.
+
+- **F-50 Pay at a partner point.** A service center can be a payment partner (`acceptsPayments`) with a small price list in coins (name, price, unit: liter / piece / service). The driver opens the point by tapping the NFC sticker at the counter (Web NFC, Chrome on Android), scanning its QR code (BarcodeDetector) or typing the code; picks an item and a quantity (fuel: 10 / 20 / 30 l or "полный бак" ≈ 50 l, decimal liters); pays with the coin balance or Google Pay (TEST); gets a receipt. Admins (audited with a note) and the point's owner manage the price list; admins switch partners on/off, see the sticker QR / "NFC-ссылка" and rotate the opaque `payTag`.
+- **F-51 Sales.** Coin payments go to the owner's wallet as `sale`; a point without an owner account gets a merchant settlement record instead.
+- **A-21** Demo: no real money moves. Coins stay non-withdrawable (§9.2); Google Pay uses `environment: 'TEST'` with the `example` gateway, and the demo provider accepts only TEST tokens. A real merchant acquirer must replace both before anything real (KNOWN_GAPS).
+- **A-22** Coins paid to a partner owner are still coins: they can't be cashed out. Settling with partners in tenge (and the e-money / payment-agent questions it raises in Kazakhstan) needs a lawyer and a licensed acquirer first.
+- **A-23** Seeded partners "RP" (АЗС) and "GT Oil Service" use plausible generic Almaty addresses (пр. Райымбека, 480; ул. Жандосова, 140) and are **demo data**, not real business listings or prices.
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| ServiceCenter (extended) | accepts_payments, pay_tag (unique, opaque), owner_id | |
+| PayItem | id, service_id, name, price_coins (> 0), unit, sort_order | |
+| PayOrder | id, user_id, service_id, method, total, lines (snapshot), idempotency_key (unique per user), wallet_tx_id, topup_id, payee_user_id, card_network, card_last4, balance_after | |
+| MerchantSettlement | id, service_id, order_id (unique), amount, status | Demo: recorded, never paid out |

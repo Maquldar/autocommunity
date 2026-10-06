@@ -347,6 +347,14 @@ Code: `apps/web/src/features/sos/*`. Pure state lives in `view-model.ts` (which 
 
 **Report dialog** (`features/feed/report-dialog.tsx`): radio list of reasons, optional details (≤ 500, counter), inline error when no reason is chosen.
 
+## 11e. Pay at a point (Phase 10)
+
+- **Scanner (`/pay`):** one hero card: a phone moving onto an "NFC" sticker inside expanding rings (`animate-nfc-ring`, `animate-nfc-tap`), the title "Поднесите телефон к NFC-метке на кассе" and a live status line. Without Web NFC the same card says so and the QR scan / typed code below becomes the primary path. A found tag swaps to a success check (`animate-check-pop`).
+- **Checkout:** point card (logo or initials on the category colour, name, category, address) → item rows (radio rows, price + unit on the right) → quantity (fuel presets 10 / 20 / 30 l / "Полный бак", a stepper with decimal liters). The total and the primary action sit in a **sticky action bar** above the tab bar (it clears the raised SOS button).
+- **Method:** `RadioCard`s "Баланс монет" (shows the balance; a shortfall in warning text) and "Google Pay" with a "Тест" badge, plus a warning-soft demo notice. The official Google Pay button renders only when `isReadyToPay` is true; otherwise our fallback follows Google's brand rules (black, white "Оплатить через" + the four-colour G Pay mark + "ТЕСТ"). This is the one deliberate exception to "tokens only".
+- **Receipt:** a green check that pops in and draws its stroke (`animate-check-pop`, `animate-check-draw`, only right after paying), the total in display size, lines, method, balance after, a short receipt number, and the demo notice. Motion collapses under reduced motion like everything else.
+- Category `fuel` (АЗС) uses `avatar-2` (teal) with the lucide `Fuel` icon.
+
 ## 12. State patterns
 
 | State | Pattern |
