@@ -102,6 +102,17 @@ describe('POST /users/:id/votes', () => {
     expect(await ledgerMatches(target.id)).toBe(true);
   });
 
+  it('concurrent votes from different voters on one target all succeed (no deadlock) with a consistent rating', async () => {
+    const target = await seasoned(t, { rating: 50 });
+    const voters = await Promise.all(Array.from({ length: 10 }, (_, i) => seasoned(t, { rating: i % 2 ? 85 : 65 })));
+    const res = await Promise.all(voters.map((v, i) => vote(v, target.id, i % 3 ? up : down)));
+    expect(res.map((r) => r.status)).toEqual(Array(10).fill(201));
+    expect(await t.prisma.userVote.count({ where: { targetId: target.id } })).toBe(10);
+    expect(await ledgerMatches(target.id)).toBe(true);
+    const r = (await get(target, '/me/rating')).body as RatingDto;
+    expect((await t.prisma.user.findUniqueOrThrow({ where: { id: target.id } })).rating).toBe(r.rating);
+  });
+
   it('20 votes per day per voter', async () => {
     const voter = await seasoned(t);
     const targets = await Promise.all(Array.from({ length: 21 }, () => seasoned(t)));

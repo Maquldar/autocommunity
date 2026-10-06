@@ -12,7 +12,7 @@
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ✅ done |
 | Final release gate (DoD) | ✅ done (2026-10-06) |
-| 9. Wallet, premium, votes, violations, vehicle details, tiers | ✅ API done (web in progress) |
+| 9. Wallet, premium, votes, violations, vehicle details, tiers | ✅ API done + security review fixed (web in progress) |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
 
@@ -170,3 +170,9 @@
 - Seed data for every Phase 9 feature.
 - Integration tests: `wallet`, `premium`, `votes` and `violations` (49 tests), including the races: concurrent transfers never overdraw, opposite transfers don't deadlock, a repeated or concurrent top-up confirm credits once, a concurrent idempotent transfer moves coins once, concurrent votes on one pair produce exactly one, and concurrent subscribes charge once.
 
+**Security review (Phase 9 API):** 2 high, 1 medium, 2 low findings and 1 nit, all fixed with regression tests:
+- High: a nickname transfer matched `_` / `%` as wildcards (ILIKE on citext).
+- High: concurrent votes on one target deadlocked (an FK key-share lock against the recompute's `FOR UPDATE`; now `FOR NO KEY UPDATE`).
+- Medium: the ledger order could disagree with `balance_after`; a per-wallet `seq` was added (migration `20261006130000_phase9_wallet_ledger_seq`).
+- Low: violations could be filed against admin-owned vehicles; wallet reads wrote to the database.
+- Nit: the early-renewal-then-cancel behaviour is now documented.

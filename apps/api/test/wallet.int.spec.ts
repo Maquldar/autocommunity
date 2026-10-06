@@ -1,6 +1,6 @@
 import type { AdminWalletDto, CreateTopupResult, Paginated, TopupDto, TransferResult, WalletDto, WalletTransactionDto } from '@autoc/shared';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { newId } from '../src/common/ids';
 import { BackgroundTasks } from '../src/infra/tasks/background-tasks';
 import { bearer, createTestApp, createUser, type TestApp } from './support/app';
@@ -256,6 +256,65 @@ describe('transfers', () => {
     }
     await drain();
     expect(await t.prisma.fraudFlag.count({ where: { userId: other.id, kind: 'wallet_funnel' } })).toBe(0);
+  });
+});
+
+describe('security review fixes', () => {
+  it('a nickname is matched exactly: `_` and `%` are not wildcards', async () => {
+    const a = await seasoned(t);
+    const tag = newId().slice(-6);
+    const victim = await seasoned(t, { nickname: `ilyas.${tag}` });
+    await fund(t, a.id, 1000);
+    for (const nick of [`ilyas_${tag}`, `ilyas%${tag}`, `%${tag}`, `ilyas.${tag.slice(0, 5)}_`]) {
+      await transfer(a, { toNickname: nick, amount: 100 }).expect((r) => expect([400, 404]).toContain(r.status));
+    }
+    expect(await balanceOf(t, victim.id)).toBe(0);
+    await transfer(a, { toNickname: `ILYAS.${tag.toUpperCase()}`, amount: 100 }).expect(201); // still case-insensitive
+    expect(await balanceOf(t, victim.id)).toBe(100);
+  });
+
+  it('ledger order: under concurrency seq order matches balance_after, and pages neither skip nor repeat', async () => {
+    const hub = await seasoned(t);
+    const senders = await Promise.all(Array.from({ length: 10 }, () => seasoned(t)));
+    await fund(t, hub.id, 5000);
+    for (const s of senders) await fund(t, s.id, 1000);
+    await Promise.all([
+      ...senders.map((s, i) => transfer(s, { toUserId: hub.id, amount: 100 + i }).expect(201)),
+      ...senders.slice(0, 5).map((s) => transfer(hub, { toUserId: s.id, amount: 300 }).expect(201)),
+    ]);
+    const rows = await t.prisma.walletTransaction.findMany({ where: { userId: hub.id }, orderBy: { seq: 'asc' } });
+    expect(rows.map((r) => Number(r.seq))).toEqual(rows.map((_, i) => i + 1));
+    let prev = 0;
+    for (const r of rows) {
+      expect(prev + Number(r.amount)).toBe(Number(r.balanceAfter));
+      prev = Number(r.balanceAfter);
+    }
+    for (let i = 1; i < rows.length; i++) expect(rows[i]!.createdAt.getTime()).toBeGreaterThanOrEqual(rows[i - 1]!.createdAt.getTime());
+    expect(prev).toBe(await balanceOf(t, hub.id));
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: Paginated<WalletTransactionDto> = (await get(hub, `/wallet/transactions?limit=4${cursor ? `&cursor=${cursor}` : ''}`).expect(200)).body;
+      seen.push(...page.items.map((x) => x.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(seen).toEqual([...rows].reverse().map((r) => r.id));
+    await get(hub, '/wallet/transactions?cursor=bogus').expect(400);
+  });
+
+  it('reading a wallet that exists does not write', async () => {
+    const u = await seasoned(t);
+    const adm = await admin(t);
+    await get(u, '/wallet').expect(200); // first read creates it
+    const spy = vi.spyOn(t.prisma, '$executeRaw');
+    try {
+      await get(u, '/wallet').expect(200);
+      await get(adm, `/admin/users/${u.id}/wallet`).expect(200);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

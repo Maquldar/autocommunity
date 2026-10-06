@@ -912,3 +912,14 @@ All additive; no field or route of §9.0–9.6 changed.
   - 7 driver votes (3 up on demo), a detailed demo car with 2 photos and details on 12 other cars.
   - 5 violations: 2 approved with penalties on one driver, 1 pending, 1 disputed, 1 rejected.
   - Wallet ledgers and the rating ledger are consistent.
+
+### Phase 9 security review fixes
+
+- **Transfers by nickname** match exactly: `nickname` is citext, so the match ignores case, but `_` and `%` are ordinary characters, not wildcards.
+- **Ledger order:**
+  - Every ledger row has a per-wallet `seq` (1, 2, 3, …), taken under the wallet row lock; `created_at` is `clock_timestamp()` at that moment. Ordered by `seq`, each row's `balance_after` = the previous row's `balance_after` + `amount`.
+  - `GET /wallet/transactions` and `GET /admin/users/:id/wallet/transactions` are ordered newest first by `seq`. The cursor is still opaque: cursors issued before this change aren't accepted (`400 VALIDATION_ERROR`). The DTOs don't change.
+- **Locks:** rating recomputes, and the other per-user serialization locks, take `FOR NO KEY UPDATE` on the user row, so they don't conflict with the key-share locks taken by foreign-key inserts (votes, penalties, ledger rows). Concurrent votes on one user no longer deadlock.
+- **Violations:** submissions against a vehicle owned by an admin → `403 INVALID_TARGET`, the owner included. Admins never moderate admins, so such a violation could never be decided.
+- **Wallet reads** (`GET /wallet`, the admin wallet reads) only read; the wallet row is created on the first use that needs it.
+- **Premium cancel near the period end:** the renewal job charges subscriptions whose period ends within the next 24 h. A `cancel` after that charge doesn't refund it: the renewed period (already paid, `currentPeriodEnd` already moved 30 days on) stays active, and auto-renew is off from then on, so the next period isn't charged. To avoid the early charge, cancel more than 24 h before `currentPeriodEnd`. No DTO change.

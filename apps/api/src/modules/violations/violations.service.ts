@@ -54,6 +54,8 @@ export class ViolationsService {
 
   async submit(userId: string, vehicleId: string, input: CreateViolationInput, now = new Date()): Promise<ViolationDto> {
     const vehicle = await this.requireVehicle(vehicleId, userId);
+    // Admins' vehicles can't be moderated (admins never act on admins), so nothing may be filed against them.
+    if (vehicle.user.role === 'admin') throw Errors.forbidden("Violations can't be reported on this vehicle", 'INVALID_TARGET');
     const isOwner = vehicle.userId === userId;
     if (!isOwner) {
       const me = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { createdAt: true, rating: true } });
@@ -235,7 +237,7 @@ export class ViolationsService {
 
   /** The vehicle, if its owner is visible to the viewer (deleted / un-onboarded owners → 404, self excepted). */
   async requireVehicle(vehicleId: string, viewerId: string) {
-    const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId }, include: { user: { select: { status: true, onboardedAt: true } } } });
+    const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId }, include: { user: { select: { status: true, onboardedAt: true, role: true } } } });
     if (!vehicle || (vehicle.userId !== viewerId && (vehicle.user.status === 'deleted' || !vehicle.user.onboardedAt))) throw Errors.notFound('Vehicle not found');
     return vehicle;
   }

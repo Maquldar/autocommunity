@@ -168,7 +168,7 @@ export class VehiclesService {
 }
 
 async function lockOwner(tx: Tx, userId: string): Promise<void> {
-  await tx.$queryRaw`SELECT 1 FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+  await tx.$queryRaw`SELECT 1 FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
 }
 
 async function requireOwned(tx: Tx, userId: string, vehicleId: string) {

@@ -28,7 +28,7 @@ export class RatingService {
    * cache and writes a ledger row when the rating changed. Returns the new rating.
    */
   async recompute(tx: Tx, userId: string, reason: RatingEventReason, refId: string | null = null, now = new Date()): Promise<number | null> {
-    const locked = await tx.$queryRaw<{ rating: number; status: string }[]>`SELECT rating, status FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    const locked = await tx.$queryRaw<{ rating: number; status: string }[]>`SELECT rating, status FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
     const old = locked[0];
     if (!old || old.status === 'deleted') return null;
     const input = await loadRatingInput(tx, userId, now);
@@ -52,7 +52,7 @@ export class RatingService {
   /** `applyPenalty` inside the caller's transaction. */
   async applyPenaltyTx(tx: Tx, userId: string, kind: RatingPenaltyKind, refId: string | null, now = new Date()): Promise<number | null> {
     {
-      const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+      const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
       if (!locked[0]) return null;
       const id = newId();
       await tx.ratingEvent.create({
@@ -71,7 +71,7 @@ export class RatingService {
    * of the penalty) whose `delta` is the resulting rating change. No-op when no live penalty matches.
    */
   async reversePenaltyTx(tx: Tx, userId: string, kind: RatingPenaltyKind, refId: string, now = new Date()): Promise<number | null> {
-    const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
     if (!locked[0]) return null;
     const live = await tx.ratingEvent.findFirst({ where: { userId, reason: 'penalty', penaltyKind: kind, refId } });
     const reversed = await tx.ratingEvent.findFirst({ where: { userId, reason: 'penalty_reversed', penaltyKind: kind, refId } });

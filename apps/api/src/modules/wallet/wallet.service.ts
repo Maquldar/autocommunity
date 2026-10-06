@@ -16,7 +16,6 @@ import {
 import { isUserBlocked } from '../../common/auth/user-state.service';
 import { ApiException, Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
-import { decodeCursor, keysetOrderBy, keysetWhere, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
 import { AntifraudService } from '../antifraud/antifraud.service';
@@ -24,12 +23,13 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { UserViewService, userViewInclude } from '../users/user-view.service';
 import { DemoPaymentProvider, PaymentProvider, type PaymentOutcome } from './payment-provider';
 import {
-  ensureWallets,
   insufficientFunds,
   isUniqueViolation,
+  ledgerPage,
   lockWallets,
   post,
   premiumDto,
+  readWallet,
   sentLast24h,
   toTxDto,
   transferDailyRemaining,
@@ -67,9 +67,8 @@ export class WalletService {
   /* ------------------------------------------------------------------ reads */
 
   async get(userId: string, now = new Date()): Promise<WalletDto> {
-    await ensureWallets(this.prisma, [userId]);
     const [wallet, sub, sent] = await Promise.all([
-      this.prisma.wallet.findUniqueOrThrow({ where: { userId } }),
+      readWallet(this.prisma, userId),
       this.prisma.premiumSubscription.findFirst({ where: { userId, endedAt: null } }),
       sentLast24h(this.prisma, userId, now),
     ]);
@@ -82,12 +81,7 @@ export class WalletService {
   }
 
   async transactions(userId: string, q: { cursor?: string; limit: number; kind?: WalletTxKind }): Promise<Paginated<WalletTransactionDto>> {
-    const rows = await this.prisma.walletTransaction.findMany({
-      where: { userId, ...(q.kind ? { kind: q.kind } : {}), ...keysetWhere(decodeCursor(q.cursor)) },
-      orderBy: keysetOrderBy,
-      take: q.limit + 1,
-    });
-    const page = splitPage(rows, q.limit);
+    const page = await ledgerPage(this.prisma, userId, q);
     return { items: await this.txDtos(page.rows), nextCursor: page.nextCursor };
   }
 
@@ -102,8 +96,7 @@ export class WalletService {
   /* ------------------------------------------------------------------ top-ups */
 
   async createTopup(userId: string, amount: number, now = new Date()): Promise<CreateTopupResult> {
-    await ensureWallets(this.prisma, [userId]);
-    const wallet = await this.prisma.wallet.findUniqueOrThrow({ where: { userId }, select: { frozen: true } });
+    const wallet = await readWallet(this.prisma, userId);
     if (wallet.frozen) throw walletFrozen();
     await this.rateLimiter.consumeOrThrow([{ key: `wallet-topup:${userId}`, limit: WALLET_LIMITS.topupsPerHour, windowSec: 3600 }]);
     const id = newId();
@@ -168,8 +161,9 @@ export class WalletService {
   /* ------------------------------------------------------------------ transfers */
 
   async transfer(senderId: string, input: CreateTransferInput, now = new Date()): Promise<TransferOutcome> {
-    const recipient = await this.prisma.user.findFirst({
-      where: input.toUserId ? { id: input.toUserId } : { nickname: { equals: input.toNickname!, mode: 'insensitive' } },
+    // Exact match: `nickname` is citext (case-insensitive equality); a pattern match would let `_` / `%` hit others.
+    const recipient = await this.prisma.user.findUnique({
+      where: input.toUserId ? { id: input.toUserId } : { nickname: input.toNickname! },
       select: { id: true, status: true, blockedUntil: true, onboardedAt: true },
     });
     if (recipient?.id === senderId) throw Errors.badRequest('INVALID_TARGET', "You can't send coins to yourself");
@@ -184,8 +178,7 @@ export class WalletService {
     const ageMs = now.getTime() - sender.createdAt.getTime();
     if (ageMs < minAgeMs) throw accountTooNew({ minHours: WALLET_LIMITS.transferMinAccountAgeHours, retryAfterSec: Math.ceil((minAgeMs - ageMs) / 1000) });
     if (sender.rating < WALLET_LIMITS.transferMinRating) throw ratingTooLow(WALLET_LIMITS.transferMinRating);
-    await ensureWallets(this.prisma, [senderId]);
-    const senderWallet = await this.prisma.wallet.findUniqueOrThrow({ where: { userId: senderId }, select: { frozen: true } });
+    const senderWallet = await readWallet(this.prisma, senderId);
     if (senderWallet.frozen) throw walletFrozen();
     if (isUserBlocked({ status: recipient.status, blockedUntil: recipient.blockedUntil?.toISOString() ?? null })) throw recipientUnavailable();
     await this.rateLimiter.consumeOrThrow([{ key: `wallet-transfer:${senderId}`, limit: WALLET_LIMITS.transfersPerMinute, windowSec: 60 }]);
@@ -219,9 +212,8 @@ export class WalletService {
           ref: inId,
           note: message,
           idempotencyKey: input.idempotencyKey,
-          createdAt: now,
         });
-        await post(tx, { id: inId, userId: recipient.id, kind: 'transfer_in', amount: input.amount, counterpartyId: senderId, ref: outId, note: message, createdAt: now });
+        await post(tx, { id: inId, userId: recipient.id, kind: 'transfer_in', amount: input.amount, counterpartyId: senderId, ref: outId, note: message });
         return { outRow, balance: outRow.balanceAfter };
       }));
     } catch (err) {

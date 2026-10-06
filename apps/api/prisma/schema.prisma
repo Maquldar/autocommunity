@@ -927,6 +927,8 @@ model Wallet {
   balance   BigInt    @default(0)
   frozen    Boolean   @default(false)
   frozenAt  DateTime? @map("frozen_at")
+  /// Last ledger `seq` of this wallet (incremented under the wallet row lock).
+  lastSeq   BigInt    @default(0) @map("last_seq")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
@@ -955,11 +957,14 @@ model WalletTransaction {
   ref            String?      @db.Uuid
   note           String?
   idempotencyKey String?      @map("idempotency_key")
+  /// Per-wallet order of the rows (1, 2, 3, …), taken under the wallet row lock; `balance_after` follows it.
+  seq            BigInt
   createdAt      DateTime     @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, idempotencyKey])
+  @@unique([userId, seq])
   @@index([userId, createdAt(sort: Desc), id])
   @@index([counterpartyId, kind, createdAt])
   @@index([userId, kind, createdAt])

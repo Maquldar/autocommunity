@@ -471,6 +471,6 @@ function uniqueToApiError(err: unknown): unknown {
 
 /** Serializes one user's membership changes so the per-user limits can't be raced past. */
 async function lockUser(tx: Tx, userId: string): Promise<void> {
-  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
 }
 

@@ -42,7 +42,7 @@ export class ReportsService {
     if (targetUserId === reporterId) throw invalidTarget("You can't report yourself or your own content");
     try {
       const row = await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${reporterId}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${reporterId}::uuid FOR NO KEY UPDATE`;
         const open = await tx.report.count({ where: { reporterId, targetType: input.targetType, targetId: input.targetId, status: 'open' } });
         if (open) throw alreadyReported();
         const recent = await tx.report.findMany({

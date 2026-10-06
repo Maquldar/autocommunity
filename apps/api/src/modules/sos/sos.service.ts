@@ -111,7 +111,7 @@ export class SosService implements OnModuleInit {
     const expiresAt = new Date(now.getTime() + this.env.SOS_TTL_SEC * 1000);
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
         await this.assertCanCreate(tx, userId);
         if (photoIds.length) {
           // SOS photos (an array column) can't carry a unique index: lock the uploads, then check.
@@ -321,7 +321,7 @@ export class SosService implements OnModuleInit {
       const response = await this.responseById(tx, id, responseId);
       const next = this.check(sos, response.status, await this.activeHelpers(tx, id), 'accept');
       // One active help per helper across open SOS; the helper's row lock serializes concurrent accepts.
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${response.helperId}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${response.helperId}::uuid FOR NO KEY UPDATE`;
       const busy = await tx.sosResponse.count({
         where: { helperId: response.helperId, status: { in: ['accepted', 'arrived'] }, sos: { status: { in: ['created', 'accepted', 'in_progress'] } } },
       });

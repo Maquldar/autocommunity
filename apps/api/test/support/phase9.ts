@@ -1,4 +1,5 @@
 import { newId } from '../../src/common/ids';
+import { lockWallets, post } from '../../src/modules/wallet/wallet-ledger';
 import { createUser, type CreateUserData, type TestApp } from './app';
 
 export type U = { id: string; token: string };
@@ -15,9 +16,8 @@ export async function seasoned(t: TestApp, opts: CreateUserData & { ageDays?: nu
 /** Credits coins through the ledger (a `topup` row), creating the wallet when needed. */
 export async function fund(t: TestApp, userId: string, amount: number): Promise<void> {
   await t.prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`INSERT INTO wallets (user_id, balance, updated_at) VALUES (${userId}::uuid, 0, now()) ON CONFLICT DO NOTHING`;
-    const [w] = await tx.$queryRaw<{ balance: bigint }[]>`UPDATE wallets SET balance = balance + ${amount}::bigint WHERE user_id = ${userId}::uuid RETURNING balance`;
-    await tx.walletTransaction.create({ data: { id: newId(), userId, kind: 'topup', amount: BigInt(amount), balanceAfter: w!.balance } });
+    await lockWallets(tx, [userId]);
+    await post(tx, { userId, kind: 'topup', amount });
   });
 }
 

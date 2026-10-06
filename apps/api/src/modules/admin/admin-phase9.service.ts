@@ -17,7 +17,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ViolationsService, type AdminDecision } from '../violations/violations.service';
 import { VotesService } from '../votes/votes.service';
-import { ensureWallets, insufficientFunds, lockWallets, post, premiumDto, sentLast24h } from '../wallet/wallet-ledger';
+import { insufficientFunds, ledgerPage, readWallet, lockWallets, post, premiumDto, sentLast24h } from '../wallet/wallet-ledger';
 import { WalletService } from '../wallet/wallet.service';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminViewService } from './admin-view.service';
@@ -40,9 +40,8 @@ export class AdminPhase9Service {
   async wallet(userId: string, now = new Date()): Promise<AdminWalletDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw Errors.notFound('User not found');
-    await ensureWallets(this.prisma, [userId]);
     const [w, sub, sent] = await Promise.all([
-      this.prisma.wallet.findUniqueOrThrow({ where: { userId } }),
+      readWallet(this.prisma, userId),
       this.prisma.premiumSubscription.findFirst({ where: { userId, endedAt: null } }),
       sentLast24h(this.prisma, userId, now),
     ]);
@@ -52,12 +51,7 @@ export class AdminPhase9Service {
   async transactions(userId: string, q: { cursor?: string; limit: number; kind?: WalletTxKind }): Promise<Paginated<AdminWalletTransactionDto>> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw Errors.notFound('User not found');
-    const rows = await this.prisma.walletTransaction.findMany({
-      where: { userId, ...(q.kind ? { kind: q.kind } : {}), ...keysetWhere(decodeCursor(q.cursor)) },
-      orderBy: keysetOrderBy,
-      take: q.limit + 1,
-    });
-    const page = splitPage(rows, q.limit);
+    const page = await ledgerPage(this.prisma, userId, q);
     const dtos = await this.wallets.txDtos(page.rows);
     return { items: dtos.map((d, i) => ({ ...d, idempotencyKey: page.rows[i]!.idempotencyKey })), nextCursor: page.nextCursor };
   }

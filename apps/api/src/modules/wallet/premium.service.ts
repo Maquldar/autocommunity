@@ -59,7 +59,7 @@ export class PremiumService implements OnModuleInit {
       const id = newId();
       const end = new Date(now.getTime() + PREMIUM.periodDays * DAY_MS);
       const created = await tx.premiumSubscription.create({ data: { id, userId, startedAt: now, currentPeriodEnd: end, autoRenew: true } });
-      await post(tx, { userId, kind: 'subscription', amount: -PREMIUM.priceCoins, ref: id, createdAt: now });
+      await post(tx, { userId, kind: 'subscription', amount: -PREMIUM.priceCoins, ref: id });
       await tx.user.update({ where: { id: userId }, data: { premiumUntil: end } });
       return created;
     });
@@ -141,7 +141,6 @@ export class PremiumService implements OnModuleInit {
         amount: -PREMIUM.priceCoins,
         ref: sub.id,
         idempotencyKey: `renew:${sub.id}:${sub.currentPeriodEnd.getTime()}`,
-        createdAt: now,
       });
       await tx.premiumSubscription.update({ where: { id: sub.id }, data: { currentPeriodEnd: end } });
       await tx.user.update({ where: { id: sub.userId }, data: { premiumUntil: end } });

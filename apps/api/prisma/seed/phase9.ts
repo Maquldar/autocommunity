@@ -30,19 +30,33 @@ async function seedImage(ctx: Ctx, ownerId: string, purpose: 'vehicle' | 'violat
   return id;
 }
 
-/** Ledger writer: keeps a running balance per user so every row's balance_after is exact. */
+/**
+ * Ledger writer: entries are collected, then ordered by time; balances, `balance_after` and the per-wallet
+ * `seq` are computed in that order (as the real ledger does under the wallet lock).
+ */
 function ledger(ctx: Ctx) {
-  const balances = new Map<string, number>();
-  const rows: { id: string; userId: string; kind: WalletTxKind; amount: bigint; balanceAfter: bigint; counterpartyId: string | null; ref: string | null; note: string | null; createdAt: Date }[] = [];
+  type Entry = { id: string; userId: string; kind: WalletTxKind; amount: number; counterpartyId: string | null; ref: string | null; note: string | null; createdAt: Date };
+  const entries: Entry[] = [];
   const add = (userId: string, kind: WalletTxKind, amount: number, at: Date, extra: { counterpartyId?: string; ref?: string; note?: string; id?: string } = {}) => {
-    const balance = (balances.get(userId) ?? 0) + amount;
-    if (balance < 0) throw new Error(`Seed ledger would overdraw ${userId}`);
-    balances.set(userId, balance);
     const id = extra.id ?? ctx.newId();
-    rows.push({ id, userId, kind, amount: BigInt(amount), balanceAfter: BigInt(balance), counterpartyId: extra.counterpartyId ?? null, ref: extra.ref ?? null, note: extra.note ?? null, createdAt: at });
+    entries.push({ id, userId, kind, amount, counterpartyId: extra.counterpartyId ?? null, ref: extra.ref ?? null, note: extra.note ?? null, createdAt: at });
     return id;
   };
-  return { balances, rows, add };
+  const finalize = () => {
+    const balances = new Map<string, { balance: number; seq: number }>();
+    const rows = [...entries]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((e) => {
+        const w = balances.get(e.userId) ?? { balance: 0, seq: 0 };
+        w.balance += e.amount;
+        w.seq += 1;
+        if (w.balance < 0) throw new Error(`Seed ledger would overdraw ${e.userId}`);
+        balances.set(e.userId, w);
+        return { ...e, amount: BigInt(e.amount), balanceAfter: BigInt(w.balance), seq: BigInt(w.seq) };
+      });
+    return { balances, rows };
+  };
+  return { add, finalize };
 }
 
 export async function seedPhase9(ctx: Ctx): Promise<string> {
@@ -87,11 +101,11 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
   await premiumFor(demo!, 10, true);
   await premiumFor(funded[1]!, 24, false);
 
-  for (const userId of L.balances.keys()) {
-    await prisma.wallet.create({ data: { userId, balance: BigInt(L.balances.get(userId)!), createdAt: at(45) } });
+  const { balances, rows } = L.finalize();
+  for (const [userId, w] of balances) {
+    await prisma.wallet.create({ data: { userId, balance: BigInt(w.balance), lastSeq: BigInt(w.seq), createdAt: at(45) } });
   }
-  // Ledger rows in time order (the immutability trigger only blocks UPDATE/DELETE).
-  await prisma.walletTransaction.createMany({ data: [...L.rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()) });
+  await prisma.walletTransaction.createMany({ data: rows });
 
   /* ---------------- detailed vehicles */
   const demoVehicle = await prisma.vehicle.findFirst({ where: { userId: demo!.id, isPrimary: true } });
@@ -209,5 +223,5 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
     await violation(otherVehicle, voters[4]!, 'dangerous_driving', 'rejected', 15, 'Резко перестраивался без поворотника.', null);
   }
 
-  return `${L.balances.size} wallets (${L.rows.length} ledger rows, demo ${L.balances.get(demo!.id)} coins, premium for demo), ${votes.length} votes, ${violations} violations`;
+  return `${balances.size} wallets (${rows.length} ledger rows, demo ${balances.get(demo!.id)?.balance} coins, premium for demo), ${votes.length} votes, ${violations} violations`;
 }

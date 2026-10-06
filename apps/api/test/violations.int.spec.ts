@@ -206,7 +206,7 @@ describe('admin moderation and rating', () => {
     expect(((await get(owner, '/me/rating')).body as RatingDto).breakdown.penalties).toBe(0);
   });
 
-  it('admins cannot moderate their own submissions or admins’ vehicles', async () => {
+  it('admins cannot moderate their own submissions; admins’ vehicles refuse submissions (403 INVALID_TARGET)', async () => {
     const adm = await admin(t);
     const other = await admin(t);
     const { vehicleId } = await setup();
@@ -214,8 +214,10 @@ describe('admin moderation and rating', () => {
     const own = (await submit(adm, vehicleId).expect(201)).body as ViolationDto;
     expect((await postAs(adm, `/admin/violations/${own.id}/approve`, { note: 'Моё' }).expect(403)).body.error.code).toBe('INVALID_TARGET');
     const reporter = await seasoned(t);
-    const onAdmin = (await submit(reporter, await vehicleOf(t, other.id)).expect(201)).body as ViolationDto;
-    expect((await postAs(adm, `/admin/violations/${onAdmin.id}/approve`, { note: 'Админ' }).expect(403)).body.error.code).toBe('INVALID_TARGET');
+    const adminCar = await vehicleOf(t, other.id);
+    expect((await submit(reporter, adminCar).expect(403)).body.error.code).toBe('INVALID_TARGET');
+    expect((await submit(other, adminCar).expect(403)).body.error.code).toBe('INVALID_TARGET');
+    expect(await t.prisma.violation.count({ where: { vehicleId: adminCar } })).toBe(0);
   });
 
   it('a submitter rejected 3 times → violation_rejections flag', async () => {
