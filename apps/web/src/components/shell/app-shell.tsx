@@ -146,6 +146,7 @@ function BottomTabBar({ items, pathname, badges }: { items: NavItem[]; pathname:
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
+                  data-testid={`nav-${item.key}`}
                   className="group flex flex-col items-center justify-end gap-0.5 pb-1.5 focus-visible:outline-none"
                 >
                   <span className="-mt-6 flex size-14 items-center justify-center rounded-full bg-sos text-sos-foreground shadow-lg ring-4 ring-card transition-transform duration-fast group-hover:bg-sos-hover group-active:scale-95 group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-ring">
@@ -208,6 +209,7 @@ function Sidebar({ tabs, secondary, pathname, badges }: { tabs: NavItem[]; secon
           <Link
             href={sos.href}
             aria-current={isNavItemActive(sos, pathname) ? 'page' : undefined}
+            data-testid="sidebar-sos"
             className={cn(buttonVariants({ variant: 'sos', size: 'lg', fullWidth: true }), 'justify-start')}
           >
             <sos.icon aria-hidden="true" />

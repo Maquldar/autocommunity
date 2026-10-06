@@ -147,6 +147,8 @@ describe('bindRealtimeHandlers', () => {
       onTyping: vi.fn(),
       onRead: vi.fn(),
       onChatsChanged: vi.fn(),
+      onSosNew: vi.fn(),
+      onSosUpdate: vi.fn(),
     };
     const unbind = bindRealtimeHandlers(socket as unknown as RealtimeSocket, handlers);
     socket.emit('notification:new', notification('n1'));
@@ -195,7 +197,7 @@ describe('createAppRealtimeHandlers', () => {
 
   it('unknown notification types toast but leave friend data alone', () => {
     const { invalidate, toast, handlers } = setup();
-    handlers.onNotification(notification('n2', 'sos_nearby'));
+    handlers.onNotification(notification('n2', 'event_new'));
     expect(toast).toHaveBeenCalled();
     expect(invalidatedKeys(invalidate)).not.toContain('["friends"]');
   });
@@ -289,5 +291,39 @@ describe('createAppRealtimeHandlers — chats', () => {
     handlers.onChatsChanged();
     const keys = invalidate.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey?: unknown }).queryKey));
     expect(keys).toContain('["communities"]');
+  });
+});
+
+describe('SOS realtime', () => {
+  it('sos:new caches the SOS and raises one alert; sos_nearby joins it instead of toasting', async () => {
+    const { sos } = await import('@/features/sos/fixtures');
+    const queryClient = new QueryClient();
+    const toast = vi.fn();
+    const alerts = { push: vi.fn(), remove: vi.fn() };
+    const handlers = createAppRealtimeHandlers({ queryClient, toast, logout: vi.fn(), alerts });
+    const s = sos({ myRole: 'viewer' });
+    handlers.onSosNew(s);
+    expect(queryClient.getQueryData(['sos', 'detail', 's1'])).toEqual(s);
+    expect(alerts.push).toHaveBeenCalledWith(expect.objectContaining({ sosId: 's1', type: 'flat_tire' }));
+    handlers.onNotification({ id: 'n', type: 'sos_nearby', payload: { sosId: 's1', type: 'flat_tire' }, readAt: null, createdAt: '2026-10-05T10:00:00Z' });
+    expect(toast).not.toHaveBeenCalled();
+    expect(alerts.push).toHaveBeenCalledTimes(2);
+    handlers.onSosUpdate({ ...s, status: 'closed' });
+    expect(alerts.remove).toHaveBeenCalledWith('s1');
+  });
+
+  it('binds sos:new / sos:update and drops malformed payloads', () => {
+    const socket = new FakeSocket();
+    const onSosNew = vi.fn();
+    const onSosUpdate = vi.fn();
+    const noop = vi.fn();
+    bindRealtimeHandlers(socket as unknown as RealtimeSocket, {
+      onNotification: noop, onCount: noop, onFriendsChanged: noop, onRevoked: noop, onMessage: noop,
+      onMessageDeleted: noop, onTyping: noop, onRead: noop, onChatsChanged: noop, onSosNew, onSosUpdate,
+    });
+    socket.emit('sos:new', { nope: true });
+    socket.emit('sos:update', { id: 'x', status: 'closed', responses: [] });
+    expect(onSosNew).not.toHaveBeenCalled();
+    expect(onSosUpdate).toHaveBeenCalledTimes(1);
   });
 });

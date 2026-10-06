@@ -3,11 +3,27 @@
 import type { MessageDto } from '@autoc/shared';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback } from 'react';
+import { parseSystemMessage } from './system-message';
 import { dayKey, daysBetween } from './timeline';
+
+/** Localized text of a system message key (`sos.helper_accepted:aidar` → "@aidar is coming to help"). */
+export function useSystemMessageText(): (text: string | null) => string {
+  const t = useTranslations('chats.system');
+  return useCallback(
+    (text: string | null) => {
+      const parsed = parseSystemMessage(text);
+      if (parsed.key === 'unknown') return t('unknown');
+      const name = parsed.nickname ? `@${parsed.nickname}` : t('someone');
+      return t(parsed.key, { name });
+    },
+    [t],
+  );
+}
 
 /** One-line preview of a message (chat list, community chat preview). */
 export function useMessagePreview(): (message: MessageDto | null) => string {
   const t = useTranslations('chats.preview');
+  const systemText = useSystemMessageText();
   return useCallback(
     (message: MessageDto | null) => {
       if (!message) return t('none');
@@ -21,11 +37,13 @@ export function useMessagePreview(): (message: MessageDto | null) => string {
           return t('location');
         case 'voice':
           return t('voice');
+        case 'system':
+          return systemText(message.text);
         default:
           return message.text ?? '';
       }
     },
-    [t],
+    [t, systemText],
   );
 }
 

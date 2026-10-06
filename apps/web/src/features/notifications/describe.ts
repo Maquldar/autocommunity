@@ -1,4 +1,4 @@
-import type { NotificationDto, UserMini } from '@autoc/shared';
+import { SOS_STATUSES, SOS_TYPES, type NotificationDto, type SosStatus, type SosType, type UserMini } from '@autoc/shared';
 
 /**
  * Turns a NotificationDto (free-form `payload`) into what the UI renders. Phase 2 types have their own
@@ -16,7 +16,22 @@ export type NotificationView =
       role: 'owner' | 'moderator' | 'member';
       href: string | null;
     }
+  | { kind: 'sos_nearby'; sosId: string | null; sosType: SosType; distanceM: number | null; user: UserMini | null; href: string | null }
+  | { kind: 'sos_response'; sosId: string | null; user: UserMini | null; href: string | null }
+  | { kind: 'sos_accepted'; sosId: string | null; user: UserMini | null; href: string | null }
+  | {
+      kind: 'sos_status';
+      sosId: string | null;
+      status: SosStatus | null;
+      /** What happened (API.md §4 clarifications); falls back to the status for close/cancel/expire. */
+      event: SosStatusEvent;
+      user: UserMini | null;
+      href: string | null;
+    }
+  | { kind: 'review_received'; sosId: string | null; stars: number; user: UserMini | null; href: string | null }
   | { kind: 'generic'; type: string; href: string | null };
+
+export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
 
 /** Kinds that carry a user (actor). */
 export type UserNotificationView = Extract<NotificationView, { user: UserMini | null }>;
@@ -52,9 +67,35 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function sosStatusEvent(event: unknown, status: SosStatus | null): SosStatusEvent {
+  if (event === 'withdrawn' || event === 'declined' || event === 'arrived' || event === 'in_progress') return event;
+  if (status === 'closed' || status === 'cancelled' || status === 'expired') return status;
+  if (status === 'in_progress') return 'in_progress';
+  return 'other';
+}
+
 export function describeNotification(notification: Pick<NotificationDto, 'type' | 'payload'>): NotificationView {
   const payload = isRecord(notification.payload) ? notification.payload : {};
+  const sosId = safeId(payload.sosId);
+  const sosHref = sosId ? `/sos/${sosId}` : null;
   switch (notification.type) {
+    case 'sos_nearby': {
+      const sosType = typeof payload.type === 'string' && (SOS_TYPES as readonly string[]).includes(payload.type) ? (payload.type as SosType) : 'other';
+      const distanceM = typeof payload.distanceM === 'number' && Number.isFinite(payload.distanceM) ? payload.distanceM : null;
+      return { kind: 'sos_nearby', sosId, sosType, distanceM, user: parseUserMini(payload.requester), href: sosHref };
+    }
+    case 'sos_response':
+      return { kind: 'sos_response', sosId, user: parseUserMini(payload.helper), href: sosHref };
+    case 'sos_accepted':
+      return { kind: 'sos_accepted', sosId, user: parseUserMini(payload.requester), href: sosHref };
+    case 'review_received': {
+      const stars = typeof payload.stars === 'number' && payload.stars >= 1 && payload.stars <= 5 ? Math.round(payload.stars) : 0;
+      return { kind: 'review_received', sosId, stars, user: parseUserMini(payload.author), href: '/profile#reviews' };
+    }
+    case 'sos_status': {
+      const status = typeof payload.status === 'string' && (SOS_STATUSES as readonly string[]).includes(payload.status) ? (payload.status as SosStatus) : null;
+      return { kind: 'sos_status', sosId, status, event: sosStatusEvent(payload.event, status), user: parseUserMini(payload.actor), href: sosHref };
+    }
     case 'friend_request': {
       const user = parseUserMini(payload.user);
       const requestId = typeof payload.requestId === 'string' && payload.requestId ? payload.requestId : null;

@@ -99,7 +99,9 @@
     "communityLimit": "You can own up to {max} communities",
     "membershipLimit": "You can be in up to {max} communities (including pending requests)",
     "alreadyMember": "You're already a member or your request is pending",
-    "ownerCannotLeave": "The owner can't leave. Transfer ownership or delete the community first."
+    "ownerCannotLeave": "The owner can't leave. Transfer ownership or delete the community first.",
+    "chatReadOnly": "This SOS chat is closed. It became read-only 24 hours after the SOS ended.",
+    "locationRequired": "Share your location first."
   },
   "form": {
     "required": "Required field",
@@ -128,7 +130,105 @@
       "medium": "Medium",
       "high": "High"
     },
-    "accessible": "Trust rating {value} out of 100, {level}"
+    "accessible": "Trust rating {value} out of 100, {level}",
+    "sheet": {
+      "openSelf": "How my trust rating works",
+      "openOther": "{name}'s trust rating",
+      "openHint": "Breakdown and what it unlocks",
+      "titleSelf": "Your trust rating",
+      "titleOther": "{name}'s trust rating",
+      "description": "It starts at 50 and changes with real help, reviews and activity. Everyone can see the breakdown.",
+      "outOf": "out of 100",
+      "breakdownLabel": "Rating breakdown",
+      "components": {
+        "base": {
+          "label": "Starting points",
+          "hint": "Every driver starts with 50, so newcomers can take part from day one."
+        },
+        "help": {
+          "label": "Help given",
+          "hint": "Each SOS where the driver arrived and the SOS was resolved. Better reviews count more; older help slowly fades. Up to +25."
+        },
+        "reviews": {
+          "label": "Reviews",
+          "hint": "Average stars from people helped or helping. A few reviews move it a little, many move it more. From −15 to +15."
+        },
+        "activity": {
+          "label": "Activity",
+          "hint": "Days in the last month with messages, SOS or reviews. Up to +5."
+        },
+        "tenure": {
+          "label": "Time with us",
+          "hint": "+0.5 per month since joining. Up to +5."
+        },
+        "penalties": {
+          "label": "Penalties",
+          "hint": "Confirmed reports (−10) or a fake SOS (−50). They expire after a year."
+        }
+      },
+      "unlocksLabel": "What the rating unlocks",
+      "unlocksSelf": "What your rating unlocks",
+      "unlocksOther": "What this rating unlocks",
+      "unlocks": {
+        "sosCreate": "Request help (SOS) from {min}",
+        "sosHelp": "Offer help to others from {min}"
+      },
+      "unlocked": "available",
+      "locked": "not yet"
+    },
+    "history": {
+      "title": "Rating history",
+      "description": "Every change to your rating and why. Only you see this.",
+      "reasons": {
+        "help_confirmed": "You helped a driver",
+        "review_received": "New review",
+        "penalty": "Penalty",
+        "recalc_daily": "Daily update (activity, time with us, ageing)",
+        "recalc": "Recalculated"
+      },
+      "empty": {
+        "title": "No changes yet",
+        "body": "Help someone or get a review and it shows up here."
+      }
+    },
+    "reviews": {
+      "title": "Reviews",
+      "starsLabel": "{stars, plural, one {# star} other {# stars}} out of 5",
+      "empty": {
+        "title": "No reviews yet",
+        "body": "Reviews appear after an SOS this driver took part in.",
+        "bodySelf": "After an SOS you took part in, the other side can review you."
+      }
+    },
+    "review": {
+      "promptTitle": "How did it go?",
+      "promptHelpers": "Rate the drivers who helped you. It builds trust for everyone.",
+      "promptRequester": "Rate the driver you helped. It builds trust for everyone.",
+      "rate": "Rate {name}",
+      "titleHelper": "Rate {name}'s help",
+      "titleRequester": "Rate {name}",
+      "description": "Your review is public on their profile and can't be edited later.",
+      "starsLegend": "Stars",
+      "starLabel": "{stars, plural, one {# star} other {# stars}}",
+      "starWords": {
+        "1": "Very bad",
+        "2": "Bad",
+        "3": "OK",
+        "4": "Good",
+        "5": "Excellent"
+      },
+      "starsRequired": "Choose from 1 to 5 stars.",
+      "commentLabel": "Comment",
+      "commentHint": "Optional. What went well, what didn't.",
+      "submit": "Send review",
+      "later": "Later",
+      "sent": "Thanks! Your review of {name} is published.",
+      "errors": {
+        "alreadyReviewed": "You've already reviewed this driver for this SOS.",
+        "windowClosed": "Reviews can only be left within 14 days after the SOS closed.",
+        "notAllowed": "You can only review the other side of a help you took part in."
+      }
+    }
   },
   "theme": {
     "label": "Theme",
@@ -397,7 +497,10 @@
       "bioPlaceholder": "Your car, driving experience, how you can help others…"
     },
     "friendsLink": "Friends",
-    "friendsLinkHint": "Your friends and friend requests"
+    "friendsLinkHint": "Your friends and friend requests",
+    "sosHistoryLink": "SOS history",
+    "sosHistoryHint": "Help you asked for and drivers you helped",
+    "report": "Report driver"
   },
   "vehicles": {
     "title": "My cars",
@@ -538,6 +641,11 @@
       "iosInstall": "On iPhone and iPad, push notifications work only in the installed app: tap Share, then “Add to Home Screen”, and open AutoCommunity from the home screen.",
       "notConfigured": "Push notifications aren't set up on the server yet.",
       "failed": "Couldn't change push notifications. Try again."
+    },
+    "reports": {
+      "title": "Reports",
+      "mine": "My reports",
+      "hint": "What you reported and what moderators decided"
     }
   },
   "legal": {
@@ -692,6 +800,12 @@
       "openProfile": "Open profile",
       "noCar": "No car added",
       "description": "Driver on the map"
+    },
+    "sosLayer": {
+      "label": "SOS",
+      "show": "Show SOS on the map",
+      "hide": "Hide SOS from the map",
+      "count": "{count, plural, one {# SOS nearby} other {# SOS nearby}}"
     }
   },
   "location": {
@@ -789,14 +903,20 @@
       "generic": "New notification",
       "communityRequest": "<b>{name}</b> wants to join <b>{community}</b>",
       "communityApproved": "You've been accepted into <b>{community}</b>",
-      "communityRole": "{role, select, owner {You're now the owner of <b>{community}</b>} moderator {You're now a moderator of <b>{community}</b>} other {You're now a regular member of <b>{community}</b>}}"
+      "communityRole": "{role, select, owner {You're now the owner of <b>{community}</b>} moderator {You're now a moderator of <b>{community}</b>} other {You're now a regular member of <b>{community}</b>}}",
+      "sosNearby": "<b>{name}</b> needs help nearby: {type}, {distance}",
+      "sosResponse": "<b>{name}</b> offered to help with your SOS",
+      "sosAccepted": "<b>{name}</b> accepted your help",
+      "sosStatus": "{event, select, withdrawn {<b>{name}</b> withdrew their offer} declined {<b>{name}</b> chose other helpers} arrived {<b>{name}</b> has arrived} in_progress {<b>{name}</b> confirmed that help arrived} closed {<b>{name}</b> marked the SOS as resolved} cancelled {<b>{name}</b> cancelled the SOS} expired {The SOS expired} other {SOS updated}}",
+      "reviewReceived": "<b>{name}</b> rated you {stars, plural, one {# star} other {# stars}}"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
     "declined": "Request declined",
     "gone": "This request is no longer active",
     "open": "Open",
-    "someCommunity": "a community"
+    "someCommunity": "a community",
+    "distanceUnknown": "nearby"
   },
   "communities": {
     "metaTitle": "Communities",
@@ -960,7 +1080,8 @@
       "demoted": "{name} is now a regular member",
       "transferred": "{name} is now the owner",
       "removed": "{name} was removed"
-    }
+    },
+    "report": "Report community"
   },
   "chats": {
     "metaTitle": "Chats",
@@ -1012,7 +1133,8 @@
       "retry": "Retry",
       "discard": "Remove",
       "actions": "Message actions",
-      "delete": "Delete message"
+      "delete": "Delete message",
+      "report": "Report"
     },
     "deleteConfirm": {
       "title": "Delete this message?",
@@ -1038,7 +1160,9 @@
         "title": "Chat not available",
         "description": "It doesn't exist or you're no longer a member.",
         "back": "All chats"
-      }
+      },
+      "sosChat": "SOS chat",
+      "openSos": "Open the SOS"
     },
     "composer": {
       "label": "Message",
@@ -1068,6 +1192,17 @@
       "micDenied": "Microphone access is blocked. Allow it in your browser settings.",
       "micUnsupported": "Voice messages aren't supported in this browser.",
       "micFailed": "Couldn't start recording. Try again."
+    },
+    "system": {
+      "chatCreated": "SOS chat created. Agree on the details here.",
+      "helperAccepted": "{name} is coming to help",
+      "helperArrived": "{name} has arrived",
+      "helperWithdrew": "{name} withdrew",
+      "closed": "The SOS was resolved",
+      "cancelled": "The SOS was cancelled",
+      "timedOut": "The SOS was closed automatically after 24 hours",
+      "unknown": "Chat update",
+      "someone": "A helper"
     }
   },
   "services": {
@@ -1160,7 +1295,8 @@
       "visits": "{count, plural, =0 {No confirmed visits} one {# confirmed visit} other {# confirmed visits}}",
       "statusVerified": "Verified",
       "statusRejected": "Rejected by moderators",
-      "rejectedDescription": "This listing was not approved. Only you can see it."
+      "rejectedDescription": "This listing was not approved. Only you can see it.",
+      "report": "Report this place"
     },
     "pending": {
       "badge": "Under review",
@@ -1321,6 +1457,433 @@
       "geoDenied": "Allow location access to confirm by location, or use a QR code.",
       "geoUnavailable": "Couldn't get your location. Try again, or use another method.",
       "bboxTooLarge": "Zoom in to see services"
+    }
+  },
+  "sos": {
+    "requestMetaTitle": "Request help",
+    "liveMetaTitle": "SOS",
+    "nearbyMetaTitle": "SOS nearby",
+    "historyMetaTitle": "SOS history",
+    "publicMetaTitle": "Live SOS status",
+    "types": {
+      "flat_tire": "Flat tyre",
+      "battery": "Dead battery",
+      "fuel": "Out of fuel",
+      "stuck": "Stuck in snow or mud",
+      "breakdown": "Breakdown",
+      "accident": "Accident",
+      "tow": "Need a tow",
+      "other": "Something else"
+    },
+    "typeHints": {
+      "flat_tire": "Puncture or burst tyre",
+      "battery": "The car won't start, need a jump",
+      "fuel": "Ran out of fuel on the road",
+      "stuck": "Need a push or a pull",
+      "breakdown": "Engine or another failure",
+      "accident": "Collision. Call 112 first if anyone is hurt",
+      "tow": "The car can't drive",
+      "other": "Describe what you need"
+    },
+    "status": {
+      "created": "Looking for help",
+      "accepted": "Helper on the way",
+      "in_progress": "Help on site",
+      "closed": "Resolved",
+      "cancelled": "Cancelled",
+      "expired": "Expired"
+    },
+    "timeline": {
+      "label": "Progress",
+      "created": "SOS sent",
+      "accepted": "Helper accepted",
+      "in_progress": "Help on site",
+      "closed": "Resolved",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "done": "done",
+      "current": "current step",
+      "upcoming": "not yet"
+    },
+    "request": {
+      "title": "Request help",
+      "description": "Drivers nearby get an alert right away.",
+      "steps": {
+        "label": "Step {step} of {total}",
+        "type": "What happened?",
+        "details": "Details and location",
+        "confirm": "Check and send"
+      },
+      "typeLegend": "Type of problem",
+      "descriptionLabel": "What's going on?",
+      "descriptionHint": "Optional. What you need and how to find you.",
+      "descriptionPlaceholder": "e.g. Rear right tyre is flat, I have a spare but no jack",
+      "photos": "Photos",
+      "photosHint": "Optional, up to {max}. They help helpers bring the right tools.",
+      "addPhoto": "Add photo",
+      "removePhoto": "Remove photo {index}",
+      "photoAlt": "Photo {index}",
+      "uploading": "Uploading…",
+      "location": "Your location",
+      "locationHint": "Drag the pin or tap the map if the position is off.",
+      "locating": "Finding your location…",
+      "useMyLocation": "Use my current location",
+      "pinAtCentre": "Move pin to map centre",
+      "locationDenied": "Location access is blocked. Tap the map to place the pin, or allow location in the browser settings.",
+      "locationUnavailable": "Couldn't get your position. Tap the map to place the pin.",
+      "locationRequired": "Set your location so helpers can find you.",
+      "locationSet": "Pin at {lat}, {lng}",
+      "mapLabel": "Map with your SOS location. Drag the pin to adjust it.",
+      "sharePhone": "Share my phone with helpers",
+      "sharePhoneOn": "Every driver who can see this SOS can call you.",
+      "sharePhoneOff": "Only helpers you accept see your number. Until then they can message you in the app.",
+      "back": "Back",
+      "review": "Review",
+      "send": "Send SOS",
+      "summary": {
+        "type": "Problem",
+        "description": "Description",
+        "noDescription": "No description",
+        "photos": "{count, plural, =0 {No photos} one {# photo} other {# photos}}",
+        "phone": "Phone number",
+        "phoneShared": "Visible to drivers who see the SOS",
+        "phoneHidden": "Only for helpers you accept"
+      },
+      "sentToast": "SOS sent. Drivers nearby are being alerted.",
+      "helpingBanner": "You're helping {name}",
+      "helpingOpen": "Open",
+      "wantToHelp": "Want to help someone instead?",
+      "nearbyLink": "SOS nearby"
+    },
+    "guidance": {
+      "phoneNotVerified": {
+        "title": "Verify your phone first",
+        "body": "Helpers need a way to reach you, so requesting help needs a verified phone number."
+      },
+      "ratingTooLowCreate": {
+        "title": "Your rating is too low to request help",
+        "body": "Requesting help needs a trust rating of at least {min}. In an emergency, call 112."
+      },
+      "ratingTooLowHelp": {
+        "title": "Your rating is too low to help",
+        "body": "Offering help needs a trust rating of at least {min}."
+      },
+      "banned": {
+        "title": "SOS requests are paused for your account",
+        "body": "You can request help again after {until}. In an emergency, call 112.",
+        "bodyNoDate": "For now you can't request help here. In an emergency, call 112."
+      },
+      "bannedHelp": {
+        "title": "Helping is paused for your account",
+        "body": "You can offer help again after {until}.",
+        "bodyNoDate": "For now you can't offer help."
+      },
+      "rateLimit": {
+        "title": "SOS limit reached",
+        "body": "You can send up to {max} SOS in 24 hours. The next one is possible at {time}. In an emergency, call 112.",
+        "bodyNoTime": "You can send up to {max} SOS in 24 hours. In an emergency, call 112."
+      },
+      "alreadyOpen": {
+        "title": "You already have an open SOS",
+        "body": "Follow it on its live page, or close it before asking again."
+      },
+      "locationRequired": {
+        "title": "Share your location",
+        "body": "We show SOS within 20 km of where you are. Turn on location sharing to see them."
+      },
+      "helperLimit": {
+        "title": "3 helpers already accepted",
+        "body": "Decline or wait for someone to withdraw first, or close the SOS once help has arrived."
+      },
+      "helperBusy": {
+        "title": "You're already helping someone",
+        "body": "Finish or withdraw from your current SOS first."
+      },
+      "offerLimit": {
+        "title": "Enough drivers have offered help",
+        "body": "This SOS has the maximum number of offers. Others nearby may still need you."
+      },
+      "invalidState": {
+        "title": "This SOS has just changed",
+        "body": "Someone acted on it a moment ago. Refresh to see the latest state."
+      },
+      "notFound": {
+        "title": "SOS not available",
+        "body": "It has ended, or it isn't visible to you any more."
+      },
+      "actions": {
+        "linkPhone": "Verify phone",
+        "viewActive": "Open my SOS",
+        "findOthers": "SOS nearby",
+        "openActive": "Open my SOS",
+        "shareLocation": "Share my location",
+        "reload": "Refresh"
+      }
+    },
+    "live": {
+      "title": "Your SOS",
+      "searching": "Searching within {km} km",
+      "notified": "Drivers nearby have been alerted.",
+      "expanding": "Widening to {km} km in {time}",
+      "expandingNow": "Widening to {km} km…",
+      "widest": "Searching the widest area, {km} km",
+      "expiresIn": "Expires in {time}",
+      "expiresNow": "Expiring now",
+      "createdAgo": "Sent {time}",
+      "distance": "{distance} away",
+      "distanceUnknown": "Distance unknown",
+      "distanceHidden": "Distance hidden",
+      "offers": "Offers to help",
+      "acceptedCount": "{count} of {max} helpers accepted",
+      "noOffers": {
+        "title": "No offers yet",
+        "titleEnded": "Nobody offered help",
+        "body": "Drivers nearby have been alerted. Keep your phone at hand and stay safe."
+      },
+      "pastOffers": "Withdrawn or declined ({count})",
+      "response": {
+        "offered": "Offers help",
+        "accepted": "On the way",
+        "arrived": "On site",
+        "withdrawn": "Withdrew",
+        "declined": "Declined"
+      },
+      "accept": "Accept",
+      "decline": "Decline",
+      "acceptLabel": "Accept help from {name}",
+      "declineLabel": "Decline help from {name}",
+      "callLabel": "Call {name}",
+      "acceptedToast": "{name} is on the way",
+      "helperLimitHint": "You've accepted {max} helpers, the maximum.",
+      "openChat": "Open SOS chat",
+      "markArrived": "Helper arrived",
+      "close": "Resolved — close SOS",
+      "cancel": "Cancel SOS",
+      "arrivedToast": "Marked as arrived",
+      "closedToast": "SOS closed. Glad you got help!",
+      "cancelledToast": "SOS cancelled",
+      "closeConfirm": {
+        "title": "Close this SOS?",
+        "description": "Do this once you've got the help you needed. Your helpers will be notified.",
+        "confirm": "Close SOS"
+      },
+      "cancelConfirm": {
+        "title": "Cancel this SOS?",
+        "description": "Helpers will be told you no longer need help.",
+        "reason": "Reason",
+        "reasonHint": "Optional. Helps us keep SOS reliable.",
+        "reasonPlaceholder": "e.g. Fixed it myself",
+        "confirm": "Cancel SOS",
+        "keep": "Keep it open"
+      },
+      "share": {
+        "button": "Share with a trusted contact",
+        "hint": "A read-only link with your status and location. It stops working 1 hour after the SOS ends.",
+        "linkLabel": "Link",
+        "copy": "Copy",
+        "copied": "Link copied",
+        "title": "My SOS status",
+        "text": "Follow my roadside SOS live"
+      },
+      "ended": {
+        "closed": {
+          "title": "Resolved",
+          "body": "Glad you got help. Thank you for trusting other drivers."
+        },
+        "cancelled": {
+          "title": "SOS cancelled",
+          "body": "Helpers were told you no longer need help."
+        },
+        "expired": {
+          "title": "SOS expired",
+          "body": "Nobody accepted within 2 hours. If you still need help, send a new SOS or call 112."
+        },
+        "timedOut": {
+          "title": "SOS closed automatically",
+          "body": "It stayed open for 24 hours after a helper accepted, so it was closed. Send a new SOS if you still need help."
+        },
+        "again": "Request help again",
+        "history": "SOS history"
+      }
+    },
+    "helper": {
+      "title": "{name} needs help",
+      "help": "I can help",
+      "helpHint": "The driver sees your profile, trust rating and car.",
+      "call": "Call",
+      "message": "Message",
+      "sosChat": "SOS chat",
+      "navigate": "Navigate",
+      "arrived": "I've arrived",
+      "withdraw": "Withdraw my offer",
+      "report": "Report this SOS",
+      "phoneHidden": "The driver's phone is shown once they accept your help.",
+      "requesterPhone": "Driver's phone",
+      "offerToast": "Offer sent",
+      "withdrawToast": "Offer withdrawn",
+      "arrivedToast": "Marked as arrived",
+      "offered": {
+        "title": "Offer sent",
+        "body": "Waiting for {name} to accept. You can message them meanwhile."
+      },
+      "accepted": {
+        "title": "{name} accepted your help",
+        "body": "Head to the location and mark when you've arrived."
+      },
+      "arrivedState": {
+        "title": "You're on site",
+        "body": "Thank you for helping!"
+      },
+      "declined": {
+        "title": "{name} chose other helpers",
+        "body": "Thank you anyway. Someone else nearby may need you."
+      },
+      "unavailable": {
+        "title": "Help is already on site",
+        "body": "This SOS isn't taking new offers."
+      },
+      "ended": {
+        "closed": "This SOS was resolved",
+        "cancelled": "This SOS was cancelled",
+        "expired": "This SOS expired"
+      },
+      "endedAt": "Ended {time}",
+      "withdrawConfirm": {
+        "title": "Withdraw your offer?",
+        "description": "{name} will be notified. You can offer again later.",
+        "confirm": "Withdraw"
+      }
+    },
+    "card": {
+      "photos": "Photos",
+      "openPhoto": "Open photo {index}",
+      "photo": "Photo {index} of {total}",
+      "description": "Description",
+      "noDescription": "No description",
+      "noCar": "No car added",
+      "location": "Location",
+      "openInMaps": "Open in maps",
+      "mapLabel": "Map with the SOS location"
+    },
+    "nearby": {
+      "title": "SOS nearby",
+      "description": "Open requests within 20 km of you.",
+      "listLabel": "Open SOS nearby",
+      "locationDenied": "Location access is blocked in your browser. Allow it in the site settings to see SOS nearby.",
+      "settings": "Alert settings",
+      "empty": {
+        "title": "No one nearby needs help",
+        "body": "We'll alert you when someone does.",
+        "bodyAlertsOff": "SOS alerts are off, so you won't be notified. You can turn them on in settings."
+      }
+    },
+    "history": {
+      "title": "SOS history",
+      "description": "Help you asked for and drivers you helped.",
+      "listLabel": "My SOS",
+      "asRequester": "You asked for help",
+      "asHelper": "You helped",
+      "asResponder": "You offered help",
+      "empty": {
+        "title": "No SOS yet",
+        "body": "When you ask for help or help someone, it shows up here.",
+        "action": "See SOS nearby"
+      }
+    },
+    "alert": {
+      "title": "SOS nearby",
+      "who": "{name} needs help",
+      "view": "View",
+      "dismiss": "Dismiss SOS alert",
+      "more": "+{count} more"
+    },
+    "map": {
+      "marker": "SOS: {type}, {status}",
+      "loading": "Loading SOS…",
+      "open": "Open SOS",
+      "openToHelp": "View and help"
+    },
+    "public": {
+      "loading": "Loading SOS status…",
+      "title": "{name} asked for roadside help",
+      "subtitle": "Live status shared with you through AutoCommunity.",
+      "updated": "Updated {time}",
+      "helpers": "Helpers",
+      "noHelpers": "No helper yet. Drivers nearby have been alerted.",
+      "noHelpersEnded": "No helper",
+      "refresh": "Refreshes every 30 seconds",
+      "notFound": {
+        "title": "This link has expired",
+        "body": "The SOS ended more than an hour ago, or the link was replaced with a new one."
+      }
+    }
+  },
+  "reports": {
+    "action": "Report",
+    "title": {
+      "user": "Report this driver",
+      "message": "Report this message",
+      "post": "Report this post",
+      "comment": "Report this comment",
+      "sos": "Report this SOS",
+      "community": "Report this community",
+      "service": "Report this place"
+    },
+    "description": "Moderators review every report. The person isn't told who reported them.",
+    "reasonLabel": "What's wrong?",
+    "reasonRequired": "Choose a reason.",
+    "reasons": {
+      "spam": "Spam or ads",
+      "fake_sos": "Fake SOS",
+      "harassment": "Harassment or threats",
+      "fraud": "Fraud or scam",
+      "inappropriate": "Inappropriate content",
+      "dangerous": "Dangerous behaviour",
+      "other": "Something else"
+    },
+    "reasonHints": {
+      "spam": "Unwanted ads, repeated messages",
+      "fake_sos": "Nobody needed help, or it's a trap",
+      "harassment": "Insults, threats, stalking",
+      "fraud": "Asking for money, fake services",
+      "inappropriate": "Offensive photos or text",
+      "dangerous": "Puts people on the road at risk",
+      "other": "Explain in the details"
+    },
+    "detailsLabel": "Details",
+    "detailsHint": "Optional. What happened and when.",
+    "submit": "Send report",
+    "cancel": "Cancel",
+    "sent": "Report sent. Thank you for keeping the community safe.",
+    "errors": {
+      "alreadyReported": "You've already reported this. Moderators will look at it soon.",
+      "rateLimited": "You've sent too many reports today. Try again in {minutes} min.",
+      "rateLimitedShort": "You've sent too many reports today. Try again later.",
+      "invalidTarget": "You can't report your own content.",
+      "notFound": "This no longer exists or isn't visible to you."
+    },
+    "targets": {
+      "user": "Driver",
+      "message": "Message",
+      "post": "Post",
+      "comment": "Comment",
+      "sos": "SOS",
+      "community": "Community",
+      "service": "Place"
+    },
+    "status": {
+      "open": "Under review",
+      "confirmed": "Confirmed",
+      "dismissed": "Dismissed"
+    },
+    "resolution": "Moderator's note",
+    "mine": {
+      "title": "My reports",
+      "description": "Reports you sent and what moderators decided.",
+      "empty": {
+        "title": "No reports",
+        "body": "If something is wrong, use “Report” on a profile, message, SOS, community or place."
+      }
     }
   }
 }

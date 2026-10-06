@@ -6,6 +6,7 @@ import type {
   MessageDto,
   NotificationDto,
   ServerToClientEvents,
+  SosDto,
 } from '@autoc/shared';
 import type { ManagerOptions, Socket, SocketOptions } from 'socket.io-client';
 
@@ -40,6 +41,9 @@ export type RealtimeHandlers = {
   onTyping: (event: ChatTypingEvent) => void;
   onRead: (event: ChatReadEvent) => void;
   onChatsChanged: () => void;
+  /* phase 4 — payloads are rendered for this viewer */
+  onSosNew: (sos: SosDto) => void;
+  onSosUpdate: (sos: SosDto) => void;
 };
 
 const hasChatId = (p: unknown): p is { chatId: string } =>
@@ -67,6 +71,14 @@ export function bindRealtimeHandlers(socket: Pick<RealtimeSocket, 'on' | 'off'>,
     if (hasChatId(p) && typeof p.userId === 'string' && typeof p.lastReadAt === 'string') handlers.onRead(p);
   };
   const onChats: ServerToClientEvents['chats:changed'] = () => handlers.onChatsChanged();
+  const isSos = (s: unknown): s is SosDto =>
+    typeof s === 'object' && s !== null && typeof (s as SosDto).id === 'string' && typeof (s as SosDto).status === 'string' && Array.isArray((s as SosDto).responses);
+  const onSosNew: ServerToClientEvents['sos:new'] = (s) => {
+    if (isSos(s)) handlers.onSosNew(s);
+  };
+  const onSosUpdate: ServerToClientEvents['sos:update'] = (s) => {
+    if (isSos(s)) handlers.onSosUpdate(s);
+  };
   const bindings = [
     ['notification:new', onNew],
     ['notification:count', onCount],
@@ -77,6 +89,8 @@ export function bindRealtimeHandlers(socket: Pick<RealtimeSocket, 'on' | 'off'>,
     ['chat:typing', onTyping],
     ['chat:read', onRead],
     ['chats:changed', onChats],
+    ['sos:new', onSosNew],
+    ['sos:update', onSosUpdate],
   ] as const;
   const target = socket as unknown as { on: (e: string, l: unknown) => void; off: (e: string, l: unknown) => void };
   for (const [event, listener] of bindings) target.on(event, listener);

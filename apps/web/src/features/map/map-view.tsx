@@ -1,7 +1,8 @@
 'use client';
 
 import { DEFAULT_MAP_CENTER } from '@autoc/shared';
-import { AlertCircle, LocateFixed, MapPinned, Minus, Plus, WifiOff, ZoomIn } from 'lucide-react';
+import { AlertCircle, ChevronRight, LocateFixed, MapPinned, Minus, Plus, Siren, WifiOff, ZoomIn } from 'lucide-react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -19,8 +20,27 @@ import { MapCanvas, type MapCanvasHandle } from './map-canvas';
 import { MapFiltersControl } from './map-filters';
 import { PrivacyToggle } from './privacy-toggle';
 import { useMapUsers } from './queries';
+import { useMapSos } from '@/features/sos/api';
+import { SosMapSheet } from '@/features/sos/map-sheet';
 
 const FILTERS_KEY = 'autoc:map-filters';
+const SOS_LAYER_KEY = 'autoc:map-sos-layer';
+
+function readSosLayer(): boolean {
+  try {
+    return window.localStorage.getItem(SOS_LAYER_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+function writeSosLayer(on: boolean) {
+  try {
+    window.localStorage.setItem(SOS_LAYER_KEY, on ? '1' : '0');
+  } catch {
+    // Per-viewer convenience only.
+  }
+}
 
 function readFilters(): MapFilters {
   try {
@@ -57,8 +77,17 @@ export function MapView() {
   const [tilesUnavailable, setTilesUnavailable] = useState(false);
   const centeredOnUser = useRef(false);
   const movedByUser = useRef(false);
+  const [sosLayer, setSosLayerState] = useState(true);
+  const [selectedSosId, setSelectedSosId] = useState<string | null>(null);
 
   useEffect(() => setFiltersState(readFilters()), []);
+  useEffect(() => setSosLayerState(readSosLayer()), []);
+  const toggleSosLayer = useCallback(() => {
+    setSosLayerState((on) => {
+      writeSosLayer(!on);
+      return !on;
+    });
+  }, []);
   const setFilters = useCallback((next: MapFilters) => {
     setFiltersState(next);
     writeFilters(next);
@@ -83,6 +112,9 @@ export function MapView() {
   // Zoomed out too far: show nothing rather than stale markers from a smaller area.
   const users = useMemo(() => (tooLarge ? [] : (query.data?.items ?? [])), [tooLarge, query.data]);
   const selected = useMemo(() => users.find((u) => u.userId === selectedId) ?? null, [users, selectedId]);
+  // SOS layer (API.md §4/§5: open SOS near the viewer; an empty list when they have no fresh location).
+  const sosQuery = useMapSos(bbox, sosLayer && !tooLarge);
+  const sosItems = useMemo(() => (sosLayer && !tooLarge ? (sosQuery.data?.items ?? []) : []), [sosLayer, tooLarge, sosQuery.data]);
 
   // Centre on the driver's first fix once, unless they already moved the map themselves.
   useEffect(() => {
@@ -114,7 +146,16 @@ export function MapView() {
         initialView={initialView}
         ownPosition={position}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        onSelect={(id) => {
+          setSelectedSosId(null);
+          setSelectedId(id);
+        }}
+        sosItems={sosItems}
+        selectedSosId={selectedSosId}
+        onSelectSos={(id) => {
+          setSelectedId(null);
+          setSelectedSosId(id);
+        }}
         onViewChange={onViewChange}
         onTilesUnavailable={setTilesUnavailable}
         labels={{ region: t('regionLabel'), zoomIn: t('zoomInControl'), zoomOut: t('zoomOutControl') }}
@@ -124,7 +165,21 @@ export function MapView() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-raised flex flex-col items-center gap-2 p-3 sm:p-4">
         <div className="flex w-full items-start justify-between gap-2">
           <PrivacyToggle className="pointer-events-auto min-w-0" />
-          <div className="pointer-events-auto shrink-0">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={sosLayer}
+              aria-label={sosLayer ? t('sosLayer.hide') : t('sosLayer.show')}
+              data-testid="map-sos-toggle"
+              onClick={toggleSosLayer}
+              className={cn(
+                'inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold shadow-md transition-colors duration-fast focus-ring',
+                sosLayer ? 'border-sos bg-sos-soft text-sos-soft-foreground' : 'bg-card text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Siren aria-hidden="true" className="size-4" />
+              {t('sosLayer.label')}
+            </button>
             <MapFiltersControl value={effectiveFilters} onChange={setFilters} communities={activeCommunities} />
           </div>
         </div>
@@ -140,6 +195,17 @@ export function MapView() {
           truncated={Boolean(query.data?.truncated) && !tooLarge}
           tilesUnavailable={tilesUnavailable}
         />
+        {sosItems.length > 0 ? (
+          <Link
+            href="/sos/nearby"
+            data-testid="map-sos-count"
+            className="pointer-events-auto flex max-w-full items-center gap-1.5 rounded-full border border-sos bg-card px-3.5 py-1.5 text-sm font-semibold text-sos-soft-foreground shadow-md hover:bg-sos-soft focus-ring"
+          >
+            <Siren aria-hidden="true" className="size-4 shrink-0" />
+            {t('sosLayer.count', { count: sosItems.length })}
+            <ChevronRight aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
+          </Link>
+        ) : null}
       </div>
 
       {/* Bottom: location sharing (left) and map buttons (right), above the attribution. */}
@@ -165,6 +231,7 @@ export function MapView() {
       </div>
 
       <DriverCard driver={selected} onClose={() => setSelectedId(null)} />
+      <SosMapSheet sosId={selectedSosId} onClose={() => setSelectedSosId(null)} />
     </div>
   );
 }

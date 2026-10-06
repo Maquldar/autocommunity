@@ -1,7 +1,7 @@
 'use client';
 
 import type { ChatDto } from '@autoc/shared';
-import { MessageCircle, UsersRound } from 'lucide-react';
+import { MessageCircle, UsersRound, Siren } from 'lucide-react';
 import Link from 'next/link';
 import { useNow, useTranslations } from 'next-intl';
 import { Avatar } from '@/components/ui/avatar';
@@ -59,7 +59,7 @@ export function ChatRow({ chat }: { chat: ChatDto }) {
   const last = chat.lastMessage;
   const unread = chat.unreadCount > 0;
   const prefix =
-    last && !last.deletedAt
+    last && !last.deletedAt && last.type !== 'system'
       ? last.sender.id === me.id
         ? `${t('you')}: `
         : chat.type !== 'direct'
@@ -74,7 +74,11 @@ export function ChatRow({ chat }: { chat: ChatDto }) {
       data-testid="chat-row"
       data-unread={chat.unreadCount}
     >
-      <Avatar id={chat.peer?.id ?? chat.refId ?? chat.id} name={chat.title} src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null} shape={chat.type === 'direct' ? 'circle' : 'square'} size="lg" decorative />
+      {chat.type === 'sos' ? (
+        <SosChatAvatar size="lg" />
+      ) : (
+        <Avatar id={chat.peer?.id ?? chat.refId ?? chat.id} name={chat.title} src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null} shape={chat.type === 'direct' ? 'circle' : 'square'} size="lg" decorative />
+      )}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-baseline gap-2">
           <span className={cn('min-w-0 flex-1 truncate text-[0.9375rem]', unread ? 'font-semibold text-foreground' : 'font-medium text-foreground')}>
@@ -112,5 +116,17 @@ function ChatRowSkeleton() {
         <Skeleton className="h-3.5 w-3/4" />
       </div>
     </div>
+  );
+}
+
+/** SOS group chats have no picture: the siren on the SOS tile (API.md §4: `avatarUrl` is null). */
+export function SosChatAvatar({ size }: { size: 'md' | 'lg' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('flex shrink-0 items-center justify-center rounded-xl bg-sos-soft text-sos-soft-foreground', size === 'lg' ? 'size-12' : 'size-10')}
+    >
+      <Siren className={size === 'lg' ? 'size-6' : 'size-5'} />
+    </span>
   );
 }

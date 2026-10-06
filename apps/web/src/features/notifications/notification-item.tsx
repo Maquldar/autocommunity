@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, ShieldCheck, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, Check, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -11,6 +11,7 @@ import { useOnlineStatus } from '@/hooks/use-online-status';
 import { hasErrorCode } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
 import { useFriendAction } from '@/features/friends/queries';
+import { distanceParts } from '@/features/sos/format';
 import { describeNotification, displayName, type NotificationView } from './describe';
 
 type TitleSpec =
@@ -18,10 +19,32 @@ type TitleSpec =
   | { key: 'types.communityRequest'; values: { name: string; community: string } }
   | { key: 'types.communityApproved'; values: { community: string } }
   | { key: 'types.communityRole'; values: { community: string; role: string } }
+  | { key: 'types.sosNearby'; values: { name: string; type: string; distance: string } }
+  | { key: 'types.sosResponse' | 'types.sosAccepted'; values: { name: string } }
+  | { key: 'types.sosStatus'; values: { name: string; event: string } }
+  | { key: 'types.reviewReceived'; values: { name: string; stars: number } }
   | { key: 'types.generic'; values: Record<string, never> };
 
-function titleSpec(view: NotificationView, someone: string, someCommunity: string): TitleSpec {
+type TitleContext = {
+  someone: string;
+  someCommunity: string;
+  sosType: (type: Extract<NotificationView, { kind: 'sos_nearby' }>['sosType']) => string;
+  distance: (meters: number | null) => string;
+};
+
+function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
+  const { someone, someCommunity } = ctx;
   switch (view.kind) {
+    case 'sos_nearby':
+      return { key: 'types.sosNearby', values: { name: displayName(view.user) ?? someone, type: ctx.sosType(view.sosType), distance: ctx.distance(view.distanceM) } };
+    case 'review_received':
+      return { key: 'types.reviewReceived', values: { name: displayName(view.user) ?? someone, stars: view.stars } };
+    case 'sos_response':
+      return { key: 'types.sosResponse', values: { name: displayName(view.user) ?? someone } };
+    case 'sos_accepted':
+      return { key: 'types.sosAccepted', values: { name: displayName(view.user) ?? someone } };
+    case 'sos_status':
+      return { key: 'types.sosStatus', values: { name: displayName(view.user) ?? someone, event: view.event } };
     case 'friend_request':
       return { key: 'types.friendRequest', values: { name: displayName(view.user) ?? someone } };
     case 'friend_accepted':
@@ -38,22 +61,57 @@ function titleSpec(view: NotificationView, someone: string, someCommunity: strin
 }
 
 /** Plain-text title for toasts and push-style surfaces. */
+function useTitleContext(): TitleContext {
+  const t = useTranslations('notifications');
+  const ts = useTranslations('sos.types');
+  const format = useFormatter();
+  return {
+    someone: t('someone'),
+    someCommunity: t('someCommunity'),
+    sosType: (type) => ts(type),
+    distance: (meters) => {
+      if (meters === null) return t('distanceUnknown');
+      const { value, unit } = distanceParts(meters);
+      return format.number(value, { style: 'unit', unit, unitDisplay: 'short' });
+    },
+  };
+}
+
 export function useNotificationTitle(): (notification: Pick<NotificationDto, 'type' | 'payload'>) => string {
   const t = useTranslations('notifications');
+  const ctx = useTitleContext();
   return (notification) => {
-    const spec = titleSpec(describeNotification(notification), t('someone'), t('someCommunity'));
+    const spec = titleSpec(describeNotification(notification), ctx);
     return t.markup(spec.key, { ...spec.values, b: (c) => c });
   };
 }
 
 function Title({ view }: { view: NotificationView }) {
   const t = useTranslations('notifications');
+  const ctx = useTitleContext();
   const b = (chunks: ReactNode) => <strong className="font-semibold">{chunks}</strong>;
-  const spec = titleSpec(view, t('someone'), t('someCommunity'));
+  const spec = titleSpec(view, ctx);
   return <>{t.rich(spec.key, { ...spec.values, b })}</>;
 }
 
+const SOS_KINDS = new Set<NotificationView['kind']>(['sos_nearby', 'sos_response', 'sos_accepted', 'sos_status']);
+
 function Leading({ view }: { view: NotificationView }) {
+  if (view.kind === 'review_received') {
+    return (
+      <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-warning-soft text-warning-soft-foreground">
+        <Star className="size-5" />
+      </span>
+    );
+  }
+  if (SOS_KINDS.has(view.kind)) {
+    // SOS events get the SOS tile: red marks an emergency, never "unread".
+    return (
+      <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-sos-soft text-sos-soft-foreground">
+        <Siren className="size-5" />
+      </span>
+    );
+  }
   if ((view.kind === 'friend_request' || view.kind === 'friend_accepted' || view.kind === 'community_request') && view.user) {
     return <Avatar id={view.user.id} name={view.user.name || view.user.nickname} src={view.user.avatarUrl} size="md" decorative />;
   }

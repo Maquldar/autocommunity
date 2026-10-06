@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, Ban, Check, CheckCheck, Clock, MoreHorizontal, RotateCw, Trash2, X } from 'lucide-react';
+import { AlertCircle, Ban, Check, CheckCheck, Clock, Flag, MoreHorizontal, RotateCw, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { memo } from 'react';
@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { LocationContent, PhotoContent, VoiceContent } from './message-content';
+import { useSystemMessageText } from './format';
 import type { TimelineMessage } from './timeline';
 
 export type MessageBubbleProps = {
@@ -25,6 +26,9 @@ export type MessageBubbleProps = {
   read: boolean;
   canDelete: boolean;
   onDelete: (messageId: string) => void;
+  /** Others' messages can be reported (opens the report dialog in the conversation). */
+  canReport?: boolean;
+  onReport?: (messageId: string) => void;
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
 };
@@ -44,6 +48,8 @@ export const MessageBubble = memo(function MessageBubble({
   read,
   canDelete,
   onDelete,
+  canReport = false,
+  onReport,
   onRetry,
   onDiscard,
 }: MessageBubbleProps) {
@@ -54,6 +60,22 @@ export const MessageBubble = memo(function MessageBubble({
   const senderName = message.sender.name || `@${message.sender.nickname}`;
   const time = format.dateTime(new Date(message.createdAt), { hour: '2-digit', minute: '2-digit' });
   const media = !deleted && (message.type === 'photo' || message.type === 'location' || message.type === 'voice');
+  const systemText = useSystemMessageText();
+
+  if (message.type === 'system') {
+    // Lifecycle notes (SOS chat): a centred line, not a bubble from someone.
+    return (
+      <div className="flex w-full justify-center py-1.5" data-testid="system-message" data-message-id={message.id}>
+        <p className="max-w-[min(90%,28rem)] rounded-full bg-muted px-3 py-1 text-center text-sm text-muted-foreground text-balance">
+          {systemText(message.text)}
+          <span className="sr-only">, </span>
+          <time dateTime={message.createdAt} className="ms-1.5 text-xs tabular-nums">
+            {time}
+          </time>
+        </p>
+      </div>
+    );
+  }
 
   const statusIcon = !mine ? null : status === 'sending' ? (
     <Clock aria-hidden="true" className="size-3.5" />
@@ -151,7 +173,12 @@ export const MessageBubble = memo(function MessageBubble({
         ) : null}
       </div>
 
-      {!mine && canDelete ? <MessageActions onDelete={() => onDelete(message.id)} /> : null}
+      {!mine && (canDelete || canReport) ? (
+        <MessageActions
+          onDelete={canDelete ? () => onDelete(message.id) : undefined}
+          onReport={canReport && onReport ? () => onReport(message.id) : undefined}
+        />
+      ) : null}
     </div>
   );
 });
@@ -160,7 +187,7 @@ export const MessageBubble = memo(function MessageBubble({
  * ⋯ menu beside a bubble. Always in the tab order and visible on touch screens; on hover-capable
  * screens it fades in on hover or keyboard focus.
  */
-function MessageActions({ onDelete }: { onDelete: () => void }) {
+function MessageActions({ onDelete, onReport }: { onDelete?: () => void; onReport?: () => void }) {
   const t = useTranslations('chats.message');
   return (
     <DropdownMenu>
@@ -175,10 +202,18 @@ function MessageActions({ onDelete }: { onDelete: () => void }) {
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center">
-        <DropdownMenuItem destructive onSelect={onDelete}>
-          <Trash2 aria-hidden="true" />
-          {t('delete')}
-        </DropdownMenuItem>
+        {onReport ? (
+          <DropdownMenuItem onSelect={onReport}>
+            <Flag aria-hidden="true" />
+            {t('report')}
+          </DropdownMenuItem>
+        ) : null}
+        {onDelete ? (
+          <DropdownMenuItem destructive onSelect={onDelete}>
+            <Trash2 aria-hidden="true" />
+            {t('delete')}
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

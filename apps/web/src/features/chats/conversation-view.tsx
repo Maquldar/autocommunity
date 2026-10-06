@@ -19,10 +19,12 @@ import { hasErrorCode } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/auth/guards';
 import { useRealtimeConnected, useRealtimeSocket } from '@/lib/realtime/realtime-provider';
 import { notify } from '@/lib/toast';
+import { ReportDialog } from '@/features/reports/report-dialog';
 import { communityPermissions } from '@/features/communities/membership-state';
 import { useCommunity } from '@/features/communities/queries';
 import { flattenMessages, setActiveChat } from './cache';
 import { Composer } from './composer';
+import { SosChatAvatar } from './chats-view';
 import { useDayLabel } from './format';
 import { createThrottle, readStore, typingStore } from './live-stores';
 import { MessageBubble } from './message-bubble';
@@ -113,6 +115,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
   const removeMessage = useDeleteMessage(chat.id);
   const markRead = useMarkChatRead(chat.id);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   const server = useMemo(() => flattenMessages(messages.data), [messages.data]);
   const timeline = useMemo(() => buildTimeline(server, pending, me), [server, pending, me]);
@@ -162,6 +165,7 @@ function Conversation({ chat }: { chat: ChatDto }) {
   }, [socket, throttle, chat.id]);
 
   const onDelete = useCallback((messageId: string) => setDeleting(messageId), []);
+  const onReport = useCallback((messageId: string) => setReporting(messageId), []);
 
   return (
     <>
@@ -172,10 +176,11 @@ function Conversation({ chat }: { chat: ChatDto }) {
         timeline={timeline}
         me={me}
         query={messages}
-        isCommunity={isCommunity}
+        isCommunity={chat.type !== 'direct'}
         peerRead={peerRead}
         canModerate={isModerator}
         onDelete={onDelete}
+        onReport={onReport}
         onRetry={retry}
         onDiscard={discard}
       />
@@ -185,6 +190,11 @@ function Conversation({ chat }: { chat: ChatDto }) {
         <Composer disabled={!online} onSend={send} onTyping={onTyping} />
       </div>
 
+      <ReportDialog
+        target={reporting ? { type: 'message', id: reporting } : null}
+        open={reporting !== null}
+        onOpenChange={(open) => (open ? undefined : setReporting(null))}
+      />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => (open ? undefined : setDeleting(null))}
@@ -214,24 +224,32 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
       ? `/u/${chat.peer.id}`
       : chat.type === 'community' && chat.refId
         ? `/communities/${chat.refId}`
-        : null;
+        : chat.type === 'sos' && chat.refId
+          ? `/sos/${chat.refId}`
+          : null;
   const subtitle = typing
     ? t('typing.direct')
     : chat.type === 'direct' && chat.peer?.nickname
       ? `@${chat.peer.nickname}`
       : chat.type === 'community'
         ? t('conversation.communityChat')
-        : null;
+        : chat.type === 'sos'
+          ? t('conversation.sosChat')
+          : null;
   const identity = (
     <>
-      <Avatar
-        id={chat.peer?.id ?? chat.refId ?? chat.id}
-        name={chat.title}
-        src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null}
-        shape={chat.type === 'direct' ? 'circle' : 'square'}
-        size="md"
-        decorative
-      />
+      {chat.type === 'sos' ? (
+        <SosChatAvatar size="md" />
+      ) : (
+        <Avatar
+          id={chat.peer?.id ?? chat.refId ?? chat.id}
+          name={chat.title}
+          src={chat.avatarUrl ?? chat.peer?.avatarUrl ?? null}
+          shape={chat.type === 'direct' ? 'circle' : 'square'}
+          size="md"
+          decorative
+        />
+      )}
       <span className="flex min-w-0 flex-col">
         <h1 className="truncate text-base font-semibold leading-6">{chat.title}</h1>
         {subtitle ? (
@@ -243,7 +261,7 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
   return (
     <header className="flex shrink-0 items-center gap-2 border-b bg-background px-2 py-2 sm:px-3">
       <IconButton asChild aria-label={tc('back')}>
-        <Link href="/chats">
+        <Link href={chat.type === 'sos' && chat.refId ? `/sos/${chat.refId}` : '/chats'}>
           <ArrowLeft className="rtl:rotate-180" />
         </Link>
       </IconButton>
@@ -251,7 +269,7 @@ function ConversationHeader({ chat, typing }: { chat: ChatDto; typing: boolean }
         <Link
           href={href}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 hover:bg-accent focus-ring"
-          aria-label={`${chat.title}. ${chat.type === 'direct' ? t('conversation.openProfile') : t('conversation.openCommunity')}`}
+          aria-label={`${chat.title}. ${chat.type === 'direct' ? t('conversation.openProfile') : chat.type === 'sos' ? t('conversation.openSos') : t('conversation.openCommunity')}`}
         >
           {identity}
         </Link>
@@ -308,6 +326,7 @@ function MessageList({
   peerRead,
   canModerate,
   onDelete,
+  onReport,
   onRetry,
   onDiscard,
 }: {
@@ -319,6 +338,7 @@ function MessageList({
   peerRead: number;
   canModerate: boolean;
   onDelete: (messageId: string) => void;
+  onReport: (messageId: string) => void;
   onRetry: (clientId: string) => void;
   onDiscard: (clientId: string) => void;
 }) {
@@ -485,6 +505,8 @@ function MessageList({
                       read={mine && peerRead >= Date.parse(item.message.createdAt)}
                       canDelete={deletable}
                       onDelete={onDelete}
+                      canReport={item.status === 'sent' && !mine && !item.message.deletedAt && item.message.type !== 'system'}
+                      onReport={onReport}
                       onRetry={onRetry}
                       onDiscard={onDiscard}
                     />

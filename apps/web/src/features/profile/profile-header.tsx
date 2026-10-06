@@ -27,7 +27,9 @@ export function ProfileHeader({ user, actions }: { user: Profile; actions?: Reac
           <h1 className="max-w-full text-2xl font-semibold leading-8 tracking-tight break-words">{user.name}</h1>
           {user.nickname ? <p className="max-w-full break-all text-[0.9375rem] text-muted-foreground">@{user.nickname}</p> : null}
           <div className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-muted-foreground sm:justify-start">
-            <RatingBadge rating={user.rating} showLabel />
+            <span data-testid="profile-rating" data-rating={user.rating} className="inline-flex">
+              <RatingBadge rating={user.rating} showLabel />
+            </span>
             {user.status === 'blocked' ? <Badge variant="danger">{t('blocked')}</Badge> : null}
             {user.city ? (
               <span className="inline-flex items-center gap-1">

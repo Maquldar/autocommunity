@@ -1,11 +1,12 @@
 'use client';
 
-import { Handshake, Pencil } from 'lucide-react';
+import { Handshake, Pencil, Siren } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { ListGroup, ListItem } from '@/components/ui/list-item';
 import { useCurrentUser } from '@/lib/auth/guards';
+import { RatingHistory, RatingSummary, ReviewsList } from '@/features/rating/rating-views';
 import { MyVehicles } from './my-vehicles';
 import { ProfileHeader } from './profile-header';
 
@@ -34,6 +35,7 @@ export function OwnProfileView() {
           })}
         </p>
       )}
+      <RatingSummary userId={me.id} self name={me.name} />
       <ListGroup>
         <ListItem
           href="/friends"
@@ -45,8 +47,20 @@ export function OwnProfileView() {
           title={t('friendsLink')}
           description={t('friendsLinkHint')}
         />
+        <ListItem
+          href="/sos/history"
+          leading={
+            <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-xl bg-sos-soft text-sos-soft-foreground">
+              <Siren className="size-5" />
+            </span>
+          }
+          title={t('sosHistoryLink')}
+          description={t('sosHistoryHint')}
+        />
       </ListGroup>
       <MyVehicles />
+      <ReviewsList userId={me.id} self />
+      <RatingHistory />
     </div>
   );
 }
