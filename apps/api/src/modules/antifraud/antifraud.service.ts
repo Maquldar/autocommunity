@@ -76,7 +76,77 @@ export class AntifraudService {
     });
   }
 
+  /** Phase 9: after coins were transferred into `recipientId`: wallet_funnel. */
+  walletTransfer(recipientId: string): void {
+    this.tasks.run('antifraud walletTransfer', () => this.checkWalletFunnel(recipientId));
+  }
+
+  /** Phase 9: after a downvote on `targetId`: vote_burst. */
+  voteDown(targetId: string): void {
+    this.tasks.run('antifraud voteDown', () => this.checkVoteBurst(targetId));
+  }
+
+  /** Phase 9: after an admin rejected a violation submitted by `submitterId`: violation_rejections. */
+  violationRejected(submitterId: string): void {
+    this.tasks.run('antifraud violationRejected', () => this.checkViolationRejections(submitterId));
+  }
+
   /* ------------------------------------------------------------------ triggers */
+
+  /**
+   * ≥ 3 distinct senders with accounts younger than 7 days transferred into one account within 24 h → a
+   * flag on the recipient, at most once per 24 h (Redis SET NX). Flag only.
+   */
+  async checkWalletFunnel(recipientId: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ senderId: string; total: bigint }[]>`
+      SELECT t.counterparty_user_id::text AS "senderId", sum(t.amount) AS total
+      FROM wallet_transactions t JOIN users u ON u.id = t.counterparty_user_id
+      WHERE t.user_id = ${recipientId}::uuid AND t.kind = 'transfer_in'
+        AND t.created_at > now() - make_interval(hours => ${ANTIFRAUD.walletFunnelHours}::int)
+        AND u.created_at > now() - make_interval(days => ${ANTIFRAUD.walletFunnelSenderMaxAgeDays}::int)
+      GROUP BY t.counterparty_user_id`;
+    if (rows.length < ANTIFRAUD.walletFunnelSenders) return false;
+    const fresh = await this.redis.set(`af:funnel:${recipientId}`, '1', 'EX', ANTIFRAUD.walletFunnelHours * 3600, 'NX');
+    if (fresh !== 'OK') return false;
+    await this.flag('wallet_funnel', recipientId, {
+      senderIds: rows.map((r) => r.senderId),
+      total: rows.reduce((s, r) => s + Number(r.total), 0),
+      windowHours: ANTIFRAUD.walletFunnelHours,
+    });
+    return true;
+  }
+
+  /**
+   * ≥ 5 downvotes on one user within 24 h from voters whose account is < 30 days old or whose rating is
+   * < 50 → a flag on the target, at most once per 24 h. Flag only.
+   */
+  async checkVoteBurst(targetId: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ voterId: string }[]>`
+      SELECT v.voter_id::text AS "voterId"
+      FROM user_votes v JOIN users u ON u.id = v.voter_id
+      WHERE v.target_id = ${targetId}::uuid AND v.value = -1
+        AND v.created_at > now() - make_interval(hours => ${ANTIFRAUD.voteBurstHours}::int)
+        AND (u.created_at > now() - make_interval(days => ${ANTIFRAUD.voteBurstNewAccountDays}::int) OR u.rating < ${ANTIFRAUD.voteBurstLowRating})`;
+    if (rows.length < ANTIFRAUD.voteBurstDownvotes) return false;
+    const fresh = await this.redis.set(`af:vote-burst:${targetId}`, '1', 'EX', ANTIFRAUD.voteBurstHours * 3600, 'NX');
+    if (fresh !== 'OK') return false;
+    await this.flag('vote_burst', targetId, { voterIds: rows.map((r) => r.voterId), count: rows.length, windowHours: ANTIFRAUD.voteBurstHours });
+    return true;
+  }
+
+  /** A submitter's rejected violations reach 3 within 90 days → flag, at most once per 30 days. */
+  async checkViolationRejections(submitterId: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id::text FROM violations
+      WHERE submitter_id = ${submitterId}::uuid AND status = 'rejected'
+        AND decided_at > now() - make_interval(days => ${ANTIFRAUD.violationRejectionsDays}::int)
+      ORDER BY decided_at`;
+    if (rows.length < ANTIFRAUD.violationRejectionsMin) return false;
+    const fresh = await this.redis.set(`af:violation-rejections:${submitterId}`, '1', 'EX', 30 * 24 * 3600, 'NX');
+    if (fresh !== 'OK') return false;
+    await this.flag('violation_rejections', submitterId, { count: rows.length, violationIds: rows.map((r) => r.id), windowDays: ANTIFRAUD.violationRejectionsDays });
+    return true;
+  }
 
   async flag(kind: FraudFlagKind, userId: string | null, details: Record<string, unknown>): Promise<string> {
     const id = newId();

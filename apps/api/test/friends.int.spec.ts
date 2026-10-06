@@ -46,7 +46,7 @@ describe('friend requests lifecycle', () => {
 
     const [reqNotif] = await notificationsOf(b.id);
     expect(reqNotif).toMatchObject({ type: 'friend_request', readAt: null });
-    expect(reqNotif!.payload).toEqual({ requestId, user: { id: a.id, nickname: 'fr_alice', name: 'Alice', avatarUrl: null, rating: 50 } });
+    expect(reqNotif!.payload).toEqual({ requestId, user: { id: a.id, nickname: 'fr_alice', name: 'Alice', avatarUrl: null, rating: 50, isPremium: false } });
 
     await api(b.token).accept(requestId).expect(204);
     expect(await api(a.token).relation(b.id)).toBe('friend');

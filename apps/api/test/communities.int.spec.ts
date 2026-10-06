@@ -158,7 +158,7 @@ describe('joining and leaving', () => {
     expect((await c(asker).join(id).expect(409)).body.error.code).toBe('ALREADY_MEMBER');
     for (const m of [owner, mod]) {
       const n = await t.prisma.notification.findFirstOrThrow({ where: { userId: m.id, type: 'community_request' } });
-      expect(n.payload).toEqual({ communityId: id, communityName: name, user: { id: asker.id, nickname: 'asker_x', name: 'Asker', avatarUrl: null, rating: 50 } });
+      expect(n.payload).toEqual({ communityId: id, communityName: name, user: { id: asker.id, nickname: 'asker_x', name: 'Asker', avatarUrl: null, rating: 50, isPremium: false } });
     }
     const pendingList = (await c(mod).members(id, '?status=pending').expect(200)).body.items as CommunityMemberDto[];
     expect(pendingList.map((m) => [m.user.id, m.status, m.joinedAt])).toEqual([[asker.id, 'pending', null]]);

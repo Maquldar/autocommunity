@@ -54,7 +54,7 @@ describe('posts: validation and media', () => {
       { poll: { question: 'Куда едем?', options: ['Медеу', 'медеу'] } },
       { poll: { question: 'Куда едем?', options: ['Медеу', 'x'.repeat(81)] } },
       { poll: { question: 'Куда едем?', options: ['Медеу', ''] } },
-      { mediaUploadIds: Array.from({ length: 7 }, () => newId()) },
+      { mediaUploadIds: Array.from({ length: 13 }, () => newId()) }, // above even the premium maximum (12)
       { text: 'x', communityId: 'nope' },
     ];
     for (const b of bad) expect((await api(me).post(b).expect(400)).body.error.code, JSON.stringify(b).slice(0, 60)).toBe('VALIDATION_ERROR');

@@ -83,7 +83,7 @@ describe('trust rating', () => {
     const mine = (await get(helper, '/me/rating').expect(200)).body as RatingDto;
     expect(mine).toEqual({
       rating: 61,
-      breakdown: { base: 50, help: 3, reviews: 7.5, activity: 0.25, tenure: 0, penalties: 0 },
+      breakdown: { base: 50, help: 3, reviews: 7.5, activity: 0.25, tenure: 0, votes: 0, penalties: 0 },
       nextThresholds: { sosCreate: 20, sosHelp: 30 },
     });
     // Public breakdown, private ledger.

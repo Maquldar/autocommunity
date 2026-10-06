@@ -28,6 +28,9 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { ViolationsModule } from './modules/violations/violations.module';
+import { VotesModule } from './modules/votes/votes.module';
+import { WalletModule } from './modules/wallet/wallet.module';
 
 @Module({
   imports: [
@@ -58,6 +61,9 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     AdminModule,
     EventsModule,
     FeedModule,
+    WalletModule,
+    VotesModule,
+    ViolationsModule,
   ],
 })
 export class AppModule {}

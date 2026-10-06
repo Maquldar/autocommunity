@@ -343,7 +343,7 @@ describe('DELETE /me and notifications', () => {
     await request(t.http).delete('/api/v1/me').set(bearer(leaver.token)).send({ confirm: 'DELETE' }).expect(204);
 
     const accepted = await t.prisma.notification.findFirstOrThrow({ where: { userId: friend.id, type: 'friend_accepted' } });
-    expect(accepted.payload).toEqual({ user: { id: leaver.id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0 } });
+    expect(accepted.payload).toEqual({ user: { id: leaver.id, nickname: '', name: 'Deleted user', avatarUrl: null, rating: 0, isPremium: false } });
     expect(await t.prisma.notification.count({ where: { userId: asked.id, type: 'friend_request' } })).toBe(0);
     const req = await t.prisma.notification.findFirstOrThrow({ where: { userId: owner.id, type: 'community_request' } });
     expect((req.payload as { user: { name: string } }).user.name).toBe('Deleted user');

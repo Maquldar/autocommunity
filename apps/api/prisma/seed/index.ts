@@ -19,6 +19,7 @@ import { createRng, type Rng } from './rng';
 import { seedSos } from './sos';
 import { seedServices } from './services';
 import { seedEventsAndFeed } from './events-feed';
+import { seedPhase9 } from './phase9';
 
 loadDotEnv();
 const env = parseEnvOrThrow();
@@ -403,6 +404,9 @@ async function main(): Promise<void> {
       { requester: others[18]!, helper: others[7]!, daysAgo: 200, helperStars: 3, requesterStars: 5, comment: 'Помог, но пришлось долго ждать.' },
     ],
   });
+
+  // Phase 9: wallets, premium, votes, detailed vehicles, violations (votes and penalties feed the ratings).
+  console.log(`Seeded ${await seedPhase9({ prisma, storage, newId, now: NOW, users })}.`);
 
   // Ratings: every user's rating is computed from the seeded data with the real formula.
   const recomputed = await recomputeSeedRatings(users.map((u) => u.id));

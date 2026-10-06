@@ -1,5 +1,5 @@
 import { Controller, Delete, Get, HttpCode, Patch, Post } from '@nestjs/common';
-import { updateVehicleBodySchema, vehicleBodySchema, type VehicleDto, type VehicleInput } from '@autoc/shared';
+import { updateVehicleBodySchema, vehicleBodySchema, type OwnVehicleDto, type VehicleInput } from '@autoc/shared';
 import { CurrentUser, type AuthUser } from '../../common/auth/decorators';
 import { IdParam, ZBody } from '../../common/validation/zod.pipe';
 import { VehiclesService } from './vehicles.service';
@@ -9,12 +9,12 @@ export class VehiclesController {
   constructor(private readonly vehicles: VehiclesService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser): Promise<VehicleDto[]> {
-    return this.vehicles.list(user.id, true);
+  list(@CurrentUser() user: AuthUser): Promise<OwnVehicleDto[]> {
+    return this.vehicles.listOwn(user.id);
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @ZBody(vehicleBodySchema) body: VehicleInput): Promise<VehicleDto> {
+  create(@CurrentUser() user: AuthUser, @ZBody(vehicleBodySchema) body: VehicleInput): Promise<OwnVehicleDto> {
     return this.vehicles.create(user.id, body);
   }
 
@@ -23,7 +23,7 @@ export class VehiclesController {
     @CurrentUser() user: AuthUser,
     @IdParam() id: string,
     @ZBody(updateVehicleBodySchema) body: Partial<VehicleInput>,
-  ): Promise<VehicleDto> {
+  ): Promise<OwnVehicleDto> {
     return this.vehicles.update(user.id, id, body);
   }
 

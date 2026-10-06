@@ -16,6 +16,7 @@ import {
 } from '@autoc/shared';
 import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
+import { perkDetails, userPerkLimit } from '../../common/premium';
 import { decodeCursor, encodeCursor } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RateLimiterService } from '../../infra/rate-limit/rate-limiter.service';
@@ -320,6 +321,9 @@ export class FeedService {
     if (videos && ids.length > 1) {
       throw Errors.validation('A post has up to 6 photos or one video', [{ path: ['mediaUploadIds'], message: 'Up to 6 photos or one video' }]);
     }
+    // Premium doubles the image limit (API.md §9.2); the schema accepts the premium maximum.
+    const limit = await userPerkLimit(this.prisma, userId, 'postMedia');
+    if (ids.length > limit) throw Errors.badRequest('MEDIA_LIMIT', `A post can have up to ${limit} photos`, perkDetails('postMedia', limit));
   }
 
   private async activeRole(communityId: string, userId: string): Promise<string | null> {

@@ -30,7 +30,8 @@ export async function loadRatingInput(db: Db, userId: string, now: Date): Promis
   const user = await db.user.findUnique({ where: { id: userId }, select: { onboardedAt: true } });
   if (!user) return null;
   const since30 = new Date(now.getTime() - RATING_FORMULA.activity.windowDays * DAY_MS);
-  const [helps, reviews, activity, penalties] = await Promise.all([
+  const sinceVotes = new Date(now.getTime() - RATING_FORMULA.votes.windowDays * DAY_MS);
+  const [helps, reviews, activity, penalties, votes] = await Promise.all([
     db.$queryRaw<{ closedAt: Date; requesterStars: number | null; counterpartId: string }[]>`
       SELECT s.closed_at AS "closedAt", rv.stars AS "requesterStars", s.user_id AS "counterpartId"
       FROM sos_responses r
@@ -57,9 +58,17 @@ export async function loadRatingInput(db: Db, userId: string, now: Date): Promis
         SELECT ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Almaty')::date FROM reviews
           WHERE author_id = ${userId}::uuid AND created_at > ${since30} AND created_at <= ${now}
       ) x`,
+    // A penalty stops counting once a later `penalty_reversed` row with the same kind and refId exists.
     db.$queryRaw<{ points: number; createdAt: Date; kind: string | null }[]>`
-      SELECT penalty_points AS points, created_at AS "createdAt", penalty_kind AS kind FROM rating_events
-      WHERE user_id = ${userId}::uuid AND penalty_points IS NOT NULL AND created_at <= ${now}`,
+      SELECT p.penalty_points AS points, p.created_at AS "createdAt", p.penalty_kind AS kind FROM rating_events p
+      WHERE p.user_id = ${userId}::uuid AND p.penalty_points IS NOT NULL AND p.created_at <= ${now}
+        AND NOT EXISTS (
+          SELECT 1 FROM rating_events r
+          WHERE r.user_id = p.user_id AND r.reason = 'penalty_reversed' AND r.ref_id = p.ref_id
+            AND r.penalty_kind IS NOT DISTINCT FROM p.penalty_kind AND r.created_at >= p.created_at AND r.created_at <= ${now})`,
+    db.$queryRaw<{ value: number; weight: number; createdAt: Date }[]>`
+      SELECT value::int AS value, weight, created_at AS "createdAt" FROM user_votes
+      WHERE target_id = ${userId}::uuid AND created_at > ${sinceVotes} AND created_at <= ${now}`,
   ]);
   return {
     onboardedAt: user.onboardedAt && user.onboardedAt <= now ? user.onboardedAt : user.onboardedAt ? now : null,
@@ -67,7 +76,6 @@ export async function loadRatingInput(db: Db, userId: string, now: Date): Promis
     reviewStars: oncePerCounterpart(reviews.map((r) => ({ ...r, at: r.createdAt }))).map((r) => r.stars),
     activeDays30: activity[0]?.days ?? 0,
     penalties,
-    // Phase 9 step B: driver votes.
-    votes: [],
+    votes,
   };
 }

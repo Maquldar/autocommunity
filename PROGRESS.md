@@ -12,7 +12,7 @@
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ✅ done |
 | Final release gate (DoD) | ✅ done (2026-10-06) |
-| 9. Wallet, premium, votes, violations, vehicle details, tiers | 🚧 Step A (contract) done; Step B (API) next |
+| 9. Wallet, premium, votes, violations, vehicle details, tiers | ✅ API done (web in progress) |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
 
@@ -161,4 +161,12 @@
 ## Phase 9 — Monetization and trust (2026-10-06, in progress)
 
 **Step A — contract (done):** API.md §9 and SPEC.md §9 written; `packages/shared` has the zod schemas and DTOs (`wallet.ts`, `votes.ts`, `violations.ts`, `tiers.ts`, vehicle details in `schemas.ts`), the `votes` rating component and the capped `violation` penalty in `computeRating`, 8 notification types with ru/en push texts, upload purposes `vehicle` / `violation`, 3 fraud flag kinds and 8 admin actions. Shared tests 72/72; API and web typecheck clean; web unit 390/390; API unit 86/86. The API returns placeholder values for the new DTO fields (`isPremium: false`, empty vehicle details) until Step B.
+
+**Step B — API (done):**
+- Migrations `20261006120000_phase9_wallet_premium_votes_violations` and `20261006120100_phase9_vehicle_cover` (wallets with a `balance >= 0` CHECK, an append-only ledger trigger, top-ups, premium subscriptions with one live row per user, votes, violations, vehicle details).
+- Modules `wallet` (PaymentProvider adapter + demo provider, transfers, premium, daily renewal job with a Redis lock), `votes` and `violations` (plus `GET /vehicles/:id`), admin routes for wallets, votes and violations (audited), and the antifraud flags `wallet_funnel`, `vote_burst` and `violation_rejections`.
+- Premium limits are hooked into vehicles, post images, owned communities and memberships.
+- The rating gains votes, capped violation penalties and penalty reversal.
+- Seed data for every Phase 9 feature.
+- Integration tests: `wallet`, `premium`, `votes` and `violations` (49 tests), including the races: concurrent transfers never overdraw, opposite transfers don't deadlock, a repeated or concurrent top-up confirm credits once, a concurrent idempotent transfer moves coins once, concurrent votes on one pair produce exactly one, and concurrent subscribes charge once.
 

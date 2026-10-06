@@ -2,15 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { LOCALES, tierForRating, type Locale, type Me, type Relation, type UserMini, type UserPublic } from '@autoc/shared';
 import { isUserBlocked } from '../../common/auth/user-state.service';
+import { isPremiumAt } from '../../common/premium';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Storage } from '../../infra/storage/storage';
+import { toUploadDto } from '../uploads/upload.mapper';
 import { toVehicleDto } from '../vehicles/vehicle.mapper';
 import { RelationService } from './relation.service';
 
 /** Relations needed to render any user view; use with `include` on every user query that feeds the mapper. */
 export const userViewInclude = {
   avatar: { select: { key: true, thumbKey: true } },
-  vehicles: { where: { isPrimary: true }, take: 1 },
+  vehicles: { where: { isPrimary: true }, take: 1, include: { cover: true } },
 } satisfies Prisma.UserInclude;
 
 export type UserWithView = Prisma.UserGetPayload<{ include: typeof userViewInclude }>;
@@ -35,8 +37,7 @@ export class UserViewService {
   }
 
   toMini(user: UserWithView): UserMini {
-    // Phase 9 step B: isPremium from the subscription.
-    return { id: user.id, nickname: user.nickname ?? '', name: user.name, avatarUrl: this.avatarUrl(user), rating: user.rating, isPremium: false };
+    return { id: user.id, nickname: user.nickname ?? '', name: user.name, avatarUrl: this.avatarUrl(user), rating: user.rating, isPremium: isPremiumAt(user.premiumUntil) };
   }
 
   toPublicWithRelation(user: UserWithView, relation: Relation): UserPublic {
@@ -50,12 +51,12 @@ export class UserViewService {
       bio: user.bio,
       rating: user.rating,
       createdAt: user.createdAt.toISOString(),
-      primaryVehicle: primary ? toVehicleDto(primary, canSeePlate(relation)) : null,
+      // Embedded vehicles carry only their cover photo (API.md §9.0); the full set is on /users/:id/vehicles.
+      primaryVehicle: primary ? toVehicleDto(primary, canSeePlate(relation), primary.cover ? [toUploadDto(primary.cover, this.storage)] : []) : null,
       relation,
       status: isUserBlocked({ status: user.status, blockedUntil: user.blockedUntil?.toISOString() ?? null }) ? 'blocked' : 'active',
-      // Phase 9 step B: isPremium / profileFrame from the subscription.
-      isPremium: false,
-      profileFrame: null,
+      isPremium: isPremiumAt(user.premiumUntil),
+      profileFrame: isPremiumAt(user.premiumUntil) ? 'premium' : null,
       tier: tierForRating(user.rating),
     };
   }

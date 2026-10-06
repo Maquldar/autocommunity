@@ -59,6 +59,8 @@ model User {
   lastActiveAt     DateTime?   @map("last_active_at")
   /// Created by the demo seed; only these users are moved by DEMO_LIVE_LOCATIONS.
   isSeed           Boolean     @default(false) @map("is_seed")
+  /// Phase 9: end of the paid premium period (cache of premium_subscriptions; premium while > now).
+  premiumUntil     DateTime?   @map("premium_until")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
@@ -92,6 +94,14 @@ model User {
   serviceVisits      ServiceVisit[]
   servicesSubmitted  ServiceCenter[]
   fraudFlags         FraudFlag[]
+  wallet             Wallet?
+  walletTransactions WalletTransaction[]
+  topups             Topup[]
+  premiumSubs        PremiumSubscription[]
+  votesGiven         UserVote[]         @relation("VoteVoter")
+  votesReceived      UserVote[]         @relation("VoteTarget")
+  violationsOwned    Violation[]        @relation("ViolationOwner")
+  violationsFiled    Violation[]        @relation("ViolationSubmitter")
 
   @@index([city])
   @@index([status])
@@ -156,13 +166,29 @@ model Vehicle {
   year      Int
   plate     String?
   isPrimary Boolean  @default(false) @map("is_primary")
+  // phase 9 details; the VIN is owner-only, never in public DTOs
+  vin            String?
+  engineVolumeL  Float?               @map("engine_volume_l")
+  fuel           VehicleFuel?
+  transmission   VehicleTransmission?
+  drive          VehicleDrive?
+  bodyType       VehicleBodyType?     @map("body_type")
+  color          VehicleColor?
+  mileageKm      Int?                 @map("mileage_km")
+  description    String?
+  photoUploadIds String[]             @default([]) @map("photo_upload_ids") @db.Uuid
+  /// First photo (photo_upload_ids[1]), joined into embedded user views without extra queries.
+  coverUploadId  String?              @map("cover_upload_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cover      Upload?     @relation("VehicleCover", fields: [coverUploadId], references: [id], onDelete: SetNull)
+  violations Violation[]
 
   @@index([userId])
   @@index([brand])
+  @@index([photoUploadIds], type: Gin)
   @@map("vehicles")
 }
 
@@ -671,6 +697,7 @@ model Upload {
   avatarOf        User[]      @relation("UserAvatar")
   communityAvatar Community[] @relation("CommunityAvatar")
   messages        Message[]
+  vehicleCovers   Vehicle[]   @relation("VehicleCover")
 
   @@index([ownerId, createdAt])
   @@index([contentHash])
@@ -842,4 +869,226 @@ model StoredFile {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("stored_files")
+}
+
+/* ------------------------------------------------------------------ phase 9: vehicles, wallet, premium, votes, violations */
+
+enum VehicleFuel {
+  petrol
+  diesel
+  gas
+  hybrid
+  electric
+}
+
+enum VehicleTransmission {
+  manual
+  automatic
+  robot
+  cvt
+}
+
+enum VehicleDrive {
+  fwd
+  rwd
+  awd
+}
+
+enum VehicleBodyType {
+  sedan
+  hatchback
+  wagon
+  suv
+  crossover
+  coupe
+  minivan
+  pickup
+  van
+}
+
+enum VehicleColor {
+  white
+  black
+  silver
+  gray
+  red
+  blue
+  green
+  brown
+  beige
+  yellow
+  orange
+  other
+}
+
+/// Coin balance (1 coin = 1 ₸, no cash-out). balance >= 0 is a CHECK constraint (migration SQL).
+model Wallet {
+  userId    String    @id @map("user_id") @db.Uuid
+  balance   BigInt    @default(0)
+  frozen    Boolean   @default(false)
+  frozenAt  DateTime? @map("frozen_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+enum WalletTxKind {
+  topup
+  transfer_out
+  transfer_in
+  subscription
+  admin_adjust
+  refund
+}
+
+/// Immutable ledger (UPDATE/DELETE are rejected by a trigger). balance_after = wallet balance after the row.
+model WalletTransaction {
+  id             String       @id @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  kind           WalletTxKind
+  amount         BigInt
+  balanceAfter   BigInt       @map("balance_after")
+  counterpartyId String?      @map("counterparty_user_id") @db.Uuid
+  ref            String?      @db.Uuid
+  note           String?
+  idempotencyKey String?      @map("idempotency_key")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt(sort: Desc), id])
+  @@index([counterpartyId, kind, createdAt])
+  @@index([userId, kind, createdAt])
+  @@map("wallet_transactions")
+}
+
+enum TopupStatus {
+  pending
+  succeeded
+  declined
+  expired
+}
+
+model Topup {
+  id          String      @id @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
+  amount      Int
+  provider    String
+  providerRef String?     @map("provider_ref")
+  status      TopupStatus @default(pending)
+  cardLast4   String?     @map("card_last4")
+  expiresAt   DateTime    @map("expires_at")
+  completedAt DateTime?   @map("completed_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("topups")
+}
+
+/// One live row (ended_at IS NULL) per user, enforced by a partial unique index (migration SQL).
+model PremiumSubscription {
+  id               String    @id @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  startedAt        DateTime  @map("started_at")
+  currentPeriodEnd DateTime  @map("current_period_end")
+  autoRenew        Boolean   @default(true) @map("auto_renew")
+  /// The period end the 3-day reminder was sent for (once per period).
+  reminderSentFor  DateTime? @map("reminder_sent_for")
+  endedAt          DateTime? @map("ended_at")
+  endReason        String?   @map("end_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([currentPeriodEnd])
+  @@map("premium_subscriptions")
+}
+
+/// Driver votes (+/−). `weight` is fixed at creation from the voter's rating (voteWeight).
+model UserVote {
+  id        String   @id @db.Uuid
+  voterId   String   @map("voter_id") @db.Uuid
+  targetId  String   @map("target_id") @db.Uuid
+  value     Int      @db.SmallInt
+  reason    String
+  comment   String?
+  weight    Float
+  createdAt DateTime @default(now()) @map("created_at")
+
+  voter  User @relation("VoteVoter", fields: [voterId], references: [id], onDelete: Cascade)
+  target User @relation("VoteTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, createdAt])
+  @@index([voterId, targetId, createdAt])
+  @@index([voterId, createdAt])
+  @@map("user_votes")
+}
+
+enum ViolationCategory {
+  speeding
+  red_light
+  drunk_driving
+  wrong_lane
+  no_license
+  accident_fled
+  dangerous_driving
+  parking
+  other
+}
+
+enum ViolationCodeType {
+  koap
+  uk
+}
+
+enum ViolationStatus {
+  pending
+  approved
+  rejected
+  disputed
+  removed
+}
+
+/// A reported vehicle violation. The vehicle snapshot survives vehicle deletion (vehicle_id → null).
+model Violation {
+  id             String            @id @db.Uuid
+  vehicleId      String?           @map("vehicle_id") @db.Uuid
+  ownerId        String            @map("owner_id") @db.Uuid
+  submitterId    String            @map("submitter_id") @db.Uuid
+  vehicleBrand   String            @map("vehicle_brand")
+  vehicleModel   String            @map("vehicle_model")
+  vehicleYear    Int               @map("vehicle_year")
+  category       ViolationCategory
+  codeType       ViolationCodeType @map("code_type")
+  article        String?
+  occurredAt     DateTime          @map("occurred_at")
+  description    String
+  photoUploadIds String[]          @default([]) @map("photo_upload_ids") @db.Uuid
+  status         ViolationStatus   @default(pending)
+  disputeText    String?           @map("dispute_text")
+  disputedAt     DateTime?         @map("disputed_at")
+  decidedAt      DateTime?         @map("decided_at")
+  decidedById    String?           @map("decided_by_id") @db.Uuid
+  decisionNote   String?           @map("decision_note")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  owner     User     @relation("ViolationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  submitter User     @relation("ViolationSubmitter", fields: [submitterId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, status])
+  @@index([ownerId, status])
+  @@index([submitterId, createdAt])
+  @@index([status, createdAt])
+  @@index([photoUploadIds], type: Gin)
+  @@map("violations")
 }

@@ -92,6 +92,8 @@ export const envSchema = z
     SOS_EXPAND_DELAY_MS: z.coerce.number().int().min(100).default(5 * 60 * 1000),
     /** SOS lifetime without acceptance (expiresAt = createdAt + this). Tests shorten it. */
     SOS_TTL_SEC: z.coerce.number().int().min(1).default(2 * 3600),
+    /** Phase 9 top-up provider (API.md §9.1). Only `demo` (in-app checkout, test card) exists so far. */
+    PAYMENT_PROVIDER: z.enum(['demo']).default('demo'),
     /** `event_reminder` goes out this long before an event starts (API.md §8: 2 h). Tests shorten it. */
     EVENT_REMINDER_LEAD_MS: z.coerce.number().int().min(0).default(2 * 3600 * 1000),
   })

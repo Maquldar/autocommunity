@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, type Community, type CommunityMember } from '@prisma/client';
 import {
   communityNameKey,
-  COMMUNITY_LIMITS,
   type CommunitiesQuery,
   type CommunityDto,
   type CommunityMemberDto,
@@ -14,6 +13,7 @@ import {
 } from '@autoc/shared';
 import { Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
+import { perkConflict, userPerkLimit } from '../../common/premium';
 import { decodeCursor, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { Storage } from '../../infra/storage/storage';
@@ -120,7 +120,8 @@ export class CommunitiesService {
       await this.prisma.$transaction(async (tx) => {
         await lockUser(tx, userId);
         const owned = await tx.community.count({ where: { ownerId: userId, deletedAt: null } });
-        if (owned >= COMMUNITY_LIMITS.ownedPerUser) throw Errors.conflict('COMMUNITY_LIMIT', `You can own at most ${COMMUNITY_LIMITS.ownedPerUser} communities`);
+        const ownLimit = await userPerkLimit(tx, userId, 'communitiesOwned');
+        if (owned >= ownLimit) throw perkConflict('COMMUNITY_LIMIT', `You can own at most ${ownLimit} communities`, 'communitiesOwned', ownLimit);
         await this.assertMembershipRoom(tx, userId);
         await this.assertNameFree(tx, input.name);
         if (input.avatarUploadId) await assertAvatarFree(tx, input.avatarUploadId);
@@ -285,7 +286,8 @@ export class CommunitiesService {
       if (role === 'owner') {
         await lockUser(tx, targetId);
         const owned = await tx.community.count({ where: { ownerId: targetId, deletedAt: null } });
-        if (owned >= COMMUNITY_LIMITS.ownedPerUser) throw Errors.conflict('COMMUNITY_LIMIT', 'The new owner already owns the maximum number of communities');
+        const ownLimit = await userPerkLimit(tx, targetId, 'communitiesOwned');
+        if (owned >= ownLimit) throw perkConflict('COMMUNITY_LIMIT', 'The new owner already owns the maximum number of communities', 'communitiesOwned', ownLimit);
         await tx.community.update({ where: { id }, data: { ownerId: targetId } });
         await tx.communityMember.update({ where: { communityId_userId: { communityId: id, userId: actorId } }, data: { role: 'moderator' } });
       }
@@ -343,9 +345,8 @@ export class CommunitiesService {
 
   private async assertMembershipRoom(tx: Tx, userId: string): Promise<void> {
     const count = await tx.communityMember.count({ where: { userId, community: { deletedAt: null } } });
-    if (count >= COMMUNITY_LIMITS.membershipsPerUser) {
-      throw Errors.conflict('MEMBERSHIP_LIMIT', `You can belong to at most ${COMMUNITY_LIMITS.membershipsPerUser} communities`);
-    }
+    const limit = await userPerkLimit(tx, userId, 'communityMemberships');
+    if (count >= limit) throw perkConflict('MEMBERSHIP_LIMIT', `You can belong to at most ${limit} communities`, 'communityMemberships', limit);
   }
 
   private async assertNameFree(tx: Tx, name: string): Promise<void> {

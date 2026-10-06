@@ -27,4 +27,5 @@ Features from PLAN.md that are not in this build, with the reason. Updated every
 | A socket that connects at the same moment as its removal from a chat can get one event for about 1–3 ms | Rooms are re-checked right after the connection; the window is one DB query |
 | Uploads used as service photos are not in the exclusive-attachment check | The services module was built in parallel; low impact, since the owner uploads their own photos |
 | The free Render plan has 512 MB of RAM, sleeps when idle, and its database expires after 30 days | Hosting limits; DEPLOY.md explains how to upgrade |
-
+| A VIN is not unique across accounts, and nobody verifies it | No VIN registry is available. The VIN is shown only to its owner, so a wrong or copied VIN doesn't affect anyone else |
+| Vehicle violations rely on the photos and the admin's judgment, with no check against official fine records | There is no public API for КоАП/УК records. Category plus free-text article only, by design (no hardcoded article numbers) |

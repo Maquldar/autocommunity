@@ -875,3 +875,40 @@ JSON bodies take real numbers only (`vehicleBodySchema`); `vehicleSchema` coerce
 ### 9.6 Web routes referenced by push URLs
 
 `/wallet` (balance, history, top-up, transfer), `/wallet/checkout/{topupId}` (demo checkout), `/premium`, `/profile?tab=votes`, `/vehicles/{id}?tab=violations`, `/admin/violations`.
+
+### Phase 9 clarifications (added during implementation)
+
+All additive; no field or route of §9.0–9.6 changed.
+
+- **Vehicle `color`** (added after the freeze, additive): optional enum `white | black | silver | gray | red | blue | green | brown | beige | yellow | orange | other` on create/PATCH and in every `VehicleDto`.
+- **Embedded vehicles:** `UserPublic.primaryVehicle.photos` (and every other user view that embeds the primary vehicle) holds only the **cover** — the first photo — so user lists render without extra queries. The full ordered set is in `GET /me/vehicles`, `GET /users/:id/vehicles` and `GET /vehicles/:id`.
+- **Vehicle photos:** an upload can belong to one vehicle only (`400 INVALID_UPLOAD` otherwise). Photos removed by a PATCH and the photos of a deleted vehicle are deleted. Vehicle and violation photos count as attached for the hourly orphan purge.
+- **Wallet:**
+  - `PAYMENT_PROVIDER` (env, default and only value `demo`).
+  - `ACCOUNT_TOO_NEW` on transfers has `details { minHours, retryAfterSec }`; `RATING_TOO_LOW` has `details { min }`.
+  - A replayed transfer key is answered before the sender gates (a replay succeeds even if a limit has been hit since). Concurrent requests with the same key move coins once; all of them get the same transaction (`201` for the first, `200` for the rest).
+  - The ledger has DB guards: `wallets.balance >= 0`, `wallet_transactions.amount <> 0` and `balance_after >= 0` (CHECKs), and an append-only trigger that rejects `UPDATE`/`DELETE` on `wallet_transactions`.
+  - Admin wallet reads (`GET /admin/users/:id/wallet[/transactions]`) work for any user (`404` if unknown); the writes use `assertTargetable`.
+- **Premium:**
+  - `users.premium_until` caches the paid period end.
+  - Renewal charges carry the idempotency key `renew:{subscriptionId}:{periodEndMs}`, so a period can never be charged twice. A subscription whose period lapsed (auto-renew on, coins arrived later) restarts from the renewal time, not from the old end.
+  - `POST /premium/subscribe` after a lapsed period (before the job ran) closes the old row and starts a new one.
+  - Deleting an account turns auto-renew off.
+- **Votes:**
+  - The daily limit (20 per rolling 24 h) is counted in the database under a per-voter lock: `429 RATE_LIMITED` with `details.retryAfterSec`.
+  - `ACCOUNT_TOO_NEW` has `details { minDays, retryAfterSec }`.
+  - Votes received count in the rating only while they are less than 180 days old.
+  - Admin removal recomputes the target with ledger reason `recalc` (refId = vote id).
+- **Violations:**
+  - Non-owner gates: `ACCOUNT_TOO_NEW` (`details { minDays, retryAfterSec }`) and `RATING_TOO_LOW` (`details { min }`). An owner reporting their own vehicle is never gated and gets no `violation_reported` notification.
+  - The daily limit is counted in the database under a per-submitter lock (`429 RATE_LIMITED`, `details.retryAfterSec`).
+  - Each photo can back only one violation (`400 INVALID_UPLOAD`).
+  - Rows keep a vehicle snapshot (brand, model, year). When the vehicle is deleted, `vehicle.id` is `''` and the violation leaves the public and owner lists (it stays in `/me/violations/submitted` and admin lists).
+  - Disputes: the submitter and the public get `dispute: null`.
+  - `POST /violations/:id/dispute` by someone who can see the violation but isn't the owner (the public for approved ones, the submitter) → `403 FORBIDDEN`; everyone else → `404`.
+  - `GET /admin/violations` without `status` is newest first. Approving or upholding applies the −5 penalty only if this violation has none yet; `remove` writes `penalty_reversed` only if a penalty exists.
+- **Seed:**
+  - Wallets for the demo user and 8 others, all with succeeded demo top-ups and transfers. The demo user has premium (renews in about 20 days) and about 23 000 coins; a friend of theirs has a cancelled premium.
+  - 7 driver votes (3 up on demo), a detailed demo car with 2 photos and details on 12 other cars.
+  - 5 violations: 2 approved with penalties on one driver, 1 pending, 1 disputed, 1 rejected.
+  - Wallet ledgers and the rating ledger are consistent.

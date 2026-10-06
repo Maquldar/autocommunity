@@ -14,7 +14,7 @@ const BATCH = 500;
 
 /**
  * Hourly purge of orphaned uploads (uploaded but never attached to a profile, community, message, post,
- * SOS, service or visit) older than 24 h. Works with every storage driver (disk, Postgres, S3): objects
+ * SOS, service, visit, vehicle or violation) older than 24 h. Works with every storage driver (disk, Postgres, S3): objects
  * go through `Storage.delete`. A Redis lock makes one instance run it per hour.
  */
 @Injectable()
@@ -63,6 +63,8 @@ export class UploadsCleanupService implements OnApplicationBootstrap, OnApplicat
           AND NOT EXISTS (SELECT 1 FROM sos_requests x WHERE x.photo_upload_ids @> ARRAY[u.id])
           AND NOT EXISTS (SELECT 1 FROM service_centers x WHERE x.photo_upload_ids @> ARRAY[u.id])
           AND NOT EXISTS (SELECT 1 FROM service_visits x WHERE x.upload_id = u.id)
+          AND NOT EXISTS (SELECT 1 FROM vehicles x WHERE x.photo_upload_ids @> ARRAY[u.id])
+          AND NOT EXISTS (SELECT 1 FROM violations x WHERE x.photo_upload_ids @> ARRAY[u.id])
         ORDER BY u.id
         LIMIT ${BATCH}::int`;
       for (const r of rows) {

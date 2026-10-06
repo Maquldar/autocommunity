@@ -66,6 +66,25 @@ export class RatingService {
     }
   }
 
+  /**
+   * Phase 9: a penalty no longer counts (a removed violation). Writes a `penalty_reversed` row (refId and kind
+   * of the penalty) whose `delta` is the resulting rating change. No-op when no live penalty matches.
+   */
+  async reversePenaltyTx(tx: Tx, userId: string, kind: RatingPenaltyKind, refId: string, now = new Date()): Promise<number | null> {
+    const locked = await tx.$queryRaw<{ rating: number }[]>`SELECT rating FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    if (!locked[0]) return null;
+    const live = await tx.ratingEvent.findFirst({ where: { userId, reason: 'penalty', penaltyKind: kind, refId } });
+    const reversed = await tx.ratingEvent.findFirst({ where: { userId, reason: 'penalty_reversed', penaltyKind: kind, refId } });
+    if (!live || reversed) return locked[0].rating;
+    const id = newId();
+    await tx.ratingEvent.create({ data: { id, userId, delta: 0, reason: 'penalty_reversed', refId, penaltyKind: kind, createdAt: now } });
+    const input = (await loadRatingInput(tx, userId, now))!;
+    const { rating } = computeRating(input, now);
+    await tx.user.update({ where: { id: userId }, data: { rating } });
+    await tx.ratingEvent.update({ where: { id }, data: { delta: rating - locked[0].rating } });
+    return rating;
+  }
+
   /** Live breakdown. If the cache drifted (decay since the last job), it is refreshed first so both agree. */
   async get(userId: string, now = new Date()): Promise<RatingDto> {
     return this.prisma.$transaction(async (tx) => {
