@@ -8,7 +8,7 @@
 | 3. Communities + chat | ✅ done |
 | 4. SOS + direct chats | 🚧 API done (direct chats shipped in Phase 3), UI in progress |
 | 5. Ratings, reviews, reports | 🚧 API done, UI pending |
-| 6. Admin, antifraud, hardening | ⏳ |
+| 6. Admin, antifraud, hardening | ✅ done (branch phase6) |
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ⏳ |
 
@@ -113,3 +113,13 @@
 **Known issues**
 - After a removal that coincides with the user's connect, a socket can still receive a chat event for the duration of one DB query (~1–3 ms).
 - Uploads used as service photos aren't part of the exclusive-attachment check yet (the services module was built in parallel).
+
+## Phase 6 — Admin, antifraud, load and security (2026-10-06)
+
+**Built**
+- Admin API (`/admin/*`, API.md §6): stats, users (search, detail, warn, block with optional end, unblock, SOS ban/unban), communities (delete), SOS (list, detail, mark fake → −50 penalty), reports (queue with target previews, confirm/dismiss, content removal per type, sibling reports, reporter notifications), fraud flags, audit log, services verify/reject + QR, photo-visit approve/reject. Every action is audited with a required note; admins can't act on themselves or other admins; 300 requests/min per admin.
+- Antifraud v1: SOS cancel streak (→ 72 h SOS ban), duplicate SOS photo, report burst (→ 24 h block under rating 30), location teleport, SOS from a new account, OTP abuse. All are hooked into the existing services and run in the background.
+- Web admin at `/admin` (role-gated, a not-found page for others, an "Admin panel" item in the account menu): dashboard, users and user detail, reports queue, SOS list and detail, communities, services moderation with map preview and a printable QR, photo visits, fraud flags, audit log. ru/en; notifications render the moderation types.
+- `load/` (k6 scripts + RESULTS.md, reduced scope) and `SECURITY.md` (ASVS L1 checklist, findings from Phases 1–5, residual risks).
+
+**Known issues:** see the Phase 6 report. Load capacity is bound by the single Node process (about 140 RPS on a shared 4-core host). The e2e admin journey signs in the seeded admin, whose phone is limited to 5 codes/h, so more than ~4 runs per hour hit the OTP limit.

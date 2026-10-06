@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut } from 'lucide-react';
+import { LogOut, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Avatar } from '@/components/ui/avatar';
@@ -15,7 +15,7 @@ import {
 import { RatingBadge } from '@/components/ui/rating-badge';
 import { NAV_ITEMS } from './nav-config';
 
-export type AccountMenuUser = { id: string; name: string; nickname: string | null; avatarUrl: string | null; rating: number };
+export type AccountMenuUser = { id: string; name: string; nickname: string | null; avatarUrl: string | null; rating: number; role?: 'user' | 'admin' };
 
 const MENU_KEYS = ['profile', 'friends', 'settings'] as const;
 
@@ -50,6 +50,14 @@ export function AccountMenu({ user, onLogout }: { user: AccountMenuUser; onLogou
             </Link>
           </DropdownMenuItem>
         ))}
+        {user.role === 'admin' ? (
+          <DropdownMenuItem asChild>
+            <Link href="/admin" data-testid="account-menu-admin">
+              <ShieldCheck aria-hidden="true" />
+              {t('admin.nav.menuItem')}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         {links.length > 0 ? <DropdownMenuSeparator /> : null}
         <DropdownMenuItem onSelect={onLogout}>
           <LogOut aria-hidden="true" />

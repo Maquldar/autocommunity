@@ -1,4 +1,5 @@
 import type { Locale, NotificationType, PushPayload, UserMini } from '@autoc/shared';
+import { ADMIN_PUSH_TYPES, adminPushPayloadFor } from './admin-push-text';
 
 type Ctx = { actor: string; community: string; role: string; sosType: string; distance: string; status: string; stars: string };
 type Texts = { title: string; body: (c: Ctx) => string };
@@ -90,6 +91,7 @@ const actorLabel = (u: UserMini | undefined) => (!u ? '' : u.name && u.nickname 
  */
 export function pushPayloadFor(type: NotificationType, payload: Record<string, unknown>, locale: string): PushPayload | null {
   const l = asLocale(locale);
+  if (ADMIN_PUSH_TYPES.includes(type)) return adminPushPayloadFor(type, payload, l);
   const texts = TEXTS[type]?.[l];
   if (!texts) return null;
   const user = (payload.user ?? payload.requester ?? payload.helper ?? payload.actor ?? payload.author) as UserMini | undefined;

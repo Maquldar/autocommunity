@@ -29,9 +29,30 @@ export type NotificationView =
       href: string | null;
     }
   | { kind: 'review_received'; sosId: string | null; stars: number; user: UserMini | null; href: string | null }
+  | {
+      kind: 'moderation';
+      /** admin_warning kinds, `report_confirmed|dismissed`, `service_verified|rejected`, `visit_verified|rejected`. */
+      variant: ModerationVariant;
+      note: string | null;
+      until: string | null;
+      serviceName: string;
+      href: string | null;
+    }
   | { kind: 'generic'; type: string; href: string | null };
 
 export type SosStatusEvent = 'withdrawn' | 'declined' | 'arrived' | 'in_progress' | 'closed' | 'cancelled' | 'expired' | 'other';
+
+export type ModerationVariant =
+  | 'warning'
+  | 'blocked'
+  | 'sos_ban'
+  | 'fake_sos'
+  | 'report_confirmed'
+  | 'report_dismissed'
+  | 'service_verified'
+  | 'service_rejected'
+  | 'visit_verified'
+  | 'visit_rejected';
 
 /** Kinds that carry a user (actor). */
 export type UserNotificationView = Extract<NotificationView, { user: UserMini | null }>;
@@ -136,9 +157,32 @@ export function describeNotification(notification: Pick<NotificationDto, 'type' 
         href: communityId ? `/communities/${communityId}` : null,
       };
     }
+    case 'admin_warning':
+    case 'report_resolved':
+    case 'service_status':
+    case 'visit_status':
+      return describeModeration(notification.type, payload);
     default:
       return { kind: 'generic', type: String(notification.type), href: safePath(payload.url) };
   }
+}
+
+/** Phase 6 moderation outcomes (API.md §6 payloads). Unknown variants fall back to the generic row. */
+function describeModeration(type: string, payload: Record<string, unknown>): NotificationView {
+  const note = typeof payload.note === 'string' && payload.note ? payload.note : null;
+  const until = typeof payload.until === 'string' && !Number.isNaN(Date.parse(payload.until)) ? payload.until : null;
+  const serviceId = safeId(payload.serviceId);
+  const base = { kind: 'moderation' as const, note, until, serviceName: text(payload.serviceName) };
+  if (type === 'admin_warning') {
+    const variant = payload.kind;
+    if (variant === 'warning' || variant === 'blocked' || variant === 'sos_ban' || variant === 'fake_sos') return { ...base, variant, href: null };
+  } else if (type === 'report_resolved') {
+    return { ...base, note: null, variant: payload.decision === 'confirmed' ? 'report_confirmed' : 'report_dismissed', href: null };
+  } else if (payload.status === 'verified' || payload.status === 'rejected') {
+    const prefix = type === 'service_status' ? 'service' : 'visit';
+    return { ...base, variant: `${prefix}_${payload.status}`, href: serviceId ? `/services/${serviceId}` : null };
+  }
+  return { kind: 'generic', type, href: null };
 }
 
 /** Display name for a user from a payload: name, else @nickname. */

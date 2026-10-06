@@ -1,7 +1,7 @@
 'use client';
 
 import type { NotificationDto } from '@autoc/shared';
-import { Bell, Check, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
+import { Bell, Check, ShieldAlert, ShieldCheck, Siren, Star, UserCheck, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
@@ -23,6 +23,7 @@ type TitleSpec =
   | { key: 'types.sosResponse' | 'types.sosAccepted'; values: { name: string } }
   | { key: 'types.sosStatus'; values: { name: string; event: string } }
   | { key: 'types.reviewReceived'; values: { name: string; stars: number } }
+  | { key: 'types.moderation'; values: { variant: string; service: string } }
   | { key: 'types.generic'; values: Record<string, never> };
 
 type TitleContext = {
@@ -55,6 +56,8 @@ function titleSpec(view: NotificationView, ctx: TitleContext): TitleSpec {
       return { key: 'types.communityApproved', values: { community: view.communityName || someCommunity } };
     case 'community_role':
       return { key: 'types.communityRole', values: { community: view.communityName || someCommunity, role: view.role } };
+    case 'moderation':
+      return { key: 'types.moderation', values: { variant: view.variant, service: view.serviceName || someCommunity } };
     default:
       return { key: 'types.generic', values: {} };
   }
@@ -122,7 +125,9 @@ function Leading({ view }: { view: NotificationView }) {
         ? UsersRound
         : view.kind === 'community_role'
           ? ShieldCheck
-          : Bell;
+          : view.kind === 'moderation'
+            ? ShieldAlert
+            : Bell;
   return (
     <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary-soft text-primary-soft-foreground">
       <Icon className="size-5" />
@@ -210,6 +215,13 @@ export function NotificationItem({ notification, onRead }: { notification: Notif
           {unread ? <span className="sr-only">{t('unread')}: </span> : null}
           <Title view={view} />
         </span>
+        {view.kind === 'moderation' && (view.note || view.until) ? (
+          <span className="break-words text-sm text-foreground" data-testid="notification-note">
+            {view.note}
+            {view.note && view.until ? ' · ' : null}
+            {view.until ? t('until', { date: format.dateTime(new Date(view.until), { dateStyle: 'medium', timeStyle: 'short' }) }) : null}
+          </span>
+        ) : null}
         <time dateTime={notification.createdAt} className="text-sm text-muted-foreground">
           {format.relativeTime(new Date(notification.createdAt), now)}
         </time>

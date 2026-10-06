@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AntifraudModule } from '../antifraud/antifraud.module';
 import { ChatsModule } from '../chats/chats.module';
 import { LocationModule } from '../location/location.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -12,7 +13,7 @@ import { SosQueue } from './sos.queue';
 import { SosService } from './sos.service';
 
 @Module({
-  imports: [UsersModule, ChatsModule, NotificationsModule, LocationModule, RatingModule],
+  imports: [UsersModule, ChatsModule, NotificationsModule, LocationModule, RatingModule, AntifraudModule],
   controllers: [SosController, SosMapController, PublicSosController],
   providers: [SosService, SosViewService, SosBroadcastService, SosDispatchService, SosQueue],
   exports: [SosService, SosViewService, SosBroadcastService],
