@@ -182,12 +182,13 @@ export function MapView() {
               data-testid="map-sos-toggle"
               onClick={toggleSosLayer}
               className={cn(
-                'inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold shadow-md transition-colors duration-fast focus-ring',
+                // Icon-only on phones: four controls share this row with the privacy chip.
+                'inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border px-2.5 text-sm font-semibold shadow-md transition-colors duration-fast focus-ring sm:px-3',
                 sosLayer ? 'border-sos bg-sos-soft text-sos-soft-foreground' : 'bg-card text-muted-foreground hover:text-foreground',
               )}
             >
               <Siren aria-hidden="true" className="size-4" />
-              {t('sosLayer.label')}
+              <span className="max-sm:sr-only">{t('sosLayer.label')}</span>
             </button>
             <MapFiltersControl value={effectiveFilters} onChange={setFilters} communities={activeCommunities} />
           </div>

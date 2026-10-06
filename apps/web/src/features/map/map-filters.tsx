@@ -45,7 +45,7 @@ export function MapFiltersControl({
         onClick={() => setOpen(true)}
         data-testid="map-filters-button"
       >
-        <span className="max-[22rem]:sr-only">{t('button')}</span>
+        <span className="max-sm:sr-only">{t('button')}</span>
         {count > 0 ? <CountBadge aria-hidden="true" count={count} className="bg-primary text-primary-foreground" /> : null}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>

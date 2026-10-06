@@ -165,7 +165,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     const emitView = (map: MlMap) => callbacks.current.onViewChange(boundsOf(map), map.getZoom());
 
     void (async () => {
-      const [lib, { style, fallback }] = await Promise.all([import('maplibre-gl'), loadMapStyle()]);
+      // A raster fallback style is still a working map: only a map whose tiles never load counts as unavailable.
+      const [lib, { style }] = await Promise.all([import('maplibre-gl'), loadMapStyle()]);
       if (disposed || !containerRef.current) return;
       const { lat, lng, zoom } = initial.current;
       const map = new lib.Map({
@@ -184,7 +185,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       map.touchZoomRotate.disableRotation();
       mapRef.current = map;
       libRef.current = lib;
-      if (fallback) callbacks.current.onTilesUnavailable(true);
 
       // `style.load` (not `load`): `load` waits for every tile, and never fires if the tile host is unreachable.
       let setUp = false;
@@ -220,7 +220,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (event.sourceId === SOURCE && event.isSourceLoaded) syncMarkers();
         if (event.tile && event.sourceId !== SOURCE && !tileLoaded) {
           tileLoaded = true;
-          if (!fallback) callbacks.current.onTilesUnavailable(false);
+          callbacks.current.onTilesUnavailable(false);
         }
       });
       map.on('idle', syncMarkers);
