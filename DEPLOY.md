@@ -39,7 +39,7 @@ Every push to `main` redeploys automatically. Data is kept; the demo seed runs o
 - **"Error: ... ECONNREFUSED 127.0.0.1:4000" lines in the log right after a start:** normal. The website comes up a few seconds before the API.
 - **Login says "too many attempts":** OTP limits are per phone and per IP. Wait an hour, or use another `+7` number.
 
-What was verified before shipping this: the exact build and start scripts were run locally with Render's environment (production mode, demo mode, Postgres file storage, no `.env` files). The full Playwright suite passed against it (24/24). Render itself was **not** tested from here (no account in the build environment), so the first real deploy is the final check. Watch the build log.
+What was verified before shipping this: the exact build and start scripts were run locally with Render's environment (production mode, demo mode, Postgres file storage, no `.env` files). The full Playwright suite passed against it (62 passed, 0 failed; from a fresh clone). Render itself was **not** tested from here (no account in the build environment), so the first real deploy is the final check. Watch the build log.
 
 ## Client IP (rate limits)
 
