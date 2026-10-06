@@ -15,8 +15,12 @@ import { useCityName } from './city';
 type Profile = Pick<UserPublic | Me, 'id' | 'name' | 'nickname' | 'avatarUrl' | 'city' | 'bio' | 'rating' | 'createdAt' | 'status'> &
   Partial<Pick<UserPublic, 'isPremium' | 'profileFrame' | 'tier'>>;
 
-/** Avatar (tier ring + premium frame), name, @nickname, premium and tier badges, city, trust rating, member since and bio. */
-export function ProfileHeader({ user, actions }: { user: Profile; actions?: ReactNode }) {
+/**
+ * Avatar (tier ring + premium frame), name, @nickname, premium badge and the tier chip (every tier has a
+ * name, Phase 10), city, trust rating, member since and bio; `footer` goes under the bio (the "what people
+ * say" traits line).
+ */
+export function ProfileHeader({ user, actions, footer }: { user: Profile; actions?: ReactNode; footer?: ReactNode }) {
   const t = useTranslations('profile');
   const format = useFormatter();
   const cityName = useCityName();
@@ -52,6 +56,7 @@ export function ProfileHeader({ user, actions }: { user: Profile; actions?: Reac
         {actions ? <div className="flex shrink-0 flex-wrap justify-center gap-2">{actions}</div> : null}
       </div>
       {user.bio ? <p className="whitespace-pre-line break-words text-[0.9375rem] leading-6">{user.bio}</p> : null}
+      {footer}
     </Card>
   );
 }

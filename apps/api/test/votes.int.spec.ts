@@ -1,4 +1,4 @@
-import type { AdminVoteDto, MyVoteDto, Paginated, RatingDto, VoteSummaryDto } from '@autoc/shared';
+import { VOTE_REASONS, type AdminVoteDto, type MyVoteDto, type Paginated, type RatingDto, type VoteSummaryDto } from '@autoc/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../src/common/ids';
@@ -142,7 +142,9 @@ describe('GET /users/:id/votes/summary', () => {
     await vote(c, target.id, { value: -1, reason: 'other' }).expect(201);
     const s = (await get(a, `/users/${target.id}/votes/summary`).expect(200)).body as VoteSummaryDto;
     expect(s).toMatchObject({ userId: target.id, up: 2, down: 1, eligibility: 'already_voted', myVote: { value: 1, reason: 'helped_on_road' } });
-    expect(s.byReason).toEqual({ helped_on_road: 1, polite: 1, good_driver: 0, rude: 0, dangerous_driving: 0, scam: 0, other: 1 });
+    expect(s.byReason).toEqual({ ...Object.fromEntries(VOTE_REASONS.map((r) => [r, 0])), helped_on_road: 1, polite: 1, other: 1 });
+    // 3 voters, but no reason has 2 of them: no traits
+    expect(s.traits).toEqual({ negative: [], positive: [] });
     for (const v of [a, b, c]) expect(JSON.stringify(s).replace(s.myVote!.id, '')).not.toContain(v.id);
 
     const fresh = await seasoned(t);

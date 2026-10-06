@@ -4,7 +4,7 @@
  * recomputed, so votes and penalties are part of every seeded rating.
  */
 import type { PrismaClient, ViolationCategory, WalletTxKind } from '@prisma/client';
-import { PREMIUM, RATING_PENALTIES, voteWeight } from '@autoc/shared';
+import { PREMIUM, RATING_PENALTIES, voteWeight, type VoteReason } from '@autoc/shared';
 import sharp from 'sharp';
 import type { Storage } from '../../src/infra/storage/storage';
 
@@ -142,15 +142,37 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
 
   /* ---------------- driver votes */
   const voters = others.filter((u) => u.rating >= 40 && now - u.createdAt.getTime() > 7 * DAY);
-  type SeedVote = { voter: SeedUser; target: SeedUser; value: 1 | -1; reason: string; comment: string | null; daysAgo: number };
+  type SeedVote = { voter: SeedUser; target: SeedUser; value: 1 | -1; reason: VoteReason; comment: string | null; daysAgo: number };
+  const offender = others[20]!;
+  // Phase 10: extra voters (distinct people, one vote each per target) so the traits thresholds are met:
+  // demo gets "пропускает" / "аккуратно водит", the offender "подрезает" / "не включает поворотники".
+  // The offender's voters are the most trusted ones (their votes weigh more), so the votes alone move the
+  // rating clearly down; together with the approved violations it lands in the 0–29 tier.
+  const pool = voters.slice(8).filter((u) => u.id !== offender.id);
+  if (pool.length < 12) throw new Error(`Seed needs 12 extra voters, has ${pool.length}`);
+  const trusted = [...pool].sort((a, b) => b.rating - a.rating || a.id.localeCompare(b.id));
+  // extra[0..4] vote for demo, extra[5..11] (the 7 most trusted) for the offender.
+  const extra = [...trusted.slice(7, 12), ...trusted.slice(0, 7)];
   const candidates: SeedVote[] = [
     { voter: voters[0]!, target: demo!, value: 1, reason: 'helped_on_road', comment: 'Помог дотащить машину до СТО', daysAgo: 20 },
     { voter: voters[1]!, target: demo!, value: 1, reason: 'polite', comment: null, daysAgo: 14 },
     { voter: voters[2]!, target: demo!, value: 1, reason: 'good_driver', comment: 'Аккуратно водит', daysAgo: 3 },
+    { voter: extra[0]!, target: demo!, value: 1, reason: 'lets_merge', comment: 'Пропустил при перестроении на Саина', daysAgo: 26 },
+    { voter: extra[1]!, target: demo!, value: 1, reason: 'lets_merge', comment: null, daysAgo: 17 },
+    { voter: extra[2]!, target: demo!, value: 1, reason: 'lets_merge', comment: null, daysAgo: 9 },
+    { voter: extra[3]!, target: demo!, value: 1, reason: 'careful_driver', comment: null, daysAgo: 12 },
+    { voter: extra[4]!, target: demo!, value: 1, reason: 'careful_driver', comment: 'Спокойно и без рывков', daysAgo: 5 },
     { voter: voters[3]!, target: others[3]!, value: 1, reason: 'helped_on_road', comment: 'Вытащил из сугроба', daysAgo: 11 },
     { voter: voters[4]!, target: others[3]!, value: 1, reason: 'polite', comment: null, daysAgo: 6 },
-    { voter: voters[5]!, target: others[20]!, value: -1, reason: 'dangerous_driving', comment: 'Подрезал на Аль-Фараби', daysAgo: 4 },
-    { voter: voters[6]!, target: others[20]!, value: -1, reason: 'rude', comment: null, daysAgo: 2 },
+    { voter: voters[5]!, target: offender, value: -1, reason: 'dangerous_driving', comment: 'Подрезал на Аль-Фараби', daysAgo: 4 },
+    { voter: voters[6]!, target: offender, value: -1, reason: 'rude', comment: null, daysAgo: 2 },
+    { voter: extra[5]!, target: offender, value: -1, reason: 'cuts_off', comment: 'Подрезал на развязке Аль-Фараби — Достык', daysAgo: 22 },
+    { voter: extra[6]!, target: offender, value: -1, reason: 'cuts_off', comment: null, daysAgo: 15 },
+    { voter: extra[7]!, target: offender, value: -1, reason: 'cuts_off', comment: null, daysAgo: 7 },
+    { voter: extra[8]!, target: offender, value: -1, reason: 'cuts_off', comment: 'Влез без поворотника и по тормозам', daysAgo: 1 },
+    { voter: extra[9]!, target: offender, value: -1, reason: 'no_turn_signals', comment: null, daysAgo: 19 },
+    { voter: extra[10]!, target: offender, value: -1, reason: 'no_turn_signals', comment: null, daysAgo: 10 },
+    { voter: extra[11]!, target: offender, value: -1, reason: 'no_turn_signals', comment: null, daysAgo: 3 },
     { voter: voters[7]!, target: others[21]!, value: 1, reason: 'good_driver', comment: null, daysAgo: 30 },
   ];
   const votes = candidates.filter((v) => v.voter && v.target && v.voter.id !== v.target.id);
@@ -161,7 +183,6 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
   }
 
   /* ---------------- violations: 2 approved (with penalties), 1 pending, 1 disputed, 1 rejected */
-  const offender = others[20]!;
   const offenderVehicle = await prisma.vehicle.findFirst({ where: { userId: offender.id, isPrimary: true } });
   const otherOwner = others[22]!;
   const otherVehicle = await prisma.vehicle.findFirst({ where: { userId: otherOwner.id, isPrimary: true } });
@@ -219,10 +240,13 @@ export async function seedPhase9(ctx: Ctx): Promise<string> {
   if (offenderVehicle && otherVehicle) {
     await violation(offenderVehicle, voters[0]!, 'speeding', 'approved', 25, 'Около 130 км/ч на пр. Аль-Фараби в районе Есентай Молла.', 'ст. 592 КоАП');
     await violation(offenderVehicle, voters[1]!, 'red_light', 'approved', 8, 'Проехал на красный на перекрёстке Абая — Достык.', null);
+    // Phase 10: two more approved ones, so the offender sits in the 0–29 tier ("Злостный нарушитель").
+    await violation(offenderVehicle, voters[3]!, 'dangerous_driving', 'approved', 40, 'Перестраивался через три полосы без поворотника на ВОАД.', null);
+    await violation(offenderVehicle, voters[4]!, 'speeding', 'approved', 60, 'Около 110 км/ч в жилой зоне на ул. Розыбакиева.', 'ст. 592 КоАП');
     await violation(offenderVehicle, voters[2]!, 'wrong_lane', 'pending', 1, 'Выехал на встречную при обгоне на Капчагайской трассе.', null);
     await violation(otherVehicle, voters[3]!, 'parking', 'disputed', 5, 'Припаркован на тротуаре у ТРЦ Mega.', null, 'Это была погрузка, я стоял две минуты.');
     await violation(otherVehicle, voters[4]!, 'dangerous_driving', 'rejected', 15, 'Резко перестраивался без поворотника.', null);
   }
 
-  return `${balances.size} wallets (${rows.length} ledger rows, demo ${balances.get(demo!.id)?.balance} coins, premium for demo), ${votes.length} votes, ${violations} violations`;
+  return `${balances.size} wallets (${rows.length} ledger rows, demo ${balances.get(demo!.id)?.balance} coins, premium for demo), ${votes.length} votes, ${violations} violations (offender with negative traits: @${offender.nickname})`;
 }

@@ -394,7 +394,7 @@ function AvatarsSection() {
         <UserAvatar user={{ id: 'user-1', name: 'Asset', avatarUrl: AVATAR_IMAGE, rating: 92, isPremium: true }} size="xl" />
       </Demo>
       <Demo label="TierBadge · PremiumBadge">
-        {(['warning', 'bronze', 'silver', 'gold', 'platinum'] as const).map((tier) => (
+        {(['warning', 'none', 'bronze', 'silver', 'gold', 'platinum'] as const).map((tier) => (
           <TierBadge key={tier} tier={tier} />
         ))}
         <PremiumBadge />

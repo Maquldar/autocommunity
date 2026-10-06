@@ -1,7 +1,7 @@
 'use client';
 
 import type { RatingTier } from '@autoc/shared';
-import { Award, Crown, Gem, TriangleAlert } from 'lucide-react';
+import { Award, Car, Crown, Gem, TriangleAlert } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
@@ -27,7 +27,7 @@ const RING: Record<Size, { plain: string; framed: string; frame: string; corner:
 
 /**
  * A user's avatar with the Phase 9 decorations, used everywhere a person is shown: a ring in the colour
- * of their rating tier (red for "low trust", nothing for the plain tier) and, for premium, a violet frame
+ * of their rating tier (red for "Repeat offender", nothing for the plain tier) and, for premium, a violet frame
  * with a crown in the corner. Colour is never the only signal: pair it with `UserName` / `RatingBadge` /
  * `TierBadge`; the non-decorative variant also announces the tier and premium.
  */
@@ -104,18 +104,23 @@ export function PremiumBadge({ compact = false, className }: { compact?: boolean
   );
 }
 
-const TIER_ICON: Record<Exclude<RatingTier, 'none'>, typeof Award> = {
+const TIER_ICON: Record<RatingTier, typeof Award> = {
   warning: TriangleAlert,
+  none: Car,
   bronze: Award,
   silver: Award,
   gold: Award,
   platinum: Gem,
 };
 
-/** Tier pill: icon + word ("Золото", "Низкое доверие"); nothing for the plain tier. */
+/**
+ * Tier chip: icon + name ("Образцовый водитель", red "Злостный нарушитель"). Every tier has a name since
+ * Phase 10, so the plain 30–49 tier gets a muted chip too; the compact mark (next to names in lists) stays
+ * off for it.
+ */
 export function TierBadge({ tier, compact = false, className }: { tier: RatingTier; compact?: boolean; className?: string }) {
   const t = useTranslations('tiers');
-  if (tier === 'none') return null;
+  if (compact && tier === 'none') return null;
   const Icon = TIER_ICON[tier];
   return (
     <span

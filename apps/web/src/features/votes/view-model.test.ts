@@ -8,8 +8,20 @@ const err = (code: string, status = 409, details?: unknown) => new ApiError({ st
 
 describe('votes view-model', () => {
   it('filters reasons by sign, `other` for both', () => {
-    expect(reasonsFor(1)).toEqual(['helped_on_road', 'polite', 'good_driver', 'other']);
-    expect(reasonsFor(-1)).toEqual(['rude', 'dangerous_driving', 'scam', 'other']);
+    expect(reasonsFor(1)).toEqual(['helped_on_road', 'polite', 'good_driver', 'lets_merge', 'careful_driver', 'signals_properly', 'other']);
+    expect(reasonsFor(-1)).toEqual([
+      'rude',
+      'dangerous_driving',
+      'scam',
+      'cuts_off',
+      'no_turn_signals',
+      'speeding',
+      'tailgating',
+      'bad_parking',
+      'aggressive',
+      'phone_while_driving',
+      'other',
+    ]);
   });
   it('counts whole days until a date', () => {
     expect(daysUntil(new Date(now + 29.2 * DAY).toISOString(), now)).toBe(30);

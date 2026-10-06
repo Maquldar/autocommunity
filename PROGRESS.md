@@ -14,6 +14,7 @@
 | Final release gate (DoD) | ✅ done (2026-10-06) |
 | 9. Wallet, Premium, votes, violations, vehicle details, tiers (client request) | ✅ done (2026-10-06) |
 | 9. Wallet, premium, votes, violations, vehicle details, tiers | ✅ API done + security review fixed (web in progress) |
+| 10. Tier names, driving vote reasons, "what people say" traits (client request) | ✅ done (2026-10-06) |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
 
@@ -215,3 +216,13 @@
 - Shared tests: 72/72.
 - Playwright e2e: 67 passed, 0 failed (17 skipped by design). The run used the exact Render scripts from a fresh clone and includes the new wallet, premium, votes and violations journeys.
 
+
+## Phase 10 — Tier names, driving vote reasons, "what people say" (client request, 2026-10-06)
+
+**Built**
+- **Tier names:** "Злостный нарушитель / Обычный / Надёжный / Уважаемый / Образцовый водитель / Легенда дорог" (en: Repeat offender … Road legend) in `RATING_TIER_NAMES`; keys and thresholds unchanged. The name is a chip on the profile header and in the tier legend for every tier; 0–29 stays red.
+- **Vote reasons:** 7 negative (`cuts_off`, `no_turn_signals`, `speeding`, `tailgating`, `bad_parking`, `aggressive`, `phone_while_driving`) and 3 positive (`lets_merge`, `careful_driver`, `signals_properly`), each with a sign. Migration `20261006172949_phase10_vote_reason_enum` turns `user_votes.reason` into a Postgres enum (rows cast in place) and adds a sign CHECK.
+- **Traits:** `traits` in the votes summary — reasons chosen by ≥ 2 different voters and ≥ 25% of that sign's voters in the last 180 days, none below 3 voters, at most 3 per sign, anonymous. The web shows one line under the name/bio with danger / success chips.
+- **Seed:** `@daniyar_almaty` lands in "Злостный нарушитель" with "подрезает · не включает поворотники"; demo is praised for "пропускает · аккуратно водит". Rating ledger consistent.
+
+**Tested:** TypeScript 0 errors (shared, API, web). API 483/483 (incl. `vote-traits.int.spec.ts`: thresholds, window, distinct voters, max 3, DB enum + sign CHECK, anonymity). Web unit 504/504 (trait line, tier chip, legend, messages ↔ shared names). Shared 92/92 (tier names, reason signs, `computeVoteTraits`). Playwright not re-run; the votes e2e legend text was updated to "Road legend".

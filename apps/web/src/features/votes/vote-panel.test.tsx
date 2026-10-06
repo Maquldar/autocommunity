@@ -1,4 +1,4 @@
-import type { VoteSummaryDto } from '@autoc/shared';
+import { VOTE_REASONS, type VoteReason, type VoteSummaryDto } from '@autoc/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -17,9 +17,10 @@ const summary = (over: Partial<VoteSummaryDto> = {}): VoteSummaryDto => ({
   userId: 'u2',
   up: 3,
   down: 1,
-  byReason: { helped_on_road: 2, polite: 1, good_driver: 0, rude: 1, dangerous_driving: 0, scam: 0, other: 0 },
+  byReason: { ...(Object.fromEntries(VOTE_REASONS.map((r) => [r, 0])) as Record<VoteReason, number>), helped_on_road: 2, polite: 1, rude: 1 },
   myVote: null,
   eligibility: 'ok',
+  traits: { negative: [], positive: [] },
   ...over,
 });
 
@@ -47,7 +48,8 @@ describe('VotePanel', () => {
     fireEvent.click(screen.getByTestId('vote-down'));
     const dialog = screen.getByTestId('vote-dialog');
     const radios = within(dialog).getAllByRole('radio').map((r) => r.getAttribute('value'));
-    expect(radios).toEqual(['rude', 'dangerous_driving', 'scam', 'other']);
+    expect(radios).toEqual(['rude', 'dangerous_driving', 'scam', 'cuts_off', 'no_turn_signals', 'speeding', 'tailgating', 'bad_parking', 'aggressive', 'phone_while_driving', 'other']);
+    expect(within(dialog).getByLabelText("Doesn't use turn signals")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Vote' }));
     expect(within(dialog).getByText('Choose a reason.')).toBeInTheDocument();
   });

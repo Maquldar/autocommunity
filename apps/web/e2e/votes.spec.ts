@@ -39,7 +39,7 @@ test('votes: a trusted driver gives a thumbs up with a reason; a new account see
     // The rating breakdown has the votes component and the tier legend.
     await voter.page.getByTestId('rating-summary').click();
     await expect(voter.page.getByTestId('rating-row-votes')).toBeVisible();
-    await expect(voter.page.getByTestId('tier-legend')).toContainText('Platinum');
+    await expect(voter.page.getByTestId('tier-legend')).toContainText('Road legend');
     await voter.page.keyboard.press('Escape');
 
     // The target sees the summary on their own profile (?tab=votes), without the voter.

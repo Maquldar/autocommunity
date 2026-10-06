@@ -41,7 +41,7 @@ Pilot city: Almaty, Kazakhstan. Mobile-first installable web app (PWA) with a Ne
 | **Service centers** | Repair shops, tire, wash, parts and tow. Map and list, open-now, visit verification (on site ≤ 150 m / QR at the counter / order photo), reviews only after a verified visit |
 | **Events & feed** | Community events with routes and RSVP chats; a feed with photos, video and polls |
 | **Wallet & Premium** | Coin balance (1 coin = 1 ₸, demo card top-up, no cash-out), coin transfers between drivers, Premium for 1 490 coins a month with auto-renewal (badge, profile frame, doubled limits) |
-| **Driver trust** | +/− votes with reasons (anti-abuse limits, capped effect on the rating), rating tiers shown on every avatar (low trust → bronze → silver → gold → platinum), detailed vehicle cards, traffic violations (КоАП / УК) published only after admin review, with owner disputes |
+| **Driver trust** | +/− votes with reasons (anti-abuse limits, capped effect on the rating), rating tiers shown on every avatar and as a named chip (Repeat offender → Regular → Reliable → Respected → Exemplary driver → Road legend), a "what people say" line of frequent vote reasons on profiles, detailed vehicle cards, traffic violations (КоАП / УК) published only after admin review, with owner disputes |
 | **Admin** | Users (warn / block / SOS ban), reports queue, SOS review (mark fake), service and visit moderation, audit log, antifraud flags |
 | **Notifications** | In-app, live over Socket.IO, and Web Push for every event type |
 

@@ -2863,15 +2863,15 @@
   "tiers": {
     "premium": "Premium",
     "name": {
-      "warning": "Low trust",
-      "none": "No tier",
-      "bronze": "Bronze",
-      "silver": "Silver",
-      "gold": "Gold",
-      "platinum": "Platinum"
+      "warning": "Repeat offender",
+      "none": "Regular driver",
+      "bronze": "Reliable driver",
+      "silver": "Respected driver",
+      "gold": "Exemplary driver",
+      "platinum": "Road legend"
     },
     "legendTitle": "Rating tiers",
-    "legendHint": "The tier shows as a ring around the avatar. Below 30 drivers get a red “low trust” mark.",
+    "legendHint": "The tier shows as a ring around the avatar. Below 30 drivers get a red “Repeat offender” mark.",
     "range": "{min}–{max}",
     "current": "Now"
   },
@@ -3109,9 +3109,19 @@
       "helped_on_road": "Helped on the road",
       "polite": "Polite",
       "good_driver": "Good driver",
+      "lets_merge": "Lets others in",
+      "careful_driver": "Drives carefully",
+      "signals_properly": "Always uses turn signals",
       "rude": "Rude",
       "dangerous_driving": "Dangerous driving",
       "scam": "Scam",
+      "cuts_off": "Cuts others off",
+      "no_turn_signals": "Doesn't use turn signals",
+      "speeding": "Speeds",
+      "tailgating": "Tailgates",
+      "bad_parking": "Parks carelessly",
+      "aggressive": "Drives aggressively",
+      "phone_while_driving": "On the phone while driving",
       "other": "Other"
     },
     "anonymous": "Votes are anonymous. You can vote for the same driver once every {days} days; trusted drivers' votes weigh more.",
@@ -3152,7 +3162,12 @@
     "receivedTitle": "Votes about you",
     "receivedHint": "What other drivers think. Voters stay anonymous.",
     "emptyTitle": "No votes yet",
-    "emptyHint": "Drivers you meet on the road can vote for you here."
+    "emptyHint": "Drivers you meet on the road can vote for you here.",
+    "traits": {
+      "negativeLead": "Often noted:",
+      "positiveLead": "praised for:",
+      "positiveLeadFirst": "Praised for:"
+    }
   },
   "violations": {
     "categories": {

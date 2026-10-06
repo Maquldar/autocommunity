@@ -8,7 +8,7 @@ const base = { id: 'u1', name: 'Aidar K.', avatarUrl: null };
 describe('UserAvatar', () => {
   it('draws the tier ring and the premium frame, and announces both', () => {
     renderWithIntl(<UserAvatar user={{ ...base, rating: 92, isPremium: true }} size="lg" />);
-    const avatar = screen.getByRole('img', { name: 'Aidar K., Premium, Platinum' });
+    const avatar = screen.getByRole('img', { name: 'Aidar K., Premium, Road legend' });
     expect(avatar).toHaveAttribute('data-tier', 'platinum');
     expect(avatar).toHaveAttribute('data-premium', 'true');
     expect(avatar.className).toContain('border-premium');
@@ -17,7 +17,7 @@ describe('UserAvatar', () => {
     const { rerender } = renderWithIntl(<UserAvatar user={{ ...base, rating: 10, tier: 'gold' }} />);
     expect(screen.getByRole('img')).toHaveAttribute('data-tier', 'gold');
     rerender(<UserAvatar user={{ ...base, rating: 12 }} />);
-    expect(screen.getByRole('img', { name: 'Aidar K., Low trust' })).toHaveAttribute('data-tier', 'warning');
+    expect(screen.getByRole('img', { name: 'Aidar K., Repeat offender' })).toHaveAttribute('data-tier', 'warning');
     rerender(<UserAvatar user={{ ...base, rating: 40 }} />);
     expect(screen.getByRole('img', { name: 'Aidar K.' })).not.toHaveAttribute('data-premium');
   });
@@ -29,12 +29,16 @@ describe('UserAvatar', () => {
 });
 
 describe('badges', () => {
-  it('tier badge: icon + word, nothing for the plain tier', () => {
+  it('tier chip: icon + name for every tier (Phase 10 names), red for 0–29; no compact mark for the plain tier', () => {
     const { rerender, container } = renderWithIntl(<TierBadge tier="silver" />);
-    expect(screen.getByTestId('tier-badge')).toHaveTextContent('Silver');
+    expect(screen.getByTestId('tier-badge')).toHaveTextContent('Respected driver');
     rerender(<TierBadge tier="warning" />);
-    expect(screen.getByTestId('tier-badge')).toHaveTextContent('Low trust');
+    expect(screen.getByTestId('tier-badge')).toHaveTextContent('Repeat offender');
+    expect(screen.getByTestId('tier-badge').className).toContain('bg-danger-soft');
     rerender(<TierBadge tier="none" />);
+    expect(screen.getByTestId('tier-badge')).toHaveTextContent('Regular driver');
+    expect(screen.getByTestId('tier-badge').className).toContain('bg-muted');
+    rerender(<TierBadge tier="none" compact />);
     expect(container).toBeEmptyDOMElement();
   });
   it('premium badge and name', () => {

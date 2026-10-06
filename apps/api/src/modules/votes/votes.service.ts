@@ -1,8 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { Prisma, UserVote } from '@prisma/client';
 import {
+  computeVoteTraits,
   VOTE_LIMITS,
   VOTE_REASONS,
+  VOTE_TRAIT_RULES,
   voteWeight,
   type CreateVoteInput,
   type MyVoteDto,
@@ -10,6 +12,7 @@ import {
   type VoteReason,
   type VoteReceivedPayload,
   type VoteSummaryDto,
+  type VoteTraitsDto,
   type VoteValue,
 } from '@autoc/shared';
 import { ApiException, Errors } from '../../common/errors/api-exception';
@@ -87,7 +90,7 @@ export class VotesService {
 
   async summary(viewerId: string, targetId: string, now = new Date()): Promise<VoteSummaryDto> {
     await this.requireVisibleTarget(targetId, viewerId);
-    const [groups, mine, viewer, today] = await Promise.all([
+    const [groups, mine, viewer, today, traits] = await Promise.all([
       this.prisma.userVote.groupBy({ by: ['value', 'reason'], where: { targetId }, _count: { _all: true } }),
       this.prisma.userVote.findFirst({
         where: { voterId: viewerId, targetId, createdAt: { gt: new Date(now.getTime() - cooldownMs) } },
@@ -95,6 +98,7 @@ export class VotesService {
       }),
       this.prisma.user.findUniqueOrThrow({ where: { id: viewerId }, select: { id: true, createdAt: true, rating: true } }),
       this.prisma.userVote.count({ where: { voterId: viewerId, createdAt: { gt: new Date(now.getTime() - DAY_MS) } } }),
+      this.traits(targetId, now),
     ]);
     const byReason = Object.fromEntries(VOTE_REASONS.map((r) => [r, 0])) as Record<VoteReason, number>;
     let up = 0;
@@ -104,7 +108,34 @@ export class VotesService {
       else down += g._count._all;
       if (g.reason in byReason) byReason[g.reason as VoteReason] += g._count._all;
     }
-    return { userId: targetId, up, down, byReason, myVote: mine ? toMyVote(mine) : null, eligibility: this.eligibility(viewer, targetId, !!mine, today, now) };
+    return { userId: targetId, up, down, byReason, myVote: mine ? toMyVote(mine) : null, eligibility: this.eligibility(viewer, targetId, !!mine, today, now), traits };
+  }
+
+  /**
+   * "What people say" (API.md §10.3): distinct-voter counts over the last 180 days, reduced by the shared
+   * `computeVoteTraits` rules. Only aggregates leave the database, never a voter id.
+   */
+  async traits(targetId: string, now = new Date()): Promise<VoteTraitsDto> {
+    const since = new Date(now.getTime() - VOTE_TRAIT_RULES.windowDays * DAY_MS);
+    const [totals, reasons] = await Promise.all([
+      this.prisma.$queryRaw<{ voters: number; up_voters: number; down_voters: number }[]>`
+        SELECT count(DISTINCT voter_id)::int AS voters,
+               count(DISTINCT voter_id) FILTER (WHERE value = 1)::int AS up_voters,
+               count(DISTINCT voter_id) FILTER (WHERE value = -1)::int AS down_voters
+          FROM user_votes WHERE target_id = ${targetId}::uuid AND created_at > ${since}`,
+      this.prisma.$queryRaw<{ value: number; reason: VoteReason; voters: number }[]>`
+        SELECT value::int AS value, reason::text AS reason, count(DISTINCT voter_id)::int AS voters
+          FROM user_votes WHERE target_id = ${targetId}::uuid AND created_at > ${since}
+         GROUP BY value, reason`,
+    ]);
+    const t = totals[0];
+    if (!t || t.voters < VOTE_TRAIT_RULES.minVoters) return { negative: [], positive: [] };
+    return computeVoteTraits({
+      voters: t.voters,
+      upVoters: t.up_voters,
+      downVoters: t.down_voters,
+      reasons: reasons.map((r) => ({ value: r.value === 1 ? 1 : -1, reason: r.reason, voters: r.voters })),
+    });
   }
 
   private eligibility(viewer: Voter, targetId: string, voted: boolean, today: number, now: Date): VoteEligibility {

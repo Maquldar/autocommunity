@@ -923,3 +923,61 @@ All additive; no field or route of §9.0–9.6 changed.
 - **Violations:** submissions against a vehicle owned by an admin → `403 INVALID_TARGET`, the owner included. Admins never moderate admins, so such a violation could never be decided.
 - **Wallet reads** (`GET /wallet`, the admin wallet reads) only read; the wallet row is created on the first use that needs it.
 - **Premium cancel near the period end:** the renewal job charges subscriptions whose period ends within the next 24 h. A `cancel` after that charge doesn't refund it: the renewed period (already paid, `currentPeriodEnd` already moved 30 days on) stays active, and auto-renew is off from then on, so the next period isn't charged. To avoid the early charge, cancel more than 24 h before `currentPeriodEnd`. No DTO change.
+
+## 10. Phase 10 — Tier names, driving vote reasons, "what people say" (client request)
+
+Shared: `tiers.ts` (`RATING_TIER_NAMES`, `tierNameForRating`), `votes.ts` (new reasons, `VOTE_REASON_SIGN`, `VOTE_TRAIT_RULES`, `computeVoteTraits`, `VoteTraitsDto`). Migration `20261006172949_phase10_vote_reason_enum`.
+
+### 10.1 Rating tier names
+
+Labels only: the tier keys (`RatingTier`), the thresholds and `tierForRating` don't change, and the API still returns `tier`.
+
+| Rating | `tier` | ru | en |
+|---|---|---|---|
+| 0–29 | `warning` | Злостный нарушитель | Repeat offender |
+| 30–49 | `none` | Обычный водитель | Regular driver |
+| 50–64 | `bronze` | Надёжный водитель | Reliable driver |
+| 65–79 | `silver` | Уважаемый водитель | Respected driver |
+| 80–89 | `gold` | Образцовый водитель | Exemplary driver |
+| 90–100 | `platinum` | Легенда дорог | Road legend |
+
+- `RATING_TIER_NAMES[tier][locale]` is the source of truth; the web's `tiers.name.*` messages must match it (unit-tested).
+- Web: the tier name is a visible chip on the profile header and in the tier legend, for every tier (`none` gets a muted chip). The 0–29 tier keeps the red ring, the warning corner mark and a red chip. The compact mark next to names in lists still skips `none`.
+
+### 10.2 Vote reasons
+
+`VoteReason` gains driving-specific reasons; the Phase 9 ones stay.
+
+| Sign | Reasons |
+|---|---|
+| +1 | `helped_on_road`, `polite`, `good_driver`, `lets_merge` (Пропускает), `careful_driver` (Аккуратно водит), `signals_properly` (Всегда включает поворотники) |
+| −1 | `rude`, `dangerous_driving`, `scam`, `cuts_off` (Подрезает), `no_turn_signals` (Не включает поворотники), `speeding` (Превышает скорость), `tailgating` (Не держит дистанцию), `bad_parking` (Паркуется как попало), `aggressive` (Агрессивно водит), `phone_while_driving` (Отвлекается на телефон) |
+| either | `other` |
+
+- `VOTE_REASON_SIGN[reason]` is `1`, `-1` or `0` (`other`). A reason that doesn't match the vote's sign → `400 VALIDATION_ERROR`, as before.
+- Database: `user_votes.reason` is now the Postgres enum `"VoteReason"` (was text; existing rows are cast in place), and the CHECK `user_votes_reason_sign_check` enforces the sign rule too. Adding a reason later needs `ALTER TYPE "VoteReason" ADD VALUE` plus a new CHECK.
+- `VoteSummaryDto.byReason` and `AdminVoteDto.reason` / `MyVoteDto.reason` / the `vote_received` payload simply carry the larger enum.
+
+### 10.3 "What people say" (traits)
+
+`GET /users/:id/votes/summary` gains `traits`:
+
+```ts
+type VoteTrait = { reason: VoteReason; count: number }
+type VoteTraitsDto = { negative: VoteTrait[]; positive: VoteTrait[] }
+type VoteSummaryDto = { ...; traits: VoteTraitsDto }
+```
+
+- Same visibility as the summary (every signed-in user, the target included). No voter ids, names or comments.
+- Rules (`VOTE_TRAIT_RULES`), over the votes of the last **180 days**, counting **different voters** (a voter who votes again after the 30-day cooldown counts once):
+  - no traits at all until **3** different voters voted in the window, so one or two people can't label anyone;
+  - a reason is a trait when **≥ 2** voters chose it and they are **≥ 25%** of the voters of its sign;
+  - `other` is never a trait; at most **3** per sign; sorted by count (desc), then by the reason order above.
+- `byReason`, `up` and `down` stay all-time vote counts.
+- Web: one line under the profile name/bio (own and other profiles), e.g. "Часто отмечают: подрезает · не включает поворотники · хвалят: пропускает" — negative traits in danger-tinted chips, positive ones in success-tinted chips; "Хвалят: …" when there are only positive ones; nothing when both lists are empty.
+
+### 10.4 Seed
+
+- `@daniyar_almaty` (the driver with the approved violations): 9 downvotes from 9 different voters, 4 × `cuts_off` and 3 × `no_turn_signals`, plus 4 approved violations (penalties capped at −20). Rating ≈ 25 → "Злостный нарушитель", traits "подрезает · не включает поворотники".
+- Demo: 8 upvotes from 8 voters, including 3 × `lets_merge` and 2 × `careful_driver` → traits "хвалят: пропускает · аккуратно водит".
+- Ratings are still computed from the seeded data; `50 + Σ delta = users.rating` holds for every user.

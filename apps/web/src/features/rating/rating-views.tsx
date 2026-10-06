@@ -142,9 +142,8 @@ export function TierLegend({ rating }: { rating: number }) {
           .reverse()
           .map((r) => (
             <li key={r.tier} className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm', r.tier === current && 'bg-muted')} data-tier={r.tier} data-current={r.tier === current || undefined}>
-              {r.tier === 'none' ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-semibold text-muted-foreground">—</span> : <TierBadge tier={r.tier} />}
-              <span className="text-muted-foreground tabular-nums">{t('range', { min: r.min, max: r.max })}</span>
-              {r.tier === 'none' ? <span className="text-muted-foreground">{t('name.none')}</span> : null}
+              <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{t('range', { min: r.min, max: r.max })}</span>
+              <TierBadge tier={r.tier} />
               {r.tier === current ? (
                 <span className="ms-auto inline-flex items-center gap-1 font-medium">
                   <Check aria-hidden="true" className="size-4 text-success" />

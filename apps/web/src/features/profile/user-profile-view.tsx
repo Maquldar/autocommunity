@@ -20,6 +20,7 @@ import { RatingSummary, ReviewsList } from '@/features/rating/rating-views';
 import { ReportButton } from '@/features/reports/report-dialog';
 import { VotePanel } from '@/features/votes/vote-panel';
 import { TransferDialog } from '@/features/wallet/transfer-dialog';
+import { VoteTraits } from '@/features/votes/vote-traits';
 import { ProfileHeader, ProfileHeaderSkeleton } from './profile-header';
 import { useUser, useUserVehicles } from './queries';
 import { VehicleRow } from './vehicle-row';
@@ -71,6 +72,7 @@ export function UserProfileView({ userId }: { userId: string }) {
     <div className="flex flex-col gap-8">
       <ProfileHeader
         user={user.data}
+        footer={<VoteTraits userId={user.data.id} />}
         actions={
           user.data.status === 'active' ? (
             <>

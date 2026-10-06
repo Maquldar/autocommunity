@@ -13,6 +13,7 @@ import { RatingHistory, RatingSummary, ReviewsList } from '@/features/rating/rat
 import { ReceivedVotes } from '@/features/votes/vote-panel';
 import { useWallet } from '@/features/wallet/api';
 import { MyVehicles } from './my-vehicles';
+import { VoteTraits } from '@/features/votes/vote-traits';
 import { ProfileHeader } from './profile-header';
 
 export type OwnProfileTab = 'overview' | 'votes';
@@ -47,6 +48,7 @@ export function OwnProfileView({ initialTab = 'overview' }: { initialTab?: OwnPr
     <div className="flex flex-col gap-8">
       <ProfileHeader
         user={me}
+        footer={<VoteTraits userId={me.id} />}
         actions={
           <Button asChild variant="outline" leadingIcon={<Pencil aria-hidden="true" />}>
             <Link href="/profile/edit">{t('edit')}</Link>
