@@ -16,6 +16,11 @@ Pilot city: Almaty, Kazakhstan. Mobile-first installable web app (PWA) with a Ne
   <img src="docs/screenshots/08-profile.png" width="200" alt="Profile with trust rating">
 </p>
 <p align="center">
+  <img src="docs/screenshots/12-profile.png" width="200" alt="Profile with Premium frame and rating tier">
+  <img src="docs/screenshots/10-wallet.png" width="200" alt="Coin wallet">
+  <img src="docs/screenshots/11-premium.png" width="200" alt="Premium subscription">
+</p>
+<p align="center">
   <img src="docs/screenshots/09-admin.png" width="820" alt="Admin dashboard (dark theme)">
 </p>
 
@@ -35,6 +40,8 @@ Pilot city: Almaty, Kazakhstan. Mobile-first installable web app (PWA) with a Ne
 | **Trust rating** | A transparent 0–100 score: help given, reviews, activity, tenure and penalties, with caps and time decay. Mutual reviews after a closed SOS; reports |
 | **Service centers** | Repair shops, tire, wash, parts and tow. Map and list, open-now, visit verification (on site ≤ 150 m / QR at the counter / order photo), reviews only after a verified visit |
 | **Events & feed** | Community events with routes and RSVP chats; a feed with photos, video and polls |
+| **Wallet & Premium** | Coin balance (1 coin = 1 ₸, demo card top-up, no cash-out), coin transfers between drivers, Premium for 1 490 coins a month with auto-renewal (badge, profile frame, doubled limits) |
+| **Driver trust** | +/− votes with reasons (anti-abuse limits, capped effect on the rating), rating tiers shown on every avatar (low trust → bronze → silver → gold → platinum), detailed vehicle cards, traffic violations (КоАП / УК) published only after admin review, with owner disputes |
 | **Admin** | Users (warn / block / SOS ban), reports queue, SOS review (mark fake), service and visit moderation, audit log, antifraud flags |
 | **Notifications** | In-app, live over Socket.IO, and Web Push for every event type |
 
@@ -95,10 +102,10 @@ Details: [ARCHITECTURE.md](ARCHITECTURE.md) · API contract: [API.md](API.md) ·
 | Check | Result (final combined run) |
 |---|---|
 | TypeScript strict typecheck (shared, API, web) | 0 errors |
-| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **415 / 415** |
-| Web unit tests | **390 / 390** |
-| Shared package tests | **44 / 44** |
-| Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **62 passed, 0 failed** (14 skipped by design: journeys that run in one project only) |
+| API tests: unit + integration against real PostgreSQL/PostGIS and Redis | **476 / 476** |
+| Web unit tests | **495 / 495** |
+| Shared package tests | **72 / 72** |
+| Playwright e2e (mobile + desktop, multi-browser journeys: live SOS, chat, friend requests, admin) | **67 passed, 0 failed** (17 skipped by design: journeys that run in one project only) |
 | Load test (k6, 4 vCPU, single API process) | 50 VUs: p95 197 ms, 0 % errors · 200 VUs: p95 1.64 s, 0 % errors ([load/RESULTS.md](load/RESULTS.md)) |
 
 
@@ -123,7 +130,7 @@ pnpm e2e      # Playwright (needs the API and website running; see apps/web/play
 **Built:** everything in the plan's MVP and version 2.0. **Not built** (with reasons): [KNOWN_GAPS.md](KNOWN_GAPS.md). The main gaps:
 - a native Flutter app (replaced by the PWA);
 - store publishing;
-- monetization (Premium, business accounts);
+- real payments (a payment provider is an adapter away), business accounts, buying items with coins;
 - v3.0 (AI assistant, OBD-II, parts marketplace, insurance).
 
 **Roadmap:**
@@ -131,7 +138,7 @@ pnpm e2e      # Playwright (needs the API and website running; see apps/web/play
 2. Cloudflare R2 storage.
 3. A pilot with an Almaty car club.
 4. A Flutter client on the same API (with background location).
-5. Premium and business accounts for service centers.
+5. A real payment provider (Kaspi / CloudPayments), buying items with coins, business accounts for service centers.
 
 ## Docs
 

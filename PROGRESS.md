@@ -12,6 +12,7 @@
 | 7. Services catalog | ✅ done (built in parallel) |
 | 8. Events, feed, polish | ✅ done |
 | Final release gate (DoD) | ✅ done (2026-10-06) |
+| 9. Wallet, Premium, votes, violations, vehicle details, tiers (client request) | ✅ done (2026-10-06) |
 | 9. Wallet, premium, votes, violations, vehicle details, tiers | ✅ API done + security review fixed (web in progress) |
 
 ## Phase 0 — Spec, architecture, contract (2026-10-04)
@@ -176,3 +177,41 @@
 - Medium: the ledger order could disagree with `balance_after`; a per-wallet `seq` was added (migration `20261006130000_phase9_wallet_ledger_seq`).
 - Low: violations could be filed against admin-owned vehicles; wallet reads wrote to the database.
 - Nit: the early-renewal-then-cancel behaviour is now documented.
+
+## Phase 9 — Monetization and driver trust (client request, 2026-10-06)
+
+**Owner decisions:**
+- Internal coins (1 coin = 1 ₸) with a demo payment provider and no cash-out. Real money transfers between people would need an e-money licence or a payment partner.
+- Premium costs 1 490 coins a month.
+- Violations are published only after admin review.
+- Driver votes (+/−) come with limits.
+- Buying items with coins is deferred.
+
+**Built**
+- **Wallet:**
+  - an immutable ledger with a per-wallet sequence;
+  - demo top-up through a payment-provider adapter;
+  - transfers with idempotency, a daily cap and sender gates;
+  - admin view, adjust and freeze.
+- **Premium:** subscribe, cancel and resume, with a daily renewal job. Perks are the badge, the profile frame and doubled vehicle, post-image, community and membership limits.
+- **Votes:** one per pair every 30 days, from voters aged 7 days or more with rating 40 or more. The effect on the rating is capped at ±15, and voters are never shown publicly.
+- **Violations:** grouped by category, under КоАП or УК, each with 1–3 evidence photos.
+  - Flow: admin approve or reject, then an owner dispute.
+  - Rating: −5 per violation, −20 at most, expiring after 365 days.
+- **Vehicle details:** VIN (visible to the owner only), engine, fuel, transmission, drive, body, mileage, colour, description and photos.
+- **Rating tiers:** shown on every avatar.
+- **Antifraud flags:** `wallet_funnel`, `vote_burst` and `violation_rejections`.
+
+**Review gate:** 2 high, 1 medium, 2 low and 1 nit. All were fixed with regression tests.
+- High: a nickname transfer matched `_` as a wildcard and could pay the wrong user.
+- High: concurrent votes on one target deadlocked, because the row locks were changed to `FOR NO KEY UPDATE`.
+- Medium: the ledger order didn't match `balance_after` under concurrency; a per-wallet sequence fixes it.
+- Verified solid: no overdraw under concurrent transfers or subscriptions, top-ups are credited once, the daily cap holds under races, and neither the VIN nor submitter or voter identities leak.
+
+**Tested on the final commit:**
+- TypeScript: 0 errors.
+- API tests: 476/476.
+- Web unit tests: 495/495.
+- Shared tests: 72/72.
+- Playwright e2e: 67 passed, 0 failed (17 skipped by design). The run used the exact Render scripts from a fresh clone and includes the new wallet, premium, votes and violations journeys.
+
