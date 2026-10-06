@@ -711,7 +711,7 @@ type UserPublic = { ...; isPremium: boolean; profileFrame: 'premium' | null; tie
 type RatingTier = 'warning' | 'none' | 'bronze' | 'silver' | 'gold' | 'platinum'
 type VehicleDto = { id; brand; model; year; plate; isPrimary;
   engineVolumeL: number | null; fuel: VehicleFuel | null; transmission: VehicleTransmission | null; drive: VehicleDrive | null;
-  bodyType: VehicleBodyType | null; mileageKm: number | null; description: string | null; photos: UploadDto[] }
+  bodyType: VehicleBodyType | null; color: VehicleColor | null; mileageKm: number | null; description: string | null; photos: UploadDto[] }
 type OwnVehicleDto = VehicleDto & { vin: string | null }          // GET/POST/PATCH /me/vehicles only
 type VehicleDetailDto = VehicleDto & { owner: UserMini; approvedViolations: number }
 type RatingBreakdown = { base; help; reviews; activity; tenure; votes; penalties }   // `votes` is new
@@ -865,6 +865,7 @@ type ViolationDto = { id; vehicle: { id, brand, model, year }; category; codeTyp
 | `transmission` | `manual \| automatic \| robot \| cvt` |
 | `drive` | `fwd \| rwd \| awd` |
 | `bodyType` | `sedan \| hatchback \| wagon \| suv \| crossover \| coupe \| minivan \| pickup \| van` |
+| `color` | `white \| black \| silver \| gray \| red \| blue \| green \| brown \| beige \| yellow \| orange \| other` (added after the contract freeze, additive) |
 | `mileageKm` | integer 0..2 000 000 |
 | `description` | ≤ 500, no invisible characters (`''` → null) |
 | `photoUploadIds` | ≤ 5 own uploads with purpose `vehicle` (→ else `400 INVALID_UPLOAD`); replaces the whole set in the given order; removed photos are deleted |

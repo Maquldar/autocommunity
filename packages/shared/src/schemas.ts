@@ -142,6 +142,8 @@ export const VEHICLE_DRIVES = ['fwd', 'rwd', 'awd'] as const;
 export type VehicleDrive = (typeof VEHICLE_DRIVES)[number];
 export const VEHICLE_BODY_TYPES = ['sedan', 'hatchback', 'wagon', 'suv', 'crossover', 'coupe', 'minivan', 'pickup', 'van'] as const;
 export type VehicleBodyType = (typeof VEHICLE_BODY_TYPES)[number];
+export const VEHICLE_COLORS = ['white', 'black', 'silver', 'gray', 'red', 'blue', 'green', 'brown', 'beige', 'yellow', 'orange', 'other'] as const;
+export type VehicleColor = (typeof VEHICLE_COLORS)[number];
 
 /** 17 characters, digits and latin letters except I, O and Q (ISO 3779); normalized to upper case. */
 export const vinSchema = z
@@ -173,6 +175,7 @@ const vehicleDetailFields = (coerce: boolean) => ({
   transmission: z.enum(VEHICLE_TRANSMISSIONS).nullable().optional(),
   drive: z.enum(VEHICLE_DRIVES).nullable().optional(),
   bodyType: z.enum(VEHICLE_BODY_TYPES).nullable().optional(),
+  color: z.enum(VEHICLE_COLORS).nullable().optional(),
   mileageKm: mileageSchema(coerce).nullable().optional(),
   description: vehicleDescriptionSchema.nullable().optional(),
   /** Replaces the whole photo set (order kept); uploads with purpose `vehicle`. `[]` removes all. */

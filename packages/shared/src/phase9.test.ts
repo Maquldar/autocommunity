@@ -119,6 +119,8 @@ describe('vehicle details', () => {
     expect(vehicleSchema.parse({ ...v, engineVolumeL: '2.0' }).engineVolumeL).toBe(2);
     ok(vehicleBodySchema.safeParse({ ...v, fuel: 'hybrid', transmission: 'cvt', drive: 'awd', bodyType: 'crossover', mileageKm: 120_000 }));
     bad(vehicleBodySchema.safeParse({ ...v, fuel: 'hydrogen' }));
+    ok(vehicleBodySchema.safeParse({ ...v, color: 'beige' }));
+    bad(vehicleBodySchema.safeParse({ ...v, color: 'pink' }));
     bad(vehicleBodySchema.safeParse({ ...v, mileageKm: -1 }));
     bad(vehicleBodySchema.safeParse({ ...v, description: 'x'.repeat(501) }));
     bad(vehicleBodySchema.safeParse({ ...v, photoUploadIds: Array(6).fill(uuid) }));

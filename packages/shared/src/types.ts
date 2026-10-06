@@ -1,6 +1,6 @@
 import type { ChatReadEvent, ChatTypingEvent, MessageDeletedEvent, MessageDto } from './communities';
 import type { Locale, PrivacyMode, UserRole } from './constants';
-import type { VehicleBodyType, VehicleDrive, VehicleFuel, VehicleTransmission } from './schemas';
+import type { VehicleBodyType, VehicleColor, VehicleDrive, VehicleFuel, VehicleTransmission } from './schemas';
 import type { SosDto } from './sos';
 import type { RatingTier } from './tiers';
 
@@ -33,6 +33,7 @@ export type VehicleDto = {
   transmission: VehicleTransmission | null;
   drive: VehicleDrive | null;
   bodyType: VehicleBodyType | null;
+  color: VehicleColor | null;
   mileageKm: number | null;
   description: string | null;
   photos: UploadDto[];

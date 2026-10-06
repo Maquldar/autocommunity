@@ -16,6 +16,7 @@ export function toVehicleDto(v: Vehicle, showPlate: boolean): VehicleDto {
     transmission: null,
     drive: null,
     bodyType: null,
+    color: null,
     mileageKm: null,
     description: null,
     photos: [],
