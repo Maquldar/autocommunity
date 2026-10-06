@@ -6,6 +6,9 @@ cd "$(dirname "$0")/../.."
 PNPM="npx --yes pnpm@10.0.0"
 # Dev dependencies (Nest CLI, TypeScript, Tailwind) are needed to build.
 NODE_ENV=development $PNPM install --frozen-lockfile
+# Render caches node_modules between builds, and an install with an unchanged lockfile skips postinstall,
+# so the Prisma client could be stale (generated from an older schema). Always regenerate it.
+$PNPM --filter @autoc/api exec prisma generate
 $PNPM --filter @autoc/shared build
 $PNPM --filter @autoc/api build
 # The browser talks to the web origin only; Next proxies /api/v1 and /media to the API on localhost.
