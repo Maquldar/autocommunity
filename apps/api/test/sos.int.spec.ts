@@ -2,6 +2,7 @@ import { SOS_LIMITS, type MessageDto, type SosDto } from '@autoc/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../src/common/ids';
+import { BackgroundTasks } from '../src/infra/tasks/background-tasks';
 import { SosDispatchService } from '../src/modules/sos/sos-dispatch.service';
 import { bearer, createTestApp, createUser, makeFriends, nextIp, setLocation, waitFor, type CreateUserData, type TestApp } from './support/app';
 import { pngImage } from './support/images';
@@ -126,6 +127,11 @@ describe('POST /sos gates', () => {
     await sos(busy).cancel(second.id).expect(200);
     const third = (await sos(busy).create(body(p)).expect(201)).body as SosDto;
     await sos(busy).cancel(third.id).expect(200);
+    // Three quick cancels also trip antifraud (sos_cancel_streak → SOS ban, checked before the rate limit);
+    // lift the ban to see the 24 h limit.
+    await t.app.get(BackgroundTasks).drain();
+    expect((await t.prisma.user.findUniqueOrThrow({ where: { id: busy.id } })).sosBannedUntil).not.toBeNull();
+    await t.prisma.user.update({ where: { id: busy.id }, data: { sosBannedUntil: null } });
     const limited = await sos(busy).create(body(p)).expect(429);
     expect(limited.body.error.code).toBe('SOS_RATE_LIMIT');
     expect(limited.body.error.details.retryAfterSec).toBeGreaterThan(23 * 3600);

@@ -5,6 +5,8 @@ import { ConfigModule } from './config/config.module';
 import { ENV, type Env } from './config/env';
 import { loggerOptions } from './config/logger';
 import { InfraModule } from './infra/infra.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { AntifraudModule } from './modules/antifraud/antifraud.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatsModule } from './modules/chats/chats.module';
 import { CommunitiesModule } from './modules/communities/communities.module';
@@ -50,6 +52,8 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     DemoModule,
     HealthModule,
     ServicesModule,
+    AntifraudModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

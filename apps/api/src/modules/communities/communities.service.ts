@@ -177,10 +177,10 @@ export class CommunitiesService {
   }
 
   /** Soft delete: hidden from lists, chat access revoked for everyone; the name becomes free again. */
-  async remove(userId: string, id: string): Promise<void> {
+  async remove(userId: string, id: string, opts: { asAdmin?: boolean } = {}): Promise<void> {
     const { chatId, userIds } = await this.prisma.$transaction(async (tx) => {
       const community = await lockCommunity(tx, id);
-      if (community.ownerId !== userId) throw Errors.forbidden('Only the owner can delete the community');
+      if (community.ownerId !== userId && !opts.asAdmin) throw Errors.forbidden('Only the owner can delete the community');
       await tx.community.update({ where: { id }, data: { deletedAt: new Date() } });
       const chat = await tx.chat.findUnique({ where: { refId: id }, select: { id: true, members: { select: { userId: true } } } });
       if (chat) await tx.chatMember.deleteMany({ where: { chatId: chat.id } });

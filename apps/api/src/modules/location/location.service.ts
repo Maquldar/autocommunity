@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { RedisService } from '../../infra/redis/redis.service';
+import { AntifraudService } from '../antifraud/antifraud.service';
 
 /** Updates closer together than this are acknowledged but not written. */
 export const LOCATION_MIN_INTERVAL_MS = 10_000;
@@ -24,6 +25,7 @@ export class LocationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly antifraud: AntifraudService,
   ) {}
 
   /**
@@ -49,7 +51,7 @@ export class LocationService {
    * until it runs out). Decided in the same statement, so concurrent updates can't skip the check.
    */
   private async write(userId: string, lat: number, lng: number, accuracyM: number | null): Promise<void> {
-    await this.prisma.$executeRaw`
+    const rows = await this.prisma.$queryRaw<{ jumped: boolean }[]>`
       INSERT INTO user_locations (user_id, location, accuracy_m, source, updated_at)
       VALUES (
         ${userId}::uuid,
@@ -68,7 +70,10 @@ export class LocationService {
         location = EXCLUDED.location,
         accuracy_m = EXCLUDED.accuracy_m,
         source = 'client',
-        updated_at = EXCLUDED.updated_at`;
+        updated_at = EXCLUDED.updated_at
+      -- now() is fixed per statement: equal only when this update set the mark (an implausible jump).
+      RETURNING untrusted_until IS NOT DISTINCT FROM (now() + make_interval(mins => ${UNTRUSTED_MINUTES}::int))::timestamp(3) AS jumped`;
+    if (rows[0]?.jumped) this.antifraud.locationJump(userId);
   }
 
   async remove(userId: string): Promise<void> {

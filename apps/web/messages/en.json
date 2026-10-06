@@ -789,14 +789,16 @@
       "generic": "New notification",
       "communityRequest": "<b>{name}</b> wants to join <b>{community}</b>",
       "communityApproved": "You've been accepted into <b>{community}</b>",
-      "communityRole": "{role, select, owner {You're now the owner of <b>{community}</b>} moderator {You're now a moderator of <b>{community}</b>} other {You're now a regular member of <b>{community}</b>}}"
+      "communityRole": "{role, select, owner {You're now the owner of <b>{community}</b>} moderator {You're now a moderator of <b>{community}</b>} other {You're now a regular member of <b>{community}</b>}}",
+      "moderation": "{variant, select, warning {Moderator warning} blocked {Your account was blocked} sos_ban {You can't create SOS requests for now} fake_sos {Your SOS was marked as fake} report_confirmed {Your report was confirmed. Thank you!} report_dismissed {Your report was reviewed: no violation found} service_verified {<b>{service}</b> was verified and is now listed} service_rejected {<b>{service}</b> didn't pass moderation} visit_verified {Your visit to <b>{service}</b> was confirmed — you can leave a review} visit_rejected {Your visit to <b>{service}</b> wasn't confirmed} other {Moderation update}}"
     },
     "someone": "A driver",
     "accepted": "Request accepted",
     "declined": "Request declined",
     "gone": "This request is no longer active",
     "open": "Open",
-    "someCommunity": "a community"
+    "someCommunity": "a community",
+    "until": "until {date}"
   },
   "communities": {
     "metaTitle": "Communities",
@@ -1321,6 +1323,457 @@
       "geoDenied": "Allow location access to confirm by location, or use a QR code.",
       "geoUnavailable": "Couldn't get your location. Try again, or use another method.",
       "bboxTooLarge": "Zoom in to see services"
+    }
+  },
+  "admin": {
+    "metaTitle": "Admin",
+    "nav": {
+      "label": "Admin sections",
+      "menuItem": "Admin panel",
+      "dashboard": "Dashboard",
+      "users": "Users",
+      "reports": "Reports",
+      "sos": "SOS",
+      "communities": "Communities",
+      "services": "Services",
+      "visits": "Photo visits",
+      "fraud": "Fraud flags",
+      "audit": "Audit log"
+    },
+    "notFound": {
+      "title": "Page not found",
+      "description": "This page doesn't exist or has been moved.",
+      "home": "Go to the map"
+    },
+    "common": {
+      "noUser": "No user",
+      "noName": "No name",
+      "any": "Any",
+      "admin": "Admin",
+      "sosBanned": "SOS ban",
+      "userStatus": {
+        "active": "Active",
+        "blocked": "Blocked",
+        "deleted": "Deleted"
+      }
+    },
+    "note": {
+      "label": "Note for the audit log",
+      "hint": "Required. Explain the decision; warnings show it to the user.",
+      "tooShort": "At least {min} characters",
+      "tooLong": "At most {max} characters"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "description": "Key MVP metrics and moderation queues.",
+      "loading": "Loading the numbers…",
+      "units": {
+        "h": "h",
+        "m": "min",
+        "s": "s"
+      },
+      "groups": {
+        "users": "Users",
+        "sos": "SOS",
+        "moderation": "Moderation"
+      },
+      "tiles": {
+        "usersTotal": {
+          "label": "Users",
+          "hint": "All accounts"
+        },
+        "usersActive7d": {
+          "label": "Active, 7 days",
+          "hint": "Used the app this week"
+        },
+        "usersNew7d": {
+          "label": "New, 7 days",
+          "hint": "Sign-ups"
+        },
+        "usersBlocked": {
+          "label": "Blocked",
+          "hint": "Block in force now"
+        },
+        "sosOpen": {
+          "label": "Open SOS",
+          "hint": "Waiting or in progress"
+        },
+        "sos7d": {
+          "label": "SOS, 7 days",
+          "hint": "Created"
+        },
+        "sosClosed7d": {
+          "label": "Helped, 7 days",
+          "hint": "Closed SOS"
+        },
+        "firstResponse": {
+          "label": "First response",
+          "hint": "Median, last 7 days"
+        },
+        "fakeRate": {
+          "label": "Fake SOS rate",
+          "hint": "Last 30 days"
+        },
+        "reportsOpen": {
+          "label": "Open reports",
+          "hint": "Waiting for a decision"
+        },
+        "servicesPending": {
+          "label": "Services to check",
+          "hint": "New submissions"
+        },
+        "visitsPending": {
+          "label": "Photo visits",
+          "hint": "Order photos to check"
+        },
+        "communities": {
+          "label": "Communities",
+          "hint": "Not deleted"
+        }
+      }
+    },
+    "users": {
+      "title": "Users",
+      "description": "Search by nickname, name or phone number.",
+      "search": "Search",
+      "searchPlaceholder": "Nickname, name or phone",
+      "status": "Status",
+      "empty": "No users found",
+      "columns": {
+        "user": "User",
+        "phone": "Phone",
+        "status": "Status",
+        "rating": "Rating",
+        "joined": "Joined"
+      }
+    },
+    "user": {
+      "loading": "Loading the user…",
+      "notFound": "User not found",
+      "title": "User",
+      "publicProfile": "Public profile",
+      "actions": {
+        "title": "Actions",
+        "protected": "You can't act on yourself or on other admins.",
+        "warn": "Warn",
+        "block": "Block",
+        "unblock": "Unblock",
+        "sosBan": "Ban from SOS",
+        "sosUnban": "Lift SOS ban"
+      },
+      "profile": "Profile",
+      "fields": {
+        "phone": "Phone",
+        "unverified": "not verified",
+        "city": "City",
+        "joined": "Joined",
+        "lastActive": "Last active",
+        "blockedUntil": "Blocked until",
+        "forever": "Indefinitely",
+        "sosBannedUntil": "SOS banned until"
+      },
+      "counts": {
+        "title": "Activity",
+        "sosCreated": "SOS created",
+        "helps": "Helps",
+        "reportsAgainst": "Reports against",
+        "reportsFiled": "Reports filed",
+        "warnings": "Warnings"
+      },
+      "ratingEvents": "Rating history",
+      "reasons": {
+        "help_confirmed": "Confirmed help",
+        "review_received": "Review received",
+        "penalty": "Penalty",
+        "recalc_daily": "Daily recalculation",
+        "recalc": "Recalculation"
+      },
+      "noRatingEvents": "No rating changes yet.",
+      "adminActions": "Admin history",
+      "noAdminActions": "No admin actions yet.",
+      "fraudFlags": "Fraud flags",
+      "noFraudFlags": "No fraud flags.",
+      "dialogs": {
+        "duration": "Duration",
+        "warn": {
+          "title": "Warn {name}?",
+          "description": "The user gets a notification with your note.",
+          "done": "Warning sent"
+        },
+        "block": {
+          "title": "Block {name}?",
+          "description": "All sessions end right away and any open SOS is cancelled.",
+          "done": "User blocked"
+        },
+        "unblock": {
+          "title": "Unblock {name}?",
+          "done": "User unblocked"
+        },
+        "sosBan": {
+          "title": "Ban {name} from SOS?",
+          "description": "They can still use the app, but not create SOS requests.",
+          "done": "SOS ban set"
+        },
+        "sosUnban": {
+          "title": "Lift the SOS ban for {name}?",
+          "done": "SOS ban lifted"
+        }
+      },
+      "presets": {
+        "24h": "24 h",
+        "72h": "72 h",
+        "7d": "7 days",
+        "30d": "30 days",
+        "forever": "Indefinite"
+      }
+    },
+    "fraud": {
+      "title": "Fraud flags",
+      "description": "Automatic antifraud signals, newest first.",
+      "kind": "Kind",
+      "empty": "No fraud flags",
+      "emptyHint": "Suspicious patterns will show up here automatically.",
+      "noFacts": "No details",
+      "openSos": "Open the SOS",
+      "kinds": {
+        "sos_cancel_streak": "SOS cancel streak",
+        "duplicate_sos_photo": "Duplicate SOS photo",
+        "report_burst": "Report burst",
+        "location_teleport": "Location jumps",
+        "new_account_sos": "SOS from a new account",
+        "otp_abuse": "OTP abuse"
+      },
+      "facts": {
+        "count": "SOS",
+        "until": "until",
+        "reporters": "reporters",
+        "rating": "rating",
+        "jumps": "jumps",
+        "minutes": "account age, min",
+        "matches": "matches",
+        "phone": "phone",
+        "lockouts": "lockouts"
+      }
+    },
+    "audit": {
+      "title": "Audit log",
+      "description": "Every admin action with its note.",
+      "empty": "No admin actions yet",
+      "target": "Open target",
+      "by": "by {name}",
+      "actions": {
+        "user_warn": "Warning",
+        "user_block": "Block",
+        "user_unblock": "Unblock",
+        "user_sos_ban": "SOS ban",
+        "user_sos_unban": "SOS ban lifted",
+        "community_delete": "Community deleted",
+        "sos_mark_fake": "SOS marked fake",
+        "report_confirm": "Report confirmed",
+        "report_dismiss": "Report dismissed",
+        "service_verify": "Service verified",
+        "service_reject": "Service rejected",
+        "visit_approve": "Visit approved",
+        "visit_reject": "Visit rejected"
+      }
+    },
+    "reports": {
+      "title": "Reports",
+      "description": "Review reports and decide.",
+      "status": "Status",
+      "targetType": "Target",
+      "empty": "No reports here",
+      "emptyHint": "New reports appear here as users file them.",
+      "statuses": {
+        "open": "Open",
+        "confirmed": "Confirmed",
+        "dismissed": "Dismissed"
+      },
+      "targets": {
+        "user": "User",
+        "message": "Message",
+        "post": "Post",
+        "comment": "Comment",
+        "sos": "SOS",
+        "community": "Community",
+        "service": "Service"
+      },
+      "reasons": {
+        "spam": "Spam",
+        "fake_sos": "Fake SOS",
+        "harassment": "Harassment",
+        "fraud": "Fraud",
+        "inappropriate": "Inappropriate",
+        "dangerous": "Dangerous",
+        "other": "Other"
+      },
+      "cardLabel": "Report about a {target}",
+      "deleted": "Content already removed",
+      "noPreview": "No preview",
+      "openTarget": "Open",
+      "details": "Details",
+      "reporter": "Reported by",
+      "targetUser": "About",
+      "dismiss": "Dismiss",
+      "confirm": "Confirm",
+      "resolution": "Decision",
+      "confirmTitle": "Confirm the report?",
+      "dismissTitle": "Dismiss the report?",
+      "confirmDescription": "The author loses 10 rating points. Other open reports on the same target are resolved too.",
+      "dismissDescription": "No penalty. Other open reports on the same target are dismissed too.",
+      "confirmed": "Report confirmed",
+      "dismissed": "Report dismissed",
+      "removeContent": "Remove the content",
+      "removeHint": {
+        "content": "Deletes the message, community or service listing.",
+        "sos": "Marks the SOS as fake (−50 more for the author)."
+      }
+    },
+    "sos": {
+      "title": "SOS",
+      "description": "All SOS requests, newest first.",
+      "status": "Status",
+      "empty": "No SOS here",
+      "loading": "Loading the SOS…",
+      "notFound": "SOS not found",
+      "detailTitle": "SOS details",
+      "columns": {
+        "sos": "SOS",
+        "requester": "Requester",
+        "status": "Status",
+        "responses": "Responses",
+        "created": "Created"
+      },
+      "statuses": {
+        "created": "Waiting",
+        "accepted": "Accepted",
+        "in_progress": "In progress",
+        "closed": "Closed",
+        "cancelled": "Cancelled",
+        "expired": "Expired"
+      },
+      "types": {
+        "flat_tire": "Flat tire",
+        "battery": "Dead battery",
+        "fuel": "Out of fuel",
+        "stuck": "Stuck",
+        "breakdown": "Breakdown",
+        "accident": "Accident",
+        "tow": "Tow needed",
+        "other": "Other"
+      },
+      "fake": "Fake",
+      "markFake": "Mark as fake",
+      "fields": {
+        "requester": "Requester",
+        "description": "Description",
+        "created": "Created",
+        "ended": "Ended",
+        "cancelReason": "Cancel reason",
+        "location": "Location",
+        "radius": "Dispatch radius",
+        "km": "{km} km",
+        "dispatched": "Notified drivers",
+        "chat": "SOS chat"
+      },
+      "photos": "Photos",
+      "photoAlt": "SOS photo",
+      "responses": "Responses",
+      "responseStatuses": {
+        "offered": "Offered",
+        "accepted": "Accepted",
+        "arrived": "Arrived",
+        "withdrawn": "Withdrew",
+        "declined": "Declined"
+      },
+      "noResponses": "Nobody responded.",
+      "reports": "Reports",
+      "noReports": "No reports.",
+      "markFakeTitle": "Mark this SOS as fake?",
+      "markFakeDescription": "It is cancelled if still open, the requester loses 50 rating points and is notified.",
+      "markedFake": "SOS marked as fake"
+    },
+    "communities": {
+      "title": "Communities",
+      "description": "All communities, including deleted ones.",
+      "search": "Search by name",
+      "empty": "No communities found",
+      "columns": {
+        "name": "Community",
+        "owner": "Owner",
+        "members": "Members",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "private": "Private",
+      "deleted": "Deleted",
+      "delete": "Delete",
+      "deleteNamed": "Delete {name}",
+      "deleteTitle": "Delete “{name}”?",
+      "deleteDescription": "Members lose access to the community and its chat.",
+      "deletedToast": "Community deleted"
+    },
+    "services": {
+      "title": "Services",
+      "description": "Check new submissions; print QR codes for verified services.",
+      "status": "Status",
+      "empty": "Nothing to review",
+      "emptyHint": "New submissions appear here.",
+      "statuses": {
+        "pending": "Pending",
+        "verified": "Verified",
+        "rejected": "Rejected"
+      },
+      "verifyTitle": "Verify “{name}”?",
+      "rejectTitle": "Reject “{name}”?",
+      "verifyDescription": "It appears in the catalog and on the map; the submitter is notified.",
+      "rejectDescription": "It is hidden from the catalog; the submitter is notified.",
+      "verify": "Verify",
+      "reject": "Reject",
+      "verified": "Service verified",
+      "rejected": "Service rejected",
+      "closed": "Closed",
+      "photos": "Photos",
+      "photoAlt": "Photo of {name}",
+      "submittedBy": "Submitted by",
+      "printQr": "QR for printing",
+      "mapLabel": "Map with the location of {name}",
+      "openMap": "Open in OpenStreetMap",
+      "days": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "qr": {
+        "title": "Visit QR code",
+        "description": "Today's code for {name}. Print it and hang it at the counter.",
+        "loading": "Generating…",
+        "alt": "QR code {code}",
+        "validToday": "Valid today and tomorrow morning (Almaty time). Print a new one daily.",
+        "close": "Close",
+        "print": "Print",
+        "printHint": "Scan with AutoCommunity to confirm your visit"
+      }
+    },
+    "visits": {
+      "title": "Photo visits",
+      "description": "Order photos that confirm a visit. Approval lets the driver leave a review.",
+      "empty": "No photos to check",
+      "emptyHint": "New order photos appear here.",
+      "photoAlt": "Order photo for {name}",
+      "noPhoto": "Photo unavailable",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approveTitle": "Approve this visit?",
+      "rejectTitle": "Reject this visit?",
+      "approveDescription": "The driver is notified and can review the service.",
+      "rejectDescription": "The driver is notified; no review is possible for this visit.",
+      "approved": "Visit approved",
+      "rejected": "Visit rejected"
     }
   }
 }

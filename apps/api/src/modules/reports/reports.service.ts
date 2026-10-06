@@ -6,6 +6,7 @@ import { ApiException, Errors } from '../../common/errors/api-exception';
 import { newId } from '../../common/ids';
 import { decodeCursor, keysetOrderBy, keysetWhere, splitPage } from '../../common/pagination/cursor';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { AntifraudService } from '../antifraud/antifraud.service';
 import { ChatsService } from '../chats/chats.service';
 import { SosService } from '../sos/sos.service';
 
@@ -31,6 +32,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly chats: ChatsService,
     private readonly sos: SosService,
+    private readonly antifraud: AntifraudService,
   ) {}
 
   async create(reporterId: string, input: CreateReportInput): Promise<ReportDto> {
@@ -64,6 +66,7 @@ export class ReportsService {
           },
         });
       });
+      this.antifraud.reportCreated(row.targetUserId);
       return toDto(row);
     } catch (err) {
       if (isUniqueViolation(err)) throw alreadyReported();

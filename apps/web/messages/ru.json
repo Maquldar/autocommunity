@@ -789,14 +789,16 @@
       "generic": "Новое уведомление",
       "communityRequest": "<b>{name}</b> хочет вступить в <b>{community}</b>",
       "communityApproved": "Вас приняли в <b>{community}</b>",
-      "communityRole": "{role, select, owner {Теперь вы владелец <b>{community}</b>} moderator {Теперь вы модератор <b>{community}</b>} other {Теперь вы обычный участник <b>{community}</b>}}"
+      "communityRole": "{role, select, owner {Теперь вы владелец <b>{community}</b>} moderator {Теперь вы модератор <b>{community}</b>} other {Теперь вы обычный участник <b>{community}</b>}}",
+      "moderation": "{variant, select, warning {Предупреждение модератора} blocked {Ваш аккаунт заблокирован} sos_ban {Создание SOS временно недоступно} fake_sos {Ваш SOS признан ложным} report_confirmed {Ваша жалоба подтверждена. Спасибо!} report_dismissed {Жалоба рассмотрена: нарушений не найдено} service_verified {<b>{service}</b> прошёл проверку и появился в каталоге} service_rejected {<b>{service}</b> не прошёл модерацию} visit_verified {Визит в <b>{service}</b> подтверждён — можно оставить отзыв} visit_rejected {Визит в <b>{service}</b> не подтверждён} other {Решение модератора}}"
     },
     "someone": "Водитель",
     "accepted": "Заявка принята",
     "declined": "Заявка отклонена",
     "gone": "Эта заявка больше не действует",
     "open": "Открыть",
-    "someCommunity": "сообщество"
+    "someCommunity": "сообщество",
+    "until": "до {date}"
   },
   "communities": {
     "metaTitle": "Сообщества",
@@ -1321,6 +1323,457 @@
       "geoDenied": "Разрешите доступ к геолокации или используйте QR-код.",
       "geoUnavailable": "Не удалось определить местоположение. Попробуйте ещё раз или выберите другой способ.",
       "bboxTooLarge": "Приблизьте карту, чтобы увидеть сервисы"
+    }
+  },
+  "admin": {
+    "metaTitle": "Админка",
+    "nav": {
+      "label": "Разделы админки",
+      "menuItem": "Админ-панель",
+      "dashboard": "Сводка",
+      "users": "Пользователи",
+      "reports": "Жалобы",
+      "sos": "SOS",
+      "communities": "Сообщества",
+      "services": "Сервисы",
+      "visits": "Фото-визиты",
+      "fraud": "Антифрод",
+      "audit": "Журнал действий"
+    },
+    "notFound": {
+      "title": "Страница не найдена",
+      "description": "Такой страницы нет или она переехала.",
+      "home": "На карту"
+    },
+    "common": {
+      "noUser": "Нет пользователя",
+      "noName": "Без имени",
+      "any": "Любой",
+      "admin": "Админ",
+      "sosBanned": "Бан SOS",
+      "userStatus": {
+        "active": "Активен",
+        "blocked": "Заблокирован",
+        "deleted": "Удалён"
+      }
+    },
+    "note": {
+      "label": "Комментарий для журнала",
+      "hint": "Обязательно. Объясните решение; при предупреждении его увидит пользователь.",
+      "tooShort": "Минимум {min} символа",
+      "tooLong": "Максимум {max} символов"
+    },
+    "dashboard": {
+      "title": "Сводка",
+      "description": "Ключевые метрики MVP и очереди модерации.",
+      "loading": "Загружаем цифры…",
+      "units": {
+        "h": "ч",
+        "m": "мин",
+        "s": "с"
+      },
+      "groups": {
+        "users": "Пользователи",
+        "sos": "SOS",
+        "moderation": "Модерация"
+      },
+      "tiles": {
+        "usersTotal": {
+          "label": "Пользователи",
+          "hint": "Все аккаунты"
+        },
+        "usersActive7d": {
+          "label": "Активны за 7 дней",
+          "hint": "Заходили на этой неделе"
+        },
+        "usersNew7d": {
+          "label": "Новые за 7 дней",
+          "hint": "Регистрации"
+        },
+        "usersBlocked": {
+          "label": "Заблокированы",
+          "hint": "Блокировка действует"
+        },
+        "sosOpen": {
+          "label": "Открытые SOS",
+          "hint": "Ждут помощи или в процессе"
+        },
+        "sos7d": {
+          "label": "SOS за 7 дней",
+          "hint": "Создано"
+        },
+        "sosClosed7d": {
+          "label": "Помогли за 7 дней",
+          "hint": "Закрытые SOS"
+        },
+        "firstResponse": {
+          "label": "Первый отклик",
+          "hint": "Медиана за 7 дней"
+        },
+        "fakeRate": {
+          "label": "Доля ложных SOS",
+          "hint": "За 30 дней"
+        },
+        "reportsOpen": {
+          "label": "Открытые жалобы",
+          "hint": "Ждут решения"
+        },
+        "servicesPending": {
+          "label": "Сервисы на проверке",
+          "hint": "Новые заявки"
+        },
+        "visitsPending": {
+          "label": "Фото-визиты",
+          "hint": "Фото заказов на проверке"
+        },
+        "communities": {
+          "label": "Сообщества",
+          "hint": "Не удалённые"
+        }
+      }
+    },
+    "users": {
+      "title": "Пользователи",
+      "description": "Поиск по нику, имени или номеру телефона.",
+      "search": "Поиск",
+      "searchPlaceholder": "Ник, имя или телефон",
+      "status": "Статус",
+      "empty": "Пользователи не найдены",
+      "columns": {
+        "user": "Пользователь",
+        "phone": "Телефон",
+        "status": "Статус",
+        "rating": "Рейтинг",
+        "joined": "Регистрация"
+      }
+    },
+    "user": {
+      "loading": "Загружаем пользователя…",
+      "notFound": "Пользователь не найден",
+      "title": "Пользователь",
+      "publicProfile": "Публичный профиль",
+      "actions": {
+        "title": "Действия",
+        "protected": "Нельзя применять меры к себе и другим администраторам.",
+        "warn": "Предупредить",
+        "block": "Заблокировать",
+        "unblock": "Разблокировать",
+        "sosBan": "Запретить SOS",
+        "sosUnban": "Снять запрет SOS"
+      },
+      "profile": "Профиль",
+      "fields": {
+        "phone": "Телефон",
+        "unverified": "не подтверждён",
+        "city": "Город",
+        "joined": "Регистрация",
+        "lastActive": "Был(а) активен",
+        "blockedUntil": "Заблокирован до",
+        "forever": "Бессрочно",
+        "sosBannedUntil": "Запрет SOS до"
+      },
+      "counts": {
+        "title": "Активность",
+        "sosCreated": "Создал SOS",
+        "helps": "Помог",
+        "reportsAgainst": "Жалоб на него",
+        "reportsFiled": "Подал жалоб",
+        "warnings": "Предупреждения"
+      },
+      "ratingEvents": "История рейтинга",
+      "reasons": {
+        "help_confirmed": "Подтверждённая помощь",
+        "review_received": "Получен отзыв",
+        "penalty": "Штраф",
+        "recalc_daily": "Ежедневный пересчёт",
+        "recalc": "Пересчёт"
+      },
+      "noRatingEvents": "Рейтинг ещё не менялся.",
+      "adminActions": "Действия администраторов",
+      "noAdminActions": "Администраторы ещё ничего не делали.",
+      "fraudFlags": "Антифрод-флаги",
+      "noFraudFlags": "Флагов нет.",
+      "dialogs": {
+        "duration": "Срок",
+        "warn": {
+          "title": "Предупредить {name}?",
+          "description": "Пользователь получит уведомление с вашим комментарием.",
+          "done": "Предупреждение отправлено"
+        },
+        "block": {
+          "title": "Заблокировать {name}?",
+          "description": "Все сессии завершатся сразу, открытый SOS будет отменён.",
+          "done": "Пользователь заблокирован"
+        },
+        "unblock": {
+          "title": "Разблокировать {name}?",
+          "done": "Пользователь разблокирован"
+        },
+        "sosBan": {
+          "title": "Запретить {name} создавать SOS?",
+          "description": "Приложением можно пользоваться, но создавать SOS нельзя.",
+          "done": "Запрет SOS установлен"
+        },
+        "sosUnban": {
+          "title": "Снять запрет SOS для {name}?",
+          "done": "Запрет SOS снят"
+        }
+      },
+      "presets": {
+        "24h": "24 ч",
+        "72h": "72 ч",
+        "7d": "7 дней",
+        "30d": "30 дней",
+        "forever": "Бессрочно"
+      }
+    },
+    "fraud": {
+      "title": "Антифрод",
+      "description": "Автоматические сигналы антифрода, сначала новые.",
+      "kind": "Тип",
+      "empty": "Флагов нет",
+      "emptyHint": "Подозрительные паттерны появятся здесь автоматически.",
+      "noFacts": "Без деталей",
+      "openSos": "Открыть SOS",
+      "kinds": {
+        "sos_cancel_streak": "Серия отмен SOS",
+        "duplicate_sos_photo": "Повтор фото SOS",
+        "report_burst": "Волна жалоб",
+        "location_teleport": "Скачки геопозиции",
+        "new_account_sos": "SOS с нового аккаунта",
+        "otp_abuse": "Перебор кодов"
+      },
+      "facts": {
+        "count": "SOS",
+        "until": "до",
+        "reporters": "жалобщиков",
+        "rating": "рейтинг",
+        "jumps": "скачков",
+        "minutes": "возраст аккаунта, мин",
+        "matches": "совпадений",
+        "phone": "телефон",
+        "lockouts": "блокировок"
+      }
+    },
+    "audit": {
+      "title": "Журнал действий",
+      "description": "Все действия администраторов с комментариями.",
+      "empty": "Действий пока нет",
+      "target": "Открыть объект",
+      "by": "выполнил(а) {name}",
+      "actions": {
+        "user_warn": "Предупреждение",
+        "user_block": "Блокировка",
+        "user_unblock": "Разблокировка",
+        "user_sos_ban": "Запрет SOS",
+        "user_sos_unban": "Снят запрет SOS",
+        "community_delete": "Удалено сообщество",
+        "sos_mark_fake": "SOS признан ложным",
+        "report_confirm": "Жалоба подтверждена",
+        "report_dismiss": "Жалоба отклонена",
+        "service_verify": "Сервис подтверждён",
+        "service_reject": "Сервис отклонён",
+        "visit_approve": "Визит подтверждён",
+        "visit_reject": "Визит отклонён"
+      }
+    },
+    "reports": {
+      "title": "Жалобы",
+      "description": "Рассмотрите жалобы и примите решение.",
+      "status": "Статус",
+      "targetType": "Объект",
+      "empty": "Жалоб нет",
+      "emptyHint": "Новые жалобы появятся здесь.",
+      "statuses": {
+        "open": "Открыта",
+        "confirmed": "Подтверждена",
+        "dismissed": "Отклонена"
+      },
+      "targets": {
+        "user": "Пользователь",
+        "message": "Сообщение",
+        "post": "Пост",
+        "comment": "Комментарий",
+        "sos": "SOS",
+        "community": "Сообщество",
+        "service": "Сервис"
+      },
+      "reasons": {
+        "spam": "Спам",
+        "fake_sos": "Ложный SOS",
+        "harassment": "Оскорбления",
+        "fraud": "Мошенничество",
+        "inappropriate": "Неприемлемое",
+        "dangerous": "Опасное",
+        "other": "Другое"
+      },
+      "cardLabel": "Жалоба: {target}",
+      "deleted": "Контент уже удалён",
+      "noPreview": "Нет предпросмотра",
+      "openTarget": "Открыть",
+      "details": "Подробности",
+      "reporter": "Пожаловался",
+      "targetUser": "На кого",
+      "dismiss": "Отклонить",
+      "confirm": "Подтвердить",
+      "resolution": "Решение",
+      "confirmTitle": "Подтвердить жалобу?",
+      "dismissTitle": "Отклонить жалобу?",
+      "confirmDescription": "Автор потеряет 10 баллов рейтинга. Другие открытые жалобы на этот объект закроются так же.",
+      "dismissDescription": "Без штрафа. Другие открытые жалобы на этот объект тоже будут отклонены.",
+      "confirmed": "Жалоба подтверждена",
+      "dismissed": "Жалоба отклонена",
+      "removeContent": "Удалить контент",
+      "removeHint": {
+        "content": "Удалит сообщение, сообщество или карточку сервиса.",
+        "sos": "Признаёт SOS ложным (ещё −50 автору)."
+      }
+    },
+    "sos": {
+      "title": "SOS",
+      "description": "Все SOS, сначала новые.",
+      "status": "Статус",
+      "empty": "SOS нет",
+      "loading": "Загружаем SOS…",
+      "notFound": "SOS не найден",
+      "detailTitle": "Детали SOS",
+      "columns": {
+        "sos": "SOS",
+        "requester": "Автор",
+        "status": "Статус",
+        "responses": "Отклики",
+        "created": "Создан"
+      },
+      "statuses": {
+        "created": "Ждёт помощи",
+        "accepted": "Принят",
+        "in_progress": "Помогают",
+        "closed": "Закрыт",
+        "cancelled": "Отменён",
+        "expired": "Истёк"
+      },
+      "types": {
+        "flat_tire": "Пробито колесо",
+        "battery": "Сел аккумулятор",
+        "fuel": "Закончилось топливо",
+        "stuck": "Застрял",
+        "breakdown": "Поломка",
+        "accident": "ДТП",
+        "tow": "Нужен эвакуатор",
+        "other": "Другое"
+      },
+      "fake": "Ложный",
+      "markFake": "Признать ложным",
+      "fields": {
+        "requester": "Автор",
+        "description": "Описание",
+        "created": "Создан",
+        "ended": "Завершён",
+        "cancelReason": "Причина отмены",
+        "location": "Координаты",
+        "radius": "Радиус рассылки",
+        "km": "{km} км",
+        "dispatched": "Оповещено водителей",
+        "chat": "Чат SOS"
+      },
+      "photos": "Фото",
+      "photoAlt": "Фото SOS",
+      "responses": "Отклики",
+      "responseStatuses": {
+        "offered": "Предложил",
+        "accepted": "Принят",
+        "arrived": "На месте",
+        "withdrawn": "Отозвал",
+        "declined": "Отклонён"
+      },
+      "noResponses": "Откликов нет.",
+      "reports": "Жалобы",
+      "noReports": "Жалоб нет.",
+      "markFakeTitle": "Признать SOS ложным?",
+      "markFakeDescription": "Если SOS открыт, он будет отменён; автор потеряет 50 баллов рейтинга и получит уведомление.",
+      "markedFake": "SOS признан ложным"
+    },
+    "communities": {
+      "title": "Сообщества",
+      "description": "Все сообщества, включая удалённые.",
+      "search": "Поиск по названию",
+      "empty": "Сообщества не найдены",
+      "columns": {
+        "name": "Сообщество",
+        "owner": "Владелец",
+        "members": "Участники",
+        "created": "Создано",
+        "actions": "Действия"
+      },
+      "private": "Закрытое",
+      "deleted": "Удалено",
+      "delete": "Удалить",
+      "deleteNamed": "Удалить {name}",
+      "deleteTitle": "Удалить «{name}»?",
+      "deleteDescription": "Участники потеряют доступ к сообществу и чату.",
+      "deletedToast": "Сообщество удалено"
+    },
+    "services": {
+      "title": "Сервисы",
+      "description": "Проверяйте заявки и печатайте QR-коды для подтверждённых сервисов.",
+      "status": "Статус",
+      "empty": "Проверять нечего",
+      "emptyHint": "Новые заявки появятся здесь.",
+      "statuses": {
+        "pending": "На проверке",
+        "verified": "Подтверждён",
+        "rejected": "Отклонён"
+      },
+      "verifyTitle": "Подтвердить «{name}»?",
+      "rejectTitle": "Отклонить «{name}»?",
+      "verifyDescription": "Сервис появится в каталоге и на карте; автор заявки получит уведомление.",
+      "rejectDescription": "Сервис будет скрыт из каталога; автор заявки получит уведомление.",
+      "verify": "Подтвердить",
+      "reject": "Отклонить",
+      "verified": "Сервис подтверждён",
+      "rejected": "Сервис отклонён",
+      "closed": "Выходной",
+      "photos": "Фото",
+      "photoAlt": "Фото: {name}",
+      "submittedBy": "Добавил(а)",
+      "printQr": "QR для печати",
+      "mapLabel": "Карта с расположением: {name}",
+      "openMap": "Открыть в OpenStreetMap",
+      "days": {
+        "mon": "Пн",
+        "tue": "Вт",
+        "wed": "Ср",
+        "thu": "Чт",
+        "fri": "Пт",
+        "sat": "Сб",
+        "sun": "Вс"
+      },
+      "qr": {
+        "title": "QR-код визита",
+        "description": "Код на сегодня для «{name}». Распечатайте и разместите у кассы.",
+        "loading": "Создаём…",
+        "alt": "QR-код {code}",
+        "validToday": "Действует сегодня (по времени Алматы) и до конца завтрашнего дня. Печатайте новый каждый день.",
+        "close": "Закрыть",
+        "print": "Печать",
+        "printHint": "Отсканируйте в AutoCommunity, чтобы подтвердить визит"
+      }
+    },
+    "visits": {
+      "title": "Фото-визиты",
+      "description": "Фото заказов для подтверждения визита. После одобрения водитель сможет оставить отзыв.",
+      "empty": "Нет фото на проверке",
+      "emptyHint": "Новые фото заказов появятся здесь.",
+      "photoAlt": "Фото заказа: {name}",
+      "noPhoto": "Фото недоступно",
+      "approve": "Одобрить",
+      "reject": "Отклонить",
+      "approveTitle": "Одобрить визит?",
+      "rejectTitle": "Отклонить визит?",
+      "approveDescription": "Водитель получит уведомление и сможет оставить отзыв.",
+      "rejectDescription": "Водитель получит уведомление; отзыв по этому визиту оставить нельзя.",
+      "approved": "Визит одобрен",
+      "rejected": "Визит отклонён"
     }
   }
 }

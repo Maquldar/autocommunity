@@ -10,5 +10,6 @@ import { CommunitiesService } from './communities.service';
   imports: [UsersModule, UploadsModule, ChatsModule, NotificationsModule],
   controllers: [CommunitiesController],
   providers: [CommunitiesService],
+  exports: [CommunitiesService],
 })
 export class CommunitiesModule {}
